@@ -1,0 +1,63 @@
+# ═══ Build output ═══
+target/
+build/
+out/
+*.class
+*.jar
+*.war
+*.ear
+
+# ═══ Maven ═══
+.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# ═══ Gradle (in case of future migration) ═══
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+
+# ═══ IDE: IntelliJ IDEA ═══
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ═══ IDE: Eclipse ═══
+.classpath
+.project
+.settings/
+bin/
+
+# ═══ IDE: VS Code ═══
+.vscode/
+
+# ═══ OS files ═══
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# ═══ Logs ═══
+*.log
+logs/
+
+# ═══ Test output ═══
+hs_err_pid*
+replay_pid*
+*.hprof
+*.jfr
+
+# ═══ Kotlin ═══
+.kotlin/
+
+# ═══ Environment ═══
+.env
+.env.local
