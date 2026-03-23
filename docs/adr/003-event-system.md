@@ -38,11 +38,49 @@ InqEvent (abstract)
 ```
 
 Every event carries:
+- `callId` — unique identifier for the call that triggered this event (see below)
 - `elementName` — the named instance that emitted it (e.g. "paymentService")
 - `timestamp` — when the event occurred
 - `elementType` — which element kind (CIRCUIT_BREAKER, RETRY, etc.)
 
 Element-specific subclasses add context: `fromState`/`toState` for circuit breaker transitions, `attemptNumber`/`waitDuration` for retries, etc.
+
+### Call identity: the `callId`
+
+Every invocation through an Inqudium element receives a unique `callId` (UUID or similar) that is carried by all events emitted during that call's lifecycle. In a pipeline with multiple elements, all elements share the same `callId`:
+
+```
+Call abc-123 → CircuitBreaker (emits event with callId=abc-123)
+            → Retry attempt 1 (emits event with callId=abc-123)
+            → Retry attempt 2 (emits event with callId=abc-123)
+            → TimeLimiter timeout (emits event with callId=abc-123)
+            → Orphaned result arrives (emits event with callId=abc-123)
+```
+
+This enables end-to-end correlation of a single call across all resilience elements — in JFR recordings, Micrometer traces, structured logs, or custom listeners.
+
+**Generation:** The `callId` is generated once at the outermost element in the pipeline. Inner elements receive it through a `CallContext` that propagates through the decoration chain. If an element is used standalone (not in a pipeline), it generates its own `callId`.
+
+**Propagation per paradigm:**
+
+| Paradigm | Mechanism |
+|---|---|
+| Imperative | `CallContext` passed as `ThreadLocal` through the decoration chain |
+| Kotlin | `CallContext` passed as `CoroutineContext` element |
+| Reactor | `CallContext` passed via Reactor `Context` (subscriber context) |
+| RxJava 3 | `CallContext` passed via `Single.compose()` / `Flowable.compose()` context propagation |
+
+Each paradigm uses its native context propagation mechanism — no thread-local bridging in reactive code.
+
+**External correlation:** Applications can supply their own `callId` (e.g. a trace ID from OpenTelemetry) via a `CallIdSupplier` in the element configuration. This avoids generating a separate ID when a correlation key already exists:
+
+```java
+var config = CircuitBreakerConfig.builder()
+    .callIdSupplier(() -> Span.current().getSpanContext().getTraceId())
+    .build();
+```
+
+If no supplier is configured, a random UUID is generated per call.
 
 ### Event types live in `inqudium-core`
 
