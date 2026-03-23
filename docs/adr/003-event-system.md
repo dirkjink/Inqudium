@@ -182,6 +182,64 @@ Explicit API   → controls what happens across element instances
 Events         → document what happened (observability only)
 ```
 
+### Extensibility: open for consumption, closed for emission
+
+The event system is intentionally open in one direction and closed in another.
+
+#### Open: consuming events
+
+Any external code can register as an event consumer through `InqEventPublisher.onEvent()`. This is a first-class API, not a back door. Inqudium ships with two built-in consumers (`inqudium-micrometer` and `inqudium-jfr`), but they have no privileged access — they use the same `onEvent()` API that any external consumer uses.
+
+#### Open: exporting events to external systems (planned)
+
+The built-in consumers (Micrometer, JFR) cover the two most common observability backends. But production environments often need events in other systems — Kafka topics for event sourcing, CloudEvents for cross-service integration, webhooks for alerting, or proprietary monitoring platforms.
+
+Rather than building adapters for every possible target, the event system will expose an `InqEventExporter` SPI:
+
+```java
+public interface InqEventExporter {
+
+    /**
+     * Called for every event emitted by any element.
+     * Implementations must be thread-safe and non-blocking.
+     * Exceptions thrown by the exporter are caught and reported
+     * — they never affect the resilience element's operation.
+     */
+    void export(InqEvent event);
+
+    /**
+     * Called once at startup. Allows the exporter to filter
+     * which event types it is interested in.
+     */
+    default Set<Class<? extends InqEvent>> subscribedEventTypes() {
+        return Set.of(); // empty = all events
+    }
+}
+```
+
+Exporters are registered globally (not per-element) and receive events from all elements in the application:
+
+```java
+InqEventExporterRegistry.register(new KafkaEventExporter(kafkaProducer, "inqudium-events"));
+InqEventExporterRegistry.register(new CloudEventsExporter(webhookUrl));
+```
+
+The `subscribedEventTypes()` filter prevents unnecessary serialization — a Kafka exporter interested only in state transitions does not receive per-call events.
+
+Design constraints for exporters:
+
+- **Non-blocking.** Exporters must not block the thread that emits the event. If the target system requires I/O (Kafka produce, HTTP webhook), the exporter is responsible for buffering internally.
+- **Exception-safe.** A failing exporter is caught, reported through `InqEventPublisher` as an exporter error, and does not affect the resilience element or other exporters.
+- **No backpressure to the element.** If the exporter cannot keep up, it drops events or buffers — it never slows down the protected call.
+
+#### Closed: emitting custom event types
+
+`InqEventPublisher` transports only `InqEvent` subtypes defined in `inqudium-core`. External modules **cannot** define their own event types and push them through the publisher.
+
+This boundary is deliberate. If the publisher accepted arbitrary types, every consumer would need to handle unknown events — requiring type registries, schema evolution, and defensive deserialization. The event system would become a generic event bus, which is not the responsibility of a resilience library. Projects that need a general-purpose event bus should use dedicated infrastructure (Spring ApplicationEvent, CDI Events, Kafka, etc.).
+
+The `InqEventExporter` SPI bridges the gap: events flow **out** of Inqudium into external systems, but external events do not flow **in**.
+
 ## Consequences
 
 **Positive:**
@@ -189,10 +247,14 @@ Events         → document what happened (observability only)
 - Consumers choose their observability backend (Micrometer, JFR, logging, custom) without the library making assumptions.
 - Event types are stable API — new listeners can be added without modifying element internals.
 - Cross-paradigm consistency: a `CircuitBreakerOnStateTransitionEvent` is identical whether it came from `ReentrantLock`-based or `Mutex`-based state machine.
+- `callId` enables end-to-end correlation of a single call across all elements, paradigms, and observability backends.
+- `InqEventExporter` SPI allows integration with arbitrary external systems without Inqudium needing to know the target.
 
 **Negative:**
 - Every paradigm implementation must remember to emit events at the correct points. This is enforced by behavioral contract tests in core (given a mock publisher, verify the correct events are emitted for each scenario).
 - Slight overhead from event object creation, though this is negligible compared to the actual resilience logic (network calls, timeouts).
+- Exporter implementations must handle their own buffering and error recovery — Inqudium provides the SPI, not a production-ready exporter for every target system.
 
 **Neutral:**
 - Elements ship with zero logging dependency. The `inqudium-test` module may optionally log events for debugging convenience.
+- The event system is open for consumption and export, but closed for external event emission. This keeps the type contract stable.
