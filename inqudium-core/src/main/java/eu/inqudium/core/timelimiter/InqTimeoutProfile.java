@@ -135,6 +135,194 @@ public final class InqTimeoutProfile {
     return safetyMarginFactor;
   }
 
+  /**
+   * Provides an agnostic configuration model for HTTP client timeouts.
+   * <p>
+   * This class abstracts the specific timeout parameters of various JVM HTTP clients
+   * (like Apache HttpClient, OkHttp, Java 11+ HttpClient, and Spring WebClient)
+   * into a unified set of configuration properties.
+   * </p>
+   *
+   * <h3>1. Timeout Configuration incl. Data Types &amp; Units (JVM)</h3>
+   * <table border="1" cellpadding="5" cellspacing="0">
+   * <tr>
+   * <th>HTTP Client (JVM)</th>
+   * <th>Timeout Parameter</th>
+   * <th>Data Type &amp; Unit</th>
+   * <th>Monitored Time Span</th>
+   * </tr>
+   * <tr>
+   * <td><b>Apache HttpClient</b></td>
+   * <td>{@code ConnectTimeout}</td>
+   * <td><b>v5:</b> {@code Timeout}<br><b>v4:</b> {@code int} (ms)</td>
+   * <td>Time limit for the initial TCP handshake.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code ResponseTimeout} (v5) / {@code SocketTimeout} (v4)</td>
+   * <td><b>v5:</b> {@code Timeout}<br><b>v4:</b> {@code int} (ms)</td>
+   * <td>Maximum inactivity time between two received data packets.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code ConnectionRequestTimeout}</td>
+   * <td><b>v5:</b> {@code Timeout}<br><b>v4:</b> {@code int} (ms)</td>
+   * <td>Maximum wait time for a free connection from the connection pool.</td>
+   * </tr>
+   * <tr>
+   * <td><b>OkHttp</b></td>
+   * <td>{@code connectTimeout}</td>
+   * <td>{@code long} + {@code TimeUnit} or {@code Duration}</td>
+   * <td>Time for establishing the TCP connection and TLS handshake.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code readTimeout}</td>
+   * <td>{@code long} + {@code TimeUnit} or {@code Duration}</td>
+   * <td>Maximum inactivity between two successful read operations.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code writeTimeout}</td>
+   * <td>{@code long} + {@code TimeUnit} or {@code Duration}</td>
+   * <td>Maximum time a single write operation is allowed to block on the network socket.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code callTimeout}</td>
+   * <td>{@code long} + {@code TimeUnit} or {@code Duration}</td>
+   * <td>Hard upper limit for the entire call.</td>
+   * </tr>
+   * <tr>
+   * <td><b>Java 11+ HttpClient</b></td>
+   * <td>{@code connectTimeout}</td>
+   * <td>{@code java.time.Duration}</td>
+   * <td>Maximum time allowed for establishing the connection.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code timeout}</td>
+   * <td>{@code java.time.Duration}</td>
+   * <td>Maximum total time for the specific request.</td>
+   * </tr>
+   * <tr>
+   * <td><b>Spring WebClient</b><br><i>(Reactor Netty)</i></td>
+   * <td>{@code CONNECT_TIMEOUT_MILLIS}</td>
+   * <td>{@code Integer} (strictly <b>ms</b>)</td>
+   * <td>Configured in Netty {@code ChannelOption}. Monitors purely the TCP establishment.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code ReadTimeoutHandler}</td>
+   * <td>{@code int} + {@code TimeUnit} or {@code Duration}</td>
+   * <td>Netty level: Time span without new received data.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code WriteTimeoutHandler}</td>
+   * <td>{@code int} + {@code TimeUnit} or {@code Duration}</td>
+   * <td>Netty level: Maximum time a single write operation to the socket is allowed to block.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code responseTimeout}</td>
+   * <td>{@code java.time.Duration}</td>
+   * <td>HttpClient level: Wait time for the response after sending the request.</td>
+   * </tr>
+   * <tr>
+   * <td></td>
+   * <td>{@code .timeout()}</td>
+   * <td>{@code java.time.Duration}</td>
+   * <td>Reactive operator: Hard upper limit for the asynchronous pipeline.</td>
+   * </tr>
+   * </table>
+   *
+   * <h3>2. Agnostic HTTP Timeout Configuration Set</h3>
+   * <table border="1" cellpadding="5" cellspacing="0">
+   * <tr>
+   * <th>Timeout Type</th>
+   * <th>Agnostic Parameter Name</th>
+   * <th>Monitored Time Span</th>
+   * <th>Equivalent in Common Clients</th>
+   * </tr>
+   * <tr>
+   * <td><b>Pool Wait Time</b></td>
+   * <td>{@code connectionAcquireTimeout}</td>
+   * <td>The maximum time waiting for a free TCP connection from an internal pool.</td>
+   * <td>Apache: {@code ConnectionRequestTimeout}<br>Spring: {@code ConnectionProvider}</td>
+   * </tr>
+   * <tr>
+   * <td><b>Connection Establishment</b></td>
+   * <td>{@code connectionEstablishmentTimeout}</td>
+   * <td>The time for the actual TCP connection (and TLS handshake).</td>
+   * <td>OkHttp/Java 11+: {@code connectTimeout}<br>Apache: {@code ConnectTimeout}</td>
+   * </tr>
+   * <tr>
+   * <td><b>Read Inactivity</b></td>
+   * <td>{@code readInactivityTimeout}</td>
+   * <td>Maximum wait time between two received data packets.</td>
+   * <td>OkHttp: {@code readTimeout}<br>Apache: {@code ResponseTimeout}</td>
+   * </tr>
+   * <tr>
+   * <td><b>Write Operation</b></td>
+   * <td>{@code writeOperationTimeout}</td>
+   * <td>Maximum time a single write operation to the network socket is allowed to block.</td>
+   * <td>OkHttp: {@code writeTimeout}<br>Spring: {@code WriteTimeoutHandler}</td>
+   * </tr>
+   * <tr>
+   * <td><b>Total Execution Time</b></td>
+   * <td>{@code totalExecutionTimeout}</td>
+   * <td>Absolute upper limit for the entire lifecycle of the call.</td>
+   * <td>Java 11+: {@code timeout}<br>OkHttp: {@code callTimeout}<br>Spring: {@code .timeout()}</td>
+   * </tr>
+   * </table>
+   *
+   * <h3>3. Mapping: Agnostic Configuration to JVM Clients</h3>
+   * <table border="1" cellpadding="5" cellspacing="0">
+   * <tr>
+   * <th>Agnostic Parameter</th>
+   * <th>Apache HttpClient (v5)</th>
+   * <th>OkHttp</th>
+   * <th>Java 11+ HttpClient</th>
+   * <th>Spring WebClient <i>(Reactor Netty)</i></th>
+   * </tr>
+   * <tr>
+   * <td><b>{@code connectionAcquireTimeout}</b></td>
+   * <td>{@code ConnectionRequestTimeout}</td>
+   * <td>Implicitly covered by {@code callTimeout}. If unset: infinite block.</td>
+   * <td>Implicitly covered by total {@code timeout}. If unset: infinite block.</td>
+   * <td>{@code pendingAcquireTimeout}</td>
+   * </tr>
+   * <tr>
+   * <td><b>{@code connectionEstablishmentTimeout}</b></td>
+   * <td>{@code ConnectTimeout}</td>
+   * <td>{@code connectTimeout}</td>
+   * <td>{@code connectTimeout}</td>
+   * <td>{@code ChannelOption.CONNECT_TIMEOUT_MILLIS}</td>
+   * </tr>
+   * <tr>
+   * <td><b>{@code readInactivityTimeout}</b></td>
+   * <td>{@code ResponseTimeout}</td>
+   * <td>{@code readTimeout}</td>
+   * <td>Implicitly covered by total {@code timeout}. If unset: infinite block.</td>
+   * <td>{@code ReadTimeoutHandler}</td>
+   * </tr>
+   * <tr>
+   * <td><b>{@code writeOperationTimeout}</b></td>
+   * <td>No native limit. Relies on OS-level TCP socket timeouts.</td>
+   * <td>{@code writeTimeout}</td>
+   * <td>Implicitly covered by total {@code timeout}. If unset: infinite block.</td>
+   * <td>{@code WriteTimeoutHandler}</td>
+   * </tr>
+   * <tr>
+   * <td><b>{@code totalExecutionTimeout}</b></td>
+   * <td>No native limit. Requires external wrapper (e.g., timed {@code Future}).</td>
+   * <td>{@code callTimeout}</td>
+   * <td>{@code timeout}</td>
+   * <td>{@code .timeout(Duration)}</td>
+   * </tr>
+   * </table>
+   */
   public static final class Builder {
 
     private final List<Duration> timeoutComponents = new ArrayList<>();
