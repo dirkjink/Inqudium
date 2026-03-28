@@ -41,7 +41,7 @@ Every event carries:
 - `callId` — unique identifier for the call that triggered this event (see below)
 - `elementName` — the named instance that emitted it (e.g. "paymentService")
 - `timestamp` — when the event occurred
-- `elementType` — which element kind (CIRCUIT_BREAKER, RETRY, etc.)
+- `elementType` — which element kind (`InqElementType` enum: `CIRCUIT_BREAKER`, `RETRY`, `RATE_LIMITER`, `BULKHEAD`, `TIME_LIMITER`, `CACHE`)
 
 Element-specific subclasses add context: `fromState`/`toState` for circuit breaker transitions, `attemptNumber`/`waitDuration` for retries, etc.
 
@@ -102,6 +102,63 @@ Each element instance owns its own `InqEventPublisher`. Consumers subscribe per-
 circuitBreaker.getEventPublisher()
     .onEvent(CircuitBreakerOnStateTransitionEvent.class, event -> { ... });
 ```
+
+### Event scope: two layers by design
+
+The event system operates at two distinct scopes. This is intentional — each scope serves a different audience with different needs.
+
+#### Per-element publishers (targeted consumption)
+
+Each element instance has its own `InqEventPublisher`. A consumer subscribes to a specific element and receives only that element's events:
+
+```java
+// Subscribe to a specific Circuit Breaker's events
+var paymentCb = registry.circuitBreaker("paymentService");
+paymentCb.getEventPublisher()
+    .onEvent(CircuitBreakerOnStateTransitionEvent.class, event -> {
+        dashboard.update(event.getElementName(), event.getToState());
+    });
+
+// A different breaker — completely independent event stream
+var orderCb = registry.circuitBreaker("orderService");
+orderCb.getEventPublisher()
+    .onEvent(CircuitBreakerOnStateTransitionEvent.class, event -> { ... });
+```
+
+**Why per-element:** The most common consumption pattern is targeted. A dashboard widget for the payment service wants payment service events — not a firehose of all events that it must filter. Per-element publishers make this zero-cost: no filtering, no routing, no topic matching. Subscribe and receive.
+
+**No global consumer registry exists.** There is no `InqGlobalEventBus.onEvent(...)` that receives all events from all elements. If a consumer wants events from multiple elements, it subscribes to each element individually. This is explicit and avoids the "subscribe once, get everything" pattern that leads to consumers processing events they don't care about.
+
+#### Global exporters (cross-cutting export)
+
+`InqEventExporter` (see "Extensibility" section below) operates at the global scope. Every event from every element is forwarded to all registered exporters:
+
+```java
+InqEventExporterRegistry.register(new KafkaEventExporter(producer, "inqudium-events"));
+// This exporter receives ALL events from ALL elements
+```
+
+**Why global:** Exporters are infrastructure concerns — a Kafka topic, a JFR recording, a Micrometer meter registry. They want everything because they serve a different purpose than targeted consumers: long-term storage, alerting, cross-service correlation. Forcing them to subscribe to each element individually would be fragile (miss a new element → miss its events) and boilerplate-heavy.
+
+#### How the two layers interact
+
+When an element emits an event, it flows through both layers:
+
+```
+Element emits event
+  ├─► Per-element InqEventPublisher → registered consumers for this element
+  └─► InqEventExporterRegistry → all global exporters
+```
+
+The per-element publisher and the global exporter mechanism are independent. A consumer that subscribes to a specific element's publisher does not receive events from the exporter layer, and vice versa. There is no duplication — the event is emitted once and routed to both paths.
+
+#### Rejected alternatives
+
+**Global singleton event bus.** A single `InqEventBus.getInstance().onEvent(...)` would receive all events from all elements. Rejected because: (a) singleton complicates testing — the global bus must be reset between tests; (b) every consumer receives every event type from every element and must filter; (c) the "subscribe to everything" default encourages consumers that process more than they need, degrading performance under high event volume.
+
+**Per-pipeline event bus.** Each `InqPipeline` would own an event bus that aggregates events from all elements in the pipeline. Rejected because: (a) the `callId` (see "Call identity" section) already provides per-pipeline correlation — filtering by `callId` reconstructs the pipeline's event sequence without a separate bus; (b) a pipeline-scoped bus would need lifecycle management (created with the pipeline, disposed when?) that adds complexity without clear benefit; (c) elements can be shared across pipelines (the same Circuit Breaker instance in multiple pipelines) — which pipeline's bus would receive the event?
+
+**Application-scoped event bus (like registries).** The application creates event bus instances and passes them to elements. Rejected because: (a) the per-element publisher already exists and is simpler; (b) an application-scoped bus is effectively a filtered view of the global scope — achievable by subscribing to the elements you care about; (c) additional lifecycle management (who creates the bus, who disposes it) without clear benefit over per-element + global exporter.
 
 ### No internal logging
 

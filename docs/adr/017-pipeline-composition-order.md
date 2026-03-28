@@ -131,11 +131,11 @@ For projects migrating from Resilience4J (ADR-006) that want behavioral parity w
 
 ```java
 var order = PipelineOrder.custom(
-    PipelinePosition.RETRY,
-    PipelinePosition.CIRCUIT_BREAKER,
-    PipelinePosition.RATE_LIMITER,
-    PipelinePosition.TIME_LIMITER,
-    PipelinePosition.BULKHEAD
+    InqElementType.RETRY,
+    InqElementType.CIRCUIT_BREAKER,
+    InqElementType.RATE_LIMITER,
+    InqElementType.TIME_LIMITER,
+    InqElementType.BULKHEAD
 );
 ```
 
@@ -166,9 +166,9 @@ var resilient = InqPipeline
 var resilient = InqPipeline
     .of(() -> service.call())
     .order(PipelineOrder.custom(
-        PipelinePosition.CIRCUIT_BREAKER,
-        PipelinePosition.RETRY,
-        PipelinePosition.RATE_LIMITER))
+        InqElementType.CIRCUIT_BREAKER,
+        InqElementType.RETRY,
+        InqElementType.RATE_LIMITER))
     .shield(circuitBreaker)
     .shield(retry)
     .shield(rateLimiter)

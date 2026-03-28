@@ -59,7 +59,7 @@ public interface InqContextPropagator {
      * Optional: enriches the current context with Inqudium-specific entries.
      * Called after restore, before the protected call executes.
      */
-    default void enrich(String callId, String elementName, String elementType) {
+    default void enrich(String callId, String elementName, InqElementType elementType) {
         // no-op by default — implementations add entries to their context system
     }
 }
@@ -115,7 +115,7 @@ Each paradigm module provides a bridge class that adapts the core SPI to the par
 class InqPropagationContext(
     private val callId: String,
     private val elementName: String,
-    private val elementType: String
+    private val elementType: InqElementType
 ) : AbstractCoroutineContextElement(Key) {
 
     companion object Key : CoroutineContext.Key<InqPropagationContext>
@@ -168,10 +168,10 @@ public class MdcContextPropagator implements InqContextPropagator {
     }
 
     @Override
-    public void enrich(String callId, String elementName, String elementType) {
+    public void enrich(String callId, String elementName, InqElementType elementType) {
         MDC.put("inqudium.callId", callId);
         MDC.put("inqudium.elementName", elementName);
-        MDC.put("inqudium.elementType", elementType);
+        MDC.put("inqudium.elementType", elementType.name());
     }
 
     private record MdcSnapshot(Map<String, String> entries) implements InqContextSnapshot {}
@@ -203,7 +203,7 @@ When `enrich()` is called, the core passes three values:
 |-----------------|--------------------------------|---------------------|
 | `callId`        | The call's unique identifier (ADR-003) | Outermost element   |
 | `elementName`   | Current element name           | Each element        |
-| `elementType`   | Current element type           | Each element        |
+| `elementType`   | Current element type (`InqElementType` enum) | Each element        |
 
 The propagator decides how to store these. The MDC bridge stores them as `inqudium.callId`, `inqudium.elementName`, `inqudium.elementType`. An OpenTelemetry bridge might store them as Baggage entries. A custom propagator stores them wherever its context system lives.
 
