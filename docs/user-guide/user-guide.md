@@ -56,11 +56,11 @@ Every resilience mechanism in Inqudium is an **element**. There are six element 
 
 | Symbol | Element | What it does |
 |--------|---------|--------------|
-| **Cb** | [Circuit Breaker](circuit-breaker.md) | Prevents cascading failures by short-circuiting calls to failing services |
-| **Rt** | [Retry](retry.md) | Re-executes a failed operation with configurable backoff |
-| **Rl** | [Rate Limiter](rate-limiter.md) | Controls throughput by limiting calls per time period |
-| **Bh** | [Bulkhead](bulkhead.md) | Isolates failures by limiting concurrent calls |
-| **Tl** | [Time Limiter](time-limiter.md) | Bounds the caller's wait time (not execution time) |
+| **Cb** | [Circuit Breaker](./circuit-breaker/circuit-breaker.md) | Prevents cascading failures by short-circuiting calls to failing services |
+| **Rt** | [Retry](./retry/retry.md) | Re-executes a failed operation with configurable backoff |
+| **Rl** | [Rate Limiter](./rate-limiter/rate-limiter.md) | Controls throughput by limiting calls per time period |
+| **Bh** | [Bulkhead](./bulkhead/bulkhead.md) | Isolates failures by limiting concurrent calls |
+| **Tl** | [Time Limiter](./time-limiter/time-limiter.md) | Bounds the caller's wait time (not execution time) |
 | **Ca** | Cache | Stores successful results to reduce load (Phase 2) |
 
 All elements implement `InqElement`, which provides a name, a type, and an event publisher.

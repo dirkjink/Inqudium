@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the internal architecture of Inqudium. It is intended for contributors, reviewers, and anyone who wants to understand *why* the library is structured the way it is. For *how to use* it, see the [User Guide](user-guide.md).
+This document describes the internal architecture of Inqudium. It is intended for contributors, reviewers, and anyone who wants to understand *why* the library is structured the way it is. For *how to use* it, see the [User Guide](./user-guide/user-guide.md).
 
 ---
 
