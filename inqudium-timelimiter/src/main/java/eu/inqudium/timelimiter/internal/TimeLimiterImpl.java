@@ -11,7 +11,6 @@ import eu.inqudium.timelimiter.event.TimeLimiterOnTimeoutEvent;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
 
@@ -60,7 +59,7 @@ public final class TimeLimiterImpl implements TimeLimiter {
     @Override
     public <T> Supplier<T> decorateFutureSupplier(Supplier<CompletionStage<T>> futureSupplier) {
         return () -> {
-            var callId = UUID.randomUUID().toString();
+            var callId = config.getCallIdGenerator().generate();
             var start = Instant.now();
             var timeout = config.getTimeoutDuration();
 

@@ -1,5 +1,6 @@
 package eu.inqudium.core.ratelimiter;
 
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqClock;
 import eu.inqudium.core.InqConfig;
 import eu.inqudium.core.compatibility.InqCompatibility;
@@ -22,6 +23,7 @@ public final class RateLimiterConfig implements InqConfig {
     private final Duration timeoutDuration;
     private final InqClock clock;
     private final InqCompatibility compatibility;
+    private final InqCallIdGenerator callIdGenerator;
 
     private RateLimiterConfig(Builder b) {
         this.limitForPeriod = b.limitForPeriod;
@@ -30,6 +32,7 @@ public final class RateLimiterConfig implements InqConfig {
         this.timeoutDuration = b.timeoutDuration;
         this.clock = b.clock;
         this.compatibility = b.compatibility;
+        this.callIdGenerator = b.callIdGenerator;
     }
 
     public static RateLimiterConfig ofDefaults() { return DEFAULTS; }
@@ -41,6 +44,7 @@ public final class RateLimiterConfig implements InqConfig {
     public Duration getTimeoutDuration() { return timeoutDuration; }
     public InqClock getClock() { return clock; }
     @Override public InqCompatibility getCompatibility() { return compatibility; }
+    @Override public InqCallIdGenerator getCallIdGenerator() { return callIdGenerator; }
 
     public static final class Builder {
         private int limitForPeriod = 50;
@@ -49,6 +53,7 @@ public final class RateLimiterConfig implements InqConfig {
         private Duration timeoutDuration = Duration.ZERO;
         private InqClock clock = InqClock.system();
         private InqCompatibility compatibility = InqCompatibility.ofDefaults();
+        private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
 
         private Builder() {}
 
@@ -58,6 +63,7 @@ public final class RateLimiterConfig implements InqConfig {
         public Builder timeoutDuration(Duration timeout) { this.timeoutDuration = Objects.requireNonNull(timeout); return this; }
         public Builder clock(InqClock clock) { this.clock = Objects.requireNonNull(clock); return this; }
         public Builder compatibility(InqCompatibility c) { this.compatibility = Objects.requireNonNull(c); return this; }
+        public Builder callIdGenerator(InqCallIdGenerator gen) { this.callIdGenerator = Objects.requireNonNull(gen); return this; }
 
         public RateLimiterConfig build() {
             if (bucketSize < 0) bucketSize = limitForPeriod;

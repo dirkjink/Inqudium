@@ -1,5 +1,6 @@
 package eu.inqudium.core.timelimiter;
 
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqConfig;
 import eu.inqudium.core.compatibility.InqCompatibility;
 
@@ -24,12 +25,14 @@ public final class TimeLimiterConfig implements InqConfig {
     private final BiConsumer<OrphanedCallContext, Object> onOrphanedResult;
     private final BiConsumer<OrphanedCallContext, Throwable> onOrphanedError;
     private final InqCompatibility compatibility;
+    private final InqCallIdGenerator callIdGenerator;
 
     private TimeLimiterConfig(Builder b) {
         this.timeoutDuration = b.timeoutDuration;
         this.onOrphanedResult = b.onOrphanedResult;
         this.onOrphanedError = b.onOrphanedError;
         this.compatibility = b.compatibility;
+        this.callIdGenerator = b.callIdGenerator;
     }
 
     public static TimeLimiterConfig ofDefaults() { return DEFAULTS; }
@@ -39,6 +42,7 @@ public final class TimeLimiterConfig implements InqConfig {
     public BiConsumer<OrphanedCallContext, Object> getOnOrphanedResult() { return onOrphanedResult; }
     public BiConsumer<OrphanedCallContext, Throwable> getOnOrphanedError() { return onOrphanedError; }
     @Override public InqCompatibility getCompatibility() { return compatibility; }
+    @Override public InqCallIdGenerator getCallIdGenerator() { return callIdGenerator; }
 
     /**
      * Context provided to orphaned call handlers after a timeout fires.
@@ -60,6 +64,7 @@ public final class TimeLimiterConfig implements InqConfig {
         private BiConsumer<OrphanedCallContext, Object> onOrphanedResult = null;
         private BiConsumer<OrphanedCallContext, Throwable> onOrphanedError = null;
         private InqCompatibility compatibility = InqCompatibility.ofDefaults();
+        private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
 
         private Builder() {}
 
@@ -67,6 +72,7 @@ public final class TimeLimiterConfig implements InqConfig {
         public Builder onOrphanedResult(BiConsumer<OrphanedCallContext, Object> handler) { this.onOrphanedResult = handler; return this; }
         public Builder onOrphanedError(BiConsumer<OrphanedCallContext, Throwable> handler) { this.onOrphanedError = handler; return this; }
         public Builder compatibility(InqCompatibility c) { this.compatibility = Objects.requireNonNull(c); return this; }
+        public Builder callIdGenerator(InqCallIdGenerator gen) { this.callIdGenerator = Objects.requireNonNull(gen); return this; }
 
         public TimeLimiterConfig build() { return new TimeLimiterConfig(this); }
     }

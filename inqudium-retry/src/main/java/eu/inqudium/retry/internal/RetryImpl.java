@@ -9,7 +9,6 @@ import eu.inqudium.retry.Retry;
 import eu.inqudium.retry.event.RetryOnRetryEvent;
 import eu.inqudium.retry.event.RetryOnSuccessEvent;
 
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
@@ -54,7 +53,7 @@ public final class RetryImpl implements Retry {
     @Override
     public <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
         return () -> {
-            var callId = UUID.randomUUID().toString();
+            var callId = config.getCallIdGenerator().generate();
             Throwable lastException = null;
 
             for (int attempt = 1; attempt <= config.getMaxAttempts(); attempt++) {

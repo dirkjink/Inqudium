@@ -10,7 +10,6 @@ import eu.inqudium.core.event.InqEventPublisher;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -89,7 +88,7 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
     @Override
     public <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
         return () -> {
-            var callId = UUID.randomUUID().toString();
+            var callId = config.getCallIdGenerator().generate();
             acquirePermission(callId);
             var start = config.getClock().instant();
             try {
@@ -119,7 +118,7 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
     @Override
     public Runnable decorateRunnable(Runnable runnable) {
         return () -> {
-            var callId = UUID.randomUUID().toString();
+            var callId = config.getCallIdGenerator().generate();
             acquirePermission(callId);
             var start = config.getClock().instant();
             try {

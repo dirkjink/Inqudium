@@ -16,6 +16,9 @@
  *   <li>{@code InqClock} — functional interface for injectable time. Every time-dependent
  *       algorithm in core uses this instead of {@code Instant.now()}, ensuring deterministic
  *       testability (ADR-016).</li>
+ *   <li>{@code InqCallIdGenerator} — functional interface for generating unique call
+ *       identifiers. Override for deterministic tests, trace ID integration, or custom
+ *       formats. Default: UUID.</li>
  * </ul>
  *
  * <h2>Design principles</h2>

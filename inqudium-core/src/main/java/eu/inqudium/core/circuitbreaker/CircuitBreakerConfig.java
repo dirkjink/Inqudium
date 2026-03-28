@@ -1,5 +1,6 @@
 package eu.inqudium.core.circuitbreaker;
 
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqClock;
 import eu.inqudium.core.InqConfig;
 import eu.inqudium.core.compatibility.InqCompatibility;
@@ -28,6 +29,7 @@ public final class CircuitBreakerConfig implements InqConfig {
     private final Duration waitDurationInOpenState;
     private final int permittedNumberOfCallsInHalfOpenState;
     private final InqClock clock;
+    private final InqCallIdGenerator callIdGenerator;
     private final InqCompatibility compatibility;
 
     private CircuitBreakerConfig(Builder b) {
@@ -40,6 +42,7 @@ public final class CircuitBreakerConfig implements InqConfig {
         this.waitDurationInOpenState = b.waitDurationInOpenState;
         this.permittedNumberOfCallsInHalfOpenState = b.permittedNumberOfCallsInHalfOpenState;
         this.clock = b.clock;
+        this.callIdGenerator = b.callIdGenerator;
         this.compatibility = b.compatibility;
     }
 
@@ -55,6 +58,7 @@ public final class CircuitBreakerConfig implements InqConfig {
     public Duration getWaitDurationInOpenState() { return waitDurationInOpenState; }
     public int getPermittedNumberOfCallsInHalfOpenState() { return permittedNumberOfCallsInHalfOpenState; }
     public InqClock getClock() { return clock; }
+    @Override public InqCallIdGenerator getCallIdGenerator() { return callIdGenerator; }
     @Override public InqCompatibility getCompatibility() { return compatibility; }
 
     /**
@@ -80,6 +84,7 @@ public final class CircuitBreakerConfig implements InqConfig {
         private Duration waitDurationInOpenState = Duration.ofSeconds(60);
         private int permittedNumberOfCallsInHalfOpenState = 10;
         private InqClock clock = InqClock.system();
+        private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
         private InqCompatibility compatibility = InqCompatibility.ofDefaults();
 
         private Builder() {}
@@ -93,6 +98,7 @@ public final class CircuitBreakerConfig implements InqConfig {
         public Builder waitDurationInOpenState(Duration duration) { this.waitDurationInOpenState = Objects.requireNonNull(duration); return this; }
         public Builder permittedNumberOfCallsInHalfOpenState(int count) { this.permittedNumberOfCallsInHalfOpenState = count; return this; }
         public Builder clock(InqClock clock) { this.clock = Objects.requireNonNull(clock); return this; }
+        public Builder callIdGenerator(InqCallIdGenerator gen) { this.callIdGenerator = Objects.requireNonNull(gen); return this; }
         public Builder compatibility(InqCompatibility c) { this.compatibility = Objects.requireNonNull(c); return this; }
 
         public CircuitBreakerConfig build() { return new CircuitBreakerConfig(this); }

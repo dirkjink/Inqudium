@@ -10,7 +10,6 @@ import eu.inqudium.core.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.event.InqEventPublisher;
 
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -68,7 +67,7 @@ public final class SemaphoreBulkhead implements Bulkhead {
     @Override
     public <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
         return () -> {
-            var callId = UUID.randomUUID().toString();
+            var callId = config.getCallIdGenerator().generate();
             acquirePermit(callId);
             try {
                 return supplier.get();
@@ -81,7 +80,7 @@ public final class SemaphoreBulkhead implements Bulkhead {
     @Override
     public Runnable decorateRunnable(Runnable runnable) {
         return () -> {
-            var callId = UUID.randomUUID().toString();
+            var callId = config.getCallIdGenerator().generate();
             acquirePermit(callId);
             try {
                 runnable.run();

@@ -1,5 +1,6 @@
 package eu.inqudium.core.retry;
 
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqConfig;
 import eu.inqudium.core.compatibility.InqCompatibility;
 import eu.inqudium.core.exception.InqException;
@@ -30,6 +31,7 @@ public final class RetryConfig implements InqConfig {
     private final boolean retryOnInqExceptions;
     private final Predicate<Throwable> retryOnPredicate;
     private final InqCompatibility compatibility;
+    private final InqCallIdGenerator callIdGenerator;
 
     private RetryConfig(Builder builder) {
         this.maxAttempts = builder.maxAttempts;
@@ -41,6 +43,7 @@ public final class RetryConfig implements InqConfig {
         this.retryOnInqExceptions = builder.retryOnInqExceptions;
         this.retryOnPredicate = builder.retryOnPredicate;
         this.compatibility = builder.compatibility;
+        this.callIdGenerator = builder.callIdGenerator;
     }
 
     public static RetryConfig ofDefaults() { return DEFAULTS; }
@@ -55,6 +58,7 @@ public final class RetryConfig implements InqConfig {
     public boolean isRetryOnInqExceptions() { return retryOnInqExceptions; }
     public Predicate<Throwable> getRetryOnPredicate() { return retryOnPredicate; }
     @Override public InqCompatibility getCompatibility() { return compatibility; }
+    @Override public InqCallIdGenerator getCallIdGenerator() { return callIdGenerator; }
 
     public static final class Builder {
         private int maxAttempts = 3;
@@ -66,6 +70,7 @@ public final class RetryConfig implements InqConfig {
         private boolean retryOnInqExceptions = false;
         private Predicate<Throwable> retryOnPredicate = null;
         private InqCompatibility compatibility = InqCompatibility.ofDefaults();
+        private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
 
         private Builder() {}
 
@@ -78,6 +83,7 @@ public final class RetryConfig implements InqConfig {
         public Builder retryOnInqExceptions(boolean retry) { this.retryOnInqExceptions = retry; return this; }
         public Builder retryOnPredicate(Predicate<Throwable> predicate) { this.retryOnPredicate = predicate; return this; }
         public Builder compatibility(InqCompatibility compatibility) { this.compatibility = Objects.requireNonNull(compatibility); return this; }
+        public Builder callIdGenerator(InqCallIdGenerator gen) { this.callIdGenerator = Objects.requireNonNull(gen); return this; }
 
         public RetryConfig build() { return new RetryConfig(this); }
     }

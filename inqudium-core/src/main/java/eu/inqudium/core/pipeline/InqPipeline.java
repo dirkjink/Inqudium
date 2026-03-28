@@ -1,5 +1,6 @@
 package eu.inqudium.core.pipeline;
 
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.context.InqContextPropagation;
 import eu.inqudium.core.context.InqContextScope;
@@ -8,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
@@ -27,7 +27,7 @@ import java.util.function.Supplier;
  * Result result = resilient.get();
  * }</pre>
  *
- * <p>When a {@link PipelineOrder} is set, the {@link #shield} calls can be in any
+ * <p>When a {@link PipelineOrder} is set, the {@link Builder#shield(InqDecorator)} calls can be in any
  * order — the pipeline sorts them. When no order is set, {@link PipelineOrder#INQUDIUM}
  * is the default.
  *
@@ -74,6 +74,7 @@ public final class InqPipeline {
         private final Supplier<T> supplier;
         private final List<InqDecorator> decorators = new ArrayList<>();
         private PipelineOrder order = PipelineOrder.INQUDIUM;
+        private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
 
         private Builder(Supplier<T> supplier) {
             this.supplier = supplier;
@@ -106,6 +107,17 @@ public final class InqPipeline {
         }
 
         /**
+         * Sets the call ID generator for this pipeline.
+         *
+         * @param callIdGenerator the generator to use (default: UUID)
+         * @return this builder
+         */
+        public Builder<T> callIdGenerator(InqCallIdGenerator callIdGenerator) {
+            this.callIdGenerator = Objects.requireNonNull(callIdGenerator, "callIdGenerator must not be null");
+            return this;
+        }
+
+        /**
          * Composes all elements into a single decorated supplier.
          *
          * <p>Elements are sorted according to the selected order. The resulting
@@ -132,8 +144,9 @@ public final class InqPipeline {
 
             // Wrap with callId generation and context propagation
             final Supplier<T> decorated = chain;
+            final InqCallIdGenerator gen = callIdGenerator;
             return () -> {
-                var callId = UUID.randomUUID().toString();
+                var callId = gen.generate();
                 try (var scope = InqContextPropagation.activateFor(
                         callId, "pipeline", InqElementType.CACHE /* placeholder — pipeline is not an element */)) {
                     return decorated.get();

@@ -9,7 +9,6 @@ import eu.inqudium.ratelimiter.event.RateLimiterOnRejectEvent;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
@@ -53,7 +52,7 @@ public final class TokenBucketRateLimiter implements RateLimiter {
 
     @Override
     public void acquirePermit() {
-        var callId = UUID.randomUUID().toString();
+        var callId = config.getCallIdGenerator().generate();
         var deadline = config.getTimeoutDuration().isZero()
                 ? Instant.MIN
                 : config.getClock().instant().plus(config.getTimeoutDuration());

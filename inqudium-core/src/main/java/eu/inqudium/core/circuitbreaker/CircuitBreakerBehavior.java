@@ -72,15 +72,8 @@ final class DefaultCircuitBreakerBehavior implements CircuitBreakerBehavior {
     public CircuitBreakerState onSuccess(CircuitBreakerState currentState, WindowSnapshot snapshot, CircuitBreakerConfig config) {
         return switch (currentState) {
             case CLOSED -> evaluateThresholds(snapshot, config);
-            case HALF_OPEN -> {
-                // Only close when all permitted probe calls have completed successfully.
-                // The window is reset on HALF_OPEN entry, so totalCalls == probes executed so far.
-                if (snapshot.totalCalls() >= config.getPermittedNumberOfCallsInHalfOpenState()) {
-                    yield CircuitBreakerState.CLOSED;
-                }
-                yield CircuitBreakerState.HALF_OPEN;
-            }
-            case OPEN -> CircuitBreakerState.OPEN; // should not happen, but safe
+            case HALF_OPEN -> evaluateHalfOpenThresholds(snapshot, config);
+            case OPEN -> CircuitBreakerState.OPEN;
         };
     }
 
@@ -88,9 +81,23 @@ final class DefaultCircuitBreakerBehavior implements CircuitBreakerBehavior {
     public CircuitBreakerState onError(CircuitBreakerState currentState, WindowSnapshot snapshot, CircuitBreakerConfig config) {
         return switch (currentState) {
             case CLOSED -> evaluateThresholds(snapshot, config);
-            case HALF_OPEN -> CircuitBreakerState.OPEN; // probe failed → reopen
-            case OPEN -> CircuitBreakerState.OPEN; // should not happen, but safe
+            case HALF_OPEN -> evaluateHalfOpenThresholds(snapshot, config);
+            case OPEN -> CircuitBreakerState.OPEN;
         };
+    }
+
+    private CircuitBreakerState evaluateHalfOpenThresholds(WindowSnapshot snapshot, CircuitBreakerConfig config) {
+        // Wait until all permitted probes have completed before deciding
+        if (!snapshot.hasMinimumCalls(config.getPermittedNumberOfCallsInHalfOpenState())) {
+            return CircuitBreakerState.HALF_OPEN;
+        }
+        if (snapshot.failureRate() >= config.getFailureRateThreshold()) {
+            return CircuitBreakerState.OPEN;
+        }
+        if (snapshot.slowCallRate() >= config.getSlowCallRateThreshold()) {
+            return CircuitBreakerState.OPEN;
+        }
+        return CircuitBreakerState.CLOSED;
     }
 
     private CircuitBreakerState evaluateThresholds(WindowSnapshot snapshot, CircuitBreakerConfig config) {
