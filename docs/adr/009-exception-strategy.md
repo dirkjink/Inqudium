@@ -123,3 +123,4 @@ This allows the application to catch a broad type (`RuntimeException` or even `E
 
 **Neutral:**
 - The exception hierarchy lives in `inqudium-core`. All paradigm implementations throw the same exception types.
+- The Retry element ignores all `InqException` subtypes by default (ADR-017) — retrying against an open Circuit Breaker or an exhausted Rate Limiter is pointless and would worsen the situation.

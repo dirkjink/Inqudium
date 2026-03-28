@@ -49,7 +49,7 @@ This is conceptually equivalent to `Future.get(timeout, unit)` — the Future co
 
 ### Imperative API: CompletionStage only (no synchronous Supplier)
 
-The imperative TimeLimiter operates exclusively on `CompletionStage<T>` / `CompletableFuture<T>`:
+The imperative TimeLimiter operates exclusively on `CompletionStage<T>` / `CompletableFuture<T>`, consistent with the functional decoration API (ADR-002):
 
 ```java
 var timeLimiter = TimeLimiter.of("paymentService", TimeLimiterConfig.builder()
@@ -155,6 +155,9 @@ Design constraints for the callback:
 - No synchronous `decorateSupplier()` for the imperative TimeLimiter. Developers must explicitly use `CompletableFuture.supplyAsync()`. This is intentionally inconvenient — it forces awareness of the concurrency model.
 - Side effects of orphaned operations (writes, payments) may execute after the caller has moved on. The completion callback enables compensation but does not prevent the side effect — that remains a service design problem (idempotency).
 - The completion callback runs without caller context (no MDC, no security context, no transaction). Developers who need context must capture it explicitly.
+
+**Neutral:**
+- The TimeLimiter's timeout value should be coordinated with HTTP client timeouts and the Circuit Breaker's `slowCallDurationThreshold` — see ADR-012 for the timeout hierarchy and the RSS calculation method.
 
 **Mitigation patterns documented:**
 - **Completion callback + compensation:** Register `onOrphanedResult` to trigger a reversal or compensation transaction when an orphaned operation succeeds.

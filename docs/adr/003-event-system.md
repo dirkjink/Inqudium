@@ -34,7 +34,9 @@ InqEvent (abstract)
 │   └── RateLimiterOnDrainedEvent
 ├── BulkheadEvent
 ├── TimeLimiterEvent
-└── CacheEvent
+├── CacheEvent
+├── InqCompatibilityEvent              (ADR-013 — behavioral flag audit)
+└── InqProviderErrorEvent              (ADR-014 — ServiceLoader provider failure)
 ```
 
 Every event carries:
@@ -283,10 +285,10 @@ InqEventExporterRegistry.register(new CloudEventsExporter(webhookUrl));
 
 The `subscribedEventTypes()` filter prevents unnecessary serialization — a Kafka exporter interested only in state transitions does not receive per-call events.
 
-Design constraints for exporters:
+Design constraints for exporters (see also ADR-014 for general ServiceLoader conventions):
 
 - **Non-blocking.** Exporters must not block the thread that emits the event. If the target system requires I/O (Kafka produce, HTTP webhook), the exporter is responsible for buffering internally.
-- **Exception-safe.** A failing exporter is caught, reported through `InqEventPublisher` as an exporter error, and does not affect the resilience element or other exporters.
+- **Exception-safe.** A failing exporter is caught, reported through `InqEventPublisher` as an exporter error, and does not affect the resilience element or other exporters (ADR-014, Convention 3).
 - **No backpressure to the element.** If the exporter cannot keep up, it drops events or buffers — it never slows down the protected call.
 
 #### Closed: emitting custom event types

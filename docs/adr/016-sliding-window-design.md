@@ -230,7 +230,7 @@ CircuitBreakerConfig.builder()
 ## Consequences
 
 **Positive:**
-- Pure algorithms with no threading dependencies — safe to share across all paradigms.
+- Pure algorithms with no threading dependencies — safe to share across all paradigms. Consistent with ADR-008: no `synchronized`, no `Thread.sleep`, no carrier-thread pinning.
 - Injectable clock eliminates time-dependent test flakiness. Tests run in microseconds, not seconds.
 - O(1) per-call overhead for count-based windows. No allocation, no iteration.
 - Count-based and time-based share the same contract (`SlidingWindow`) — the Circuit Breaker state machine doesn't know which type it uses.
@@ -245,3 +245,4 @@ CircuitBreakerConfig.builder()
 **Neutral:**
 - The sliding window does not know about states (CLOSED, OPEN, HALF_OPEN). It records and computes. The state machine (in the behavioral contract) interprets the snapshot and decides transitions.
 - The `slowCallDurationThreshold` in the sliding window should be aligned with the TimeLimiter timeout per ADR-012. The sliding window does not enforce this — it is a configuration-level concern.
+- Behavioral changes to the sliding window algorithm (e.g. boundary inclusive vs. exclusive) are gated by compatibility flags (ADR-013). The flag is resolved at configuration time — the selected implementation runs without branching overhead.

@@ -150,7 +150,7 @@ Registries are **not** globally scoped by design. The application controls how m
 
 ### Registry in `inqudium-core`
 
-The base registry contract lives in core:
+The base registry contract lives in core as part of the shared contracts (ADR-005):
 
 ```java
 public interface InqRegistry<E extends InqElement, C extends InqConfig> {
@@ -165,6 +165,8 @@ public interface InqRegistry<E extends InqElement, C extends InqConfig> {
 ```
 
 Each imperative element module provides its concrete registry (`CircuitBreakerRegistry`, `RetryRegistry`, etc.). Paradigm modules provide their own registries (`CoroutineCircuitBreakerRegistry`, `ReactiveCircuitBreakerRegistry`, etc.) with the same contract.
+
+The registry is the resolution mechanism for annotation-based configuration: the `InqAnnotationScanner` (ADR-017) resolves element names from `@InqCircuitBreaker("paymentCb")` by calling `registry.get("paymentCb")`. If the name was pre-registered (via YAML or programmatic config), the existing instance is returned. If not, a new instance is created with the registry's default configuration.
 
 ## Consequences
 

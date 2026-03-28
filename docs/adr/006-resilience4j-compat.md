@@ -12,7 +12,7 @@ Migrating away from Resilience4J requires changing annotations, rewriting YAML, 
 
 ## Decision
 
-We provide `inqudium-compat-resilience4j`, a compatibility module that makes migration a **dependency swap with zero code changes**.
+We provide `inqudium-compat-resilience4j`, a compatibility module (ADR-001) that makes migration a **dependency swap with zero code changes**.
 
 ### Four compatibility layers
 
@@ -80,6 +80,8 @@ Each step is independent. A project can stay at step 1 indefinitely.
 - It does not re-implement Resilience4J. It maps to Inqudium's own engine.
 - It does not support Resilience4J's internal extension points (custom `CircuitBreakerStateMachineFactory` etc.).
 - It does not provide runtime co-existence with actual Resilience4J on the classpath — one or the other, not both.
+
+For projects that want Resilience4J's element ordering during migration, `PipelineOrder.RESILIENCE4J` is available as a pipeline composition strategy (ADR-017). This preserves the behavioral semantics of R4J's aspect ordering while running on Inqudium's engine.
 
 ## Consequences
 

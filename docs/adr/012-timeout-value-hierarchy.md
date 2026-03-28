@@ -277,3 +277,4 @@ What Inqudium **cannot** validate: the HTTP client's timeout values. They live o
 - The `InqTimeoutProfile` is optional. Applications can configure timeouts manually at each layer. The profile is a convenience for projects that want derivation from a single source.
 - RSS vs. worst-case addition is a configuration choice per profile. For projects that prefer conservative timeouts, worst-case is available.
 - The timeout hierarchy rule applies identically across all paradigms. The HTTP client timeout is always the innermost boundary, regardless of whether the call is imperative, reactive, or coroutine-based.
+- The `slowCallDurationThreshold` feeds into the sliding window's slow-call classification (ADR-016). Calls exceeding this threshold are recorded as slow independently of whether they succeeded or failed.

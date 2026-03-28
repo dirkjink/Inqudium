@@ -279,7 +279,7 @@ public @interface InqCache {
 
 #### How the AOP aspect resolves elements
 
-The `InqShieldAspect` scans the method for all Inqudium element annotations, collects them, and builds the pipeline according to the `@InqShield.order()`:
+The `InqShieldAspect` scans the method for all Inqudium element annotations, collects them, and builds the pipeline according to the `@InqShield.order()`. Element names are resolved from the corresponding registries (ADR-015):
 
 ```java
 // Simplified — inside InqShieldAspect
@@ -380,7 +380,7 @@ No boilerplate, no ceremony. The intent is immediately clear.
 
 ### Retry should not retry on `InqException` by default
 
-Regardless of pipeline order, the Retry element should be configured to **not retry** on Inqudium's own rejection exceptions. This is the **default behavior** — Retry ignores all `InqException` subtypes unless explicitly overridden:
+Regardless of pipeline order, the Retry element should be configured to **not retry** on Inqudium's own rejection exceptions (ADR-009). This is the **default behavior** — Retry ignores all `InqException` subtypes unless explicitly overridden:
 
 ```java
 // Default: retries on application exceptions, ignores Inqudium rejections

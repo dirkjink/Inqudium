@@ -139,7 +139,7 @@ InqContextPropagatorRegistry.register(new OtelBaggagePropagator());
 ```
 
 **ServiceLoader (automatic):**
-Implementations provide a `META-INF/services/io.inqudium.core.context.InqContextPropagator` file. Inqudium discovers them at startup. This allows bridge modules to activate automatically when they are on the classpath — zero configuration.
+Implementations provide a `META-INF/services/io.inqudium.core.context.InqContextPropagator` file. Inqudium discovers them at startup. This allows bridge modules to activate automatically when they are on the classpath — zero configuration. Discovery timing, ordering, error isolation, and lifecycle follow the conventions defined in ADR-014.
 
 Multiple propagators can be registered simultaneously. They execute in registration order during capture and in reverse order during cleanup.
 
