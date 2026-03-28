@@ -116,11 +116,11 @@ Each element has its own page with detailed usage documentation and configuratio
 
 | Element | Guide | What you'll learn |
 |---------|-------|-------------------|
-| Circuit Breaker | [circuit-breaker.md](circuit-breaker.md) | State machine, sliding windows, minimum calls threshold |
-| Retry | [retry.md](retry.md) | Backoff strategies, jitter algorithms, exception filtering |
-| Rate Limiter | [rate-limiter.md](rate-limiter.md) | Token bucket, burst tolerance, effective rate calculation |
-| Bulkhead | [bulkhead.md](bulkhead.md) | Acquire/release lifecycle, semaphore vs. thread pool |
-| Time Limiter | [time-limiter.md](time-limiter.md) | Orphaned calls, timeout profiles, RSS calculation |
+| Circuit Breaker | [./circuit-breaker/circuit-breaker.md](circuit-breaker.md) | State machine, sliding windows, minimum calls threshold |
+| Retry | [retry.md](./retry/retry.md) | Backoff strategies, jitter algorithms, exception filtering |
+| Rate Limiter | [./rate-limiter/rate-limiter.md](rate-limiter.md) | Token bucket, burst tolerance, effective rate calculation |
+| Bulkhead | [bulkhead.md](./bulkhead/bulkhead.md) | Acquire/release lifecycle, semaphore vs. thread pool |
+| Time Limiter | [time-limiter.md](./time-limiter/time-limiter.md) | Orphaned calls, timeout profiles, RSS calculation |
 
 ---
 
@@ -142,6 +142,6 @@ Each element has its own page with detailed usage documentation and configuratio
 | Document | Audience |
 |----------|----------|
 | [Configuration Reference](configuration.md) | Quick lookup of all parameters and defaults |
-| [Architecture](architecture.md) | Contributors — why the library is structured this way |
+| [Architecture](../architecture.md) | Contributors — why the library is structured this way |
 | [Spring Boot Integration](spring-boot.md) | Spring users — auto-configuration, annotations |
 | [Migration from Resilience4J](migration.md) | Teams switching from R4J — property mapping, behavioral differences |

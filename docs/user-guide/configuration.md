@@ -8,12 +8,12 @@ Quick-reference hub for all Inqudium element configurations. Each element's full
 
 | Element | Config class | Page | Key parameters |
 |---------|-------------|------|----------------|
-| Circuit Breaker | `CircuitBreakerConfig` | [circuit-breaker.md](circuit-breaker.md#configuration-reference) | `failureRateThreshold`, `slidingWindowSize`, `waitDurationInOpenState` |
-| Retry | `RetryConfig` | [retry.md](retry.md#configuration-reference) | `maxAttempts`, `backoffStrategy`, `maxInterval`, `retryOn`/`ignoreOn` |
-| Rate Limiter | `RateLimiterConfig` | [rate-limiter.md](rate-limiter.md#configuration-reference) | `limitForPeriod`, `limitRefreshPeriod`, `bucketSize` |
-| Bulkhead | `BulkheadConfig` | [bulkhead.md](bulkhead.md#configuration-reference) | `maxConcurrentCalls`, `maxWaitDuration` |
-| Time Limiter | `TimeLimiterConfig` | [time-limiter.md](time-limiter.md#configuration-reference) | `timeoutDuration`, `onOrphanedResult`/`onOrphanedError` |
-| Timeout Profile | `InqTimeoutProfile` | [time-limiter.md](time-limiter.md#inqtimeoutprofile) | `connectTimeout`, `responseTimeout`, `method`, `safetyMarginFactor` |
+| Circuit Breaker | `CircuitBreakerConfig` | [circuit-breaker.md](./circuit-breaker/circuit-breaker.md#configuration-reference) | `failureRateThreshold`, `slidingWindowSize`, `waitDurationInOpenState` |
+| Retry | `RetryConfig` | [retry.md](./retry/retry.md#configuration-reference) | `maxAttempts`, `backoffStrategy`, `maxInterval`, `retryOn`/`ignoreOn` |
+| Rate Limiter | `RateLimiterConfig` | [rate-limiter.md](./rate-limiter/rate-limiter.md#configuration-reference) | `limitForPeriod`, `limitRefreshPeriod`, `bucketSize` |
+| Bulkhead | `BulkheadConfig` | [bulkhead.md](./bulkhead/bulkhead.md#configuration-reference) | `maxConcurrentCalls`, `maxWaitDuration` |
+| Time Limiter | `TimeLimiterConfig` | [time-limiter.md](./time-limiter/time-limiter.md#configuration-reference) | `timeoutDuration`, `onOrphanedResult`/`onOrphanedError` |
+| Timeout Profile | `InqTimeoutProfile` | [time-limiter.md](./time-limiter/time-limiter.md#inqtimeoutprofile) | `connectTimeout`, `responseTimeout`, `method`, `safetyMarginFactor` |
 
 ---
 
