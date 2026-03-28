@@ -9,7 +9,7 @@
     <version>${revision}</version>
     <packaging>pom</packaging>
 
-    <name>Inqudium BOM</name>
+    <n>Inqudium BOM</n>
     <description>Bill of Materials for Inqudium — import this to align versions across modules.</description>
 
     <properties>
@@ -75,6 +75,13 @@
                 <artifactId>inqudium-spring-boot3</artifactId>
                 <version>${revision}</version>
             </dependency>
+
+            <!-- Context bridges -->
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-context-slf4j</artifactId>
+                <version>${revision}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -87,7 +94,6 @@
                 <configuration>
                     <updatePomFile>true</updatePomFile>
                     <flattenMode>bom</flattenMode>
-                    <outputDirectory>${project.build.directory}/flatten</outputDirectory>
                 </configuration>
                 <executions>
                     <execution>
