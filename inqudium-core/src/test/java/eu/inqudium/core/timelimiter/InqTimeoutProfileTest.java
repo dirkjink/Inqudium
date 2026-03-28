@@ -56,80 +56,59 @@ class InqTimeoutProfileTest {
   // TimeoutCalculator
   // =========================================================================
 
+  // =========================================================================
+  // RssTimeoutCalculator
+  // =========================================================================
+
   @Nested
-  @DisplayName("TimeoutCalculator")
-  class TimeoutCalculatorTests {
+  @DisplayName("RssTimeoutCalculator")
+  class RssTimeoutCalculatorTests {
 
-    private final TimeoutCalculator calculator = new TimeoutCalculator();
+    private final TimeoutCalculator calculator = new RssTimeoutCalculator();
 
-    @Nested
-    @DisplayName("RSS strategy")
-    class RssStrategy {
+    @Test
+    void rss_produces_a_strictly_smaller_result_than_worst_case_for_multiple_components() {
+      // Given
+      var components = java.util.List.of(
+          Duration.ofMillis(250),
+          Duration.ofSeconds(3)
+      );
 
-      @Test
-      void rss_produces_a_strictly_smaller_result_than_worst_case_for_multiple_components() {
-        // Given
-        var components = java.util.List.of(
-            Duration.ofMillis(250),
-            Duration.ofSeconds(3)
-        );
+      // When
+      var rssResult = calculator.calculate(components, 1.0);
+      var wcResult = new WorstCaseTimeoutCalculator().calculate(components, 1.0);
 
-        // When
-        var rssResult = calculator.calculate(components, TimeoutCalculation.RSS, 1.0);
-        var wcResult = calculator.calculate(components, TimeoutCalculation.WORST_CASE, 1.0);
-
-        // Then
-        assertThat(rssResult).isLessThan(wcResult);
-      }
-
-      @Test
-      void rss_with_a_single_component_equals_worst_case_for_that_same_single_component() {
-        // Given — with one component RSS and WORST_CASE are mathematically identical
-        var components = java.util.List.of(Duration.ofSeconds(2));
-
-        // When
-        var rssResult = calculator.calculate(components, TimeoutCalculation.RSS, 1.0);
-        var wcResult = calculator.calculate(components, TimeoutCalculation.WORST_CASE, 1.0);
-
-        // Then
-        assertThat(rssResult).isEqualTo(wcResult);
-      }
-
-      @Test
-      void rss_result_is_always_positive_for_positive_components() {
-        // Given
-        var components = java.util.List.of(
-            Duration.ofMillis(100),
-            Duration.ofMillis(500),
-            Duration.ofSeconds(2)
-        );
-
-        // When
-        var result = calculator.calculate(components, TimeoutCalculation.RSS, 1.2);
-
-        // Then
-        assertThat(result).isPositive();
-      }
+      // Then
+      assertThat(rssResult).isLessThan(wcResult);
     }
 
-    @Nested
-    @DisplayName("WORST_CASE strategy")
-    class WorstCaseStrategy {
+    @Test
+    void rss_with_a_single_component_equals_worst_case_for_that_same_single_component() {
+      // Given — with one component RSS and WORST_CASE are mathematically identical
+      var components = java.util.List.of(Duration.ofSeconds(2));
 
-      @Test
-      void worst_case_total_equals_the_sum_of_all_individual_component_timeouts_when_margin_is_one() {
-        // Given — with safetyMarginFactor=1.0 the formula reduces to:
-        //   result = Σ(ms_i × 0.5) + Σ(ms_i × 0.5) = Σ ms_i
-        var c1 = Duration.ofSeconds(1); // 1000 ms
-        var c2 = Duration.ofSeconds(2); // 2000 ms
-        var components = java.util.List.of(c1, c2);
+      // When
+      var rssResult = calculator.calculate(components, 1.0);
+      var wcResult = new WorstCaseTimeoutCalculator().calculate(components, 1.0);
 
-        // When
-        var result = calculator.calculate(components, TimeoutCalculation.WORST_CASE, 1.0);
+      // Then
+      assertThat(rssResult).isEqualTo(wcResult);
+    }
 
-        // Then — expected: 1000 + 2000 = 3000 ms
-        assertThat(result).isEqualTo(Duration.ofMillis(3000));
-      }
+    @Test
+    void rss_result_is_always_positive_for_positive_components() {
+      // Given
+      var components = java.util.List.of(
+          Duration.ofMillis(100),
+          Duration.ofMillis(500),
+          Duration.ofSeconds(2)
+      );
+
+      // When
+      var result = calculator.calculate(components, 1.2);
+
+      // Then
+      assertThat(result).isPositive();
     }
 
     @Nested
@@ -142,7 +121,7 @@ class InqTimeoutProfileTest {
         var components = java.util.List.<Duration>of();
 
         // When
-        var result = calculator.calculate(components, TimeoutCalculation.RSS, 1.0);
+        var result = calculator.calculate(components, 1.0);
 
         // Then
         assertThat(result).isEqualTo(Duration.ofSeconds(5));
@@ -154,25 +133,237 @@ class InqTimeoutProfileTest {
         var components = java.util.List.<Duration>of();
 
         // When
-        var resultWithLargeMargin = calculator.calculate(components, TimeoutCalculation.RSS, 2.0);
+        var result = calculator.calculate(components, 2.0);
 
         // Then — fallback is returned unchanged regardless of margin
-        assertThat(resultWithLargeMargin).isEqualTo(Duration.ofSeconds(5));
+        assertThat(result).isEqualTo(Duration.ofSeconds(5));
       }
     }
 
     @Nested
-    @DisplayName("Safety margin factor applied by calculator")
-    class SafetyMarginAppliedByCalculator {
+    @DisplayName("Safety margin factor")
+    class SafetyMarginFactor {
 
       @Test
-      void applying_a_safety_margin_factor_scales_the_result_proportionally() {
+      void applying_a_safety_margin_factor_scales_the_rss_result_proportionally() {
         // Given
         var components = java.util.List.of(Duration.ofSeconds(2));
 
         // When
-        var base = calculator.calculate(components, TimeoutCalculation.WORST_CASE, 1.0);
-        var withMargin = calculator.calculate(components, TimeoutCalculation.WORST_CASE, 1.5);
+        var base = calculator.calculate(components, 1.0);
+        var withMargin = calculator.calculate(components, 1.5);
+
+        // Then
+        assertThat(withMargin.toMillis())
+            .isCloseTo((long) (base.toMillis() * 1.5), Offset.offset(1L));
+      }
+    }
+  }
+
+  // =========================================================================
+  // WorstCaseTimeoutCalculator
+  // =========================================================================
+
+  @Nested
+  @DisplayName("WorstCaseTimeoutCalculator")
+  class WorstCaseTimeoutCalculatorTests {
+
+    private final TimeoutCalculator calculator = new WorstCaseTimeoutCalculator();
+
+    @Test
+    void worst_case_total_equals_the_sum_of_all_individual_component_timeouts_when_margin_is_one() {
+      // Given — with safetyMarginFactor=1.0 the formula reduces to:
+      //   result = Σ(ms_i × 0.5) + Σ(ms_i × 0.5) = Σ ms_i
+      var c1 = Duration.ofSeconds(1); // 1000 ms
+      var c2 = Duration.ofSeconds(2); // 2000 ms
+      var components = java.util.List.of(c1, c2);
+
+      // When
+      var result = calculator.calculate(components, 1.0);
+
+      // Then — expected: 1000 + 2000 = 3000 ms
+      assertThat(result).isEqualTo(Duration.ofMillis(3000));
+    }
+
+    @Test
+    void worst_case_produces_a_strictly_larger_result_than_rss_for_multiple_components() {
+      // Given
+      var components = java.util.List.of(
+          Duration.ofMillis(250),
+          Duration.ofSeconds(3)
+      );
+
+      // When
+      var wcResult = calculator.calculate(components, 1.0);
+      var rssResult = new RssTimeoutCalculator().calculate(components, 1.0);
+
+      // Then
+      assertThat(wcResult).isGreaterThan(rssResult);
+    }
+
+    @Nested
+    @DisplayName("Fallback behaviour")
+    class FallbackBehaviour {
+
+      @Test
+      void empty_component_list_returns_the_five_second_fallback_duration() {
+        // Given
+        var components = java.util.List.<Duration>of();
+
+        // When
+        var result = calculator.calculate(components, 1.0);
+
+        // Then
+        assertThat(result).isEqualTo(Duration.ofSeconds(5));
+      }
+
+      @Test
+      void empty_component_list_ignores_the_safety_margin_factor_and_still_returns_fallback() {
+        // Given
+        var components = java.util.List.<Duration>of();
+
+        // When
+        var result = calculator.calculate(components, 2.0);
+
+        // Then — fallback is returned unchanged regardless of margin
+        assertThat(result).isEqualTo(Duration.ofSeconds(5));
+      }
+    }
+
+    @Nested
+    @DisplayName("Safety margin factor")
+    class SafetyMarginFactor {
+
+      @Test
+      void applying_a_safety_margin_factor_scales_the_worst_case_result_proportionally() {
+        // Given
+        var components = java.util.List.of(Duration.ofSeconds(2));
+
+        // When
+        var base = calculator.calculate(components, 1.0);
+        var withMargin = calculator.calculate(components, 1.5);
+
+        // Then
+        assertThat(withMargin.toMillis())
+            .isCloseTo((long) (base.toMillis() * 1.5), Offset.offset(1L));
+      }
+    }
+  }
+
+  // =========================================================================
+  // MaxTimeoutCalculator
+  // =========================================================================
+
+  @Nested
+  @DisplayName("MaxTimeoutCalculator")
+  class MaxTimeoutCalculatorTests {
+
+    private final TimeoutCalculator calculator = new MaxTimeoutCalculator();
+
+    @Test
+    void max_returns_the_largest_component_duration_when_margin_is_one() {
+      // Given
+      var components = java.util.List.of(
+          Duration.ofMillis(250),
+          Duration.ofSeconds(3),   // largest — 3000 ms
+          Duration.ofMillis(750)
+      );
+
+      // When
+      var result = calculator.calculate(components, 1.0);
+
+      // Then
+      assertThat(result).isEqualTo(Duration.ofSeconds(3));
+    }
+
+    @Test
+    void max_result_is_strictly_less_than_or_equal_to_worst_case_for_the_same_components() {
+      // Given
+      var components = java.util.List.of(
+          Duration.ofMillis(250),
+          Duration.ofSeconds(3)
+      );
+
+      // When
+      var maxResult = calculator.calculate(components, 1.0);
+      var wcResult = new WorstCaseTimeoutCalculator().calculate(components, 1.0);
+
+      // Then — MAX can never exceed WORST_CASE (which sums all components)
+      assertThat(maxResult).isLessThanOrEqualTo(wcResult);
+    }
+
+    @Test
+    void max_with_a_single_component_returns_that_component_scaled_by_the_margin() {
+      // Given
+      var components = java.util.List.of(Duration.ofSeconds(2));
+
+      // When
+      var result = calculator.calculate(components, 1.5);
+
+      // Then — 2000 ms × 1.5 = 3000 ms
+      assertThat(result).isEqualTo(Duration.ofMillis(3000));
+    }
+
+    @Test
+    void max_with_all_equal_components_returns_that_shared_value_scaled_by_the_margin() {
+      // Given
+      var components = java.util.List.of(
+          Duration.ofSeconds(2),
+          Duration.ofSeconds(2),
+          Duration.ofSeconds(2)
+      );
+
+      // When
+      var result = calculator.calculate(components, 1.0);
+
+      // Then
+      assertThat(result).isEqualTo(Duration.ofSeconds(2));
+    }
+
+    @Nested
+    @DisplayName("Fallback behaviour")
+    class FallbackBehaviour {
+
+      @Test
+      void empty_component_list_returns_the_five_second_fallback_duration() {
+        // Given
+        var components = java.util.List.<Duration>of();
+
+        // When
+        var result = calculator.calculate(components, 1.0);
+
+        // Then
+        assertThat(result).isEqualTo(Duration.ofSeconds(5));
+      }
+
+      @Test
+      void empty_component_list_ignores_the_safety_margin_factor_and_still_returns_fallback() {
+        // Given
+        var components = java.util.List.<Duration>of();
+
+        // When
+        var result = calculator.calculate(components, 2.0);
+
+        // Then — fallback is returned unchanged regardless of margin
+        assertThat(result).isEqualTo(Duration.ofSeconds(5));
+      }
+    }
+
+    @Nested
+    @DisplayName("Safety margin factor")
+    class SafetyMarginFactor {
+
+      @Test
+      void applying_a_safety_margin_factor_scales_the_maximum_component_proportionally() {
+        // Given
+        var components = java.util.List.of(
+            Duration.ofMillis(500),
+            Duration.ofSeconds(2)   // largest
+        );
+
+        // When
+        var base = calculator.calculate(components, 1.0);
+        var withMargin = calculator.calculate(components, 1.5);
 
         // Then
         assertThat(withMargin.toMillis())
@@ -193,15 +384,15 @@ class InqTimeoutProfileTest {
     void rss_profile_produces_tighter_timeout_than_worst_case_for_the_same_components() {
       // Given
       var rss = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(250))
-          .responseTimeout(Duration.ofSeconds(3))
+          .connectionEstablishmentTimeout(Duration.ofMillis(250))
+          .readInactivityTimeout(Duration.ofSeconds(3))
           .method(TimeoutCalculation.RSS)
           .safetyMarginFactor(1.0) // no margin for clean comparison
           .build();
 
       var worstCase = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(250))
-          .responseTimeout(Duration.ofSeconds(3))
+          .connectionEstablishmentTimeout(Duration.ofMillis(250))
+          .readInactivityTimeout(Duration.ofSeconds(3))
           .method(TimeoutCalculation.WORST_CASE)
           .safetyMarginFactor(1.0)
           .build();
@@ -218,8 +409,8 @@ class InqTimeoutProfileTest {
     void profile_produces_a_positive_timelimiter_timeout_for_typical_http_values() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(250))
-          .responseTimeout(Duration.ofSeconds(3))
+          .connectionEstablishmentTimeout(Duration.ofMillis(250))
+          .readInactivityTimeout(Duration.ofSeconds(3))
           .build(); // defaults: RSS, 1.2 margin
 
       // When
@@ -238,15 +429,15 @@ class InqTimeoutProfileTest {
     void a_safety_margin_factor_of_one_point_five_scales_the_timeout_by_exactly_that_factor() {
       // Given
       var noMargin = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofSeconds(1))
-          .responseTimeout(Duration.ofSeconds(2))
+          .connectionEstablishmentTimeout(Duration.ofSeconds(1))
+          .readInactivityTimeout(Duration.ofSeconds(2))
           .method(TimeoutCalculation.WORST_CASE)
           .safetyMarginFactor(1.0)
           .build();
 
       var withMargin = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofSeconds(1))
-          .responseTimeout(Duration.ofSeconds(2))
+          .connectionEstablishmentTimeout(Duration.ofSeconds(1))
+          .readInactivityTimeout(Duration.ofSeconds(2))
           .method(TimeoutCalculation.WORST_CASE)
           .safetyMarginFactor(1.5)
           .build();
@@ -274,7 +465,7 @@ class InqTimeoutProfileTest {
       // Given / When / Then — boundary: 1.0 must not throw
       assertThat(
           InqTimeoutProfile.builder()
-              .connectTimeout(Duration.ofSeconds(1))
+              .connectionEstablishmentTimeout(Duration.ofSeconds(1))
               .safetyMarginFactor(1.0)
               .build()
       ).isNotNull();
@@ -289,8 +480,8 @@ class InqTimeoutProfileTest {
     void slow_call_duration_threshold_is_always_equal_to_the_timelimiter_timeout() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(500))
-          .responseTimeout(Duration.ofSeconds(5))
+          .connectionEstablishmentTimeout(Duration.ofMillis(500))
+          .readInactivityTimeout(Duration.ofSeconds(5))
           .build();
 
       // When / Then — ADR-012 requirement
@@ -304,25 +495,25 @@ class InqTimeoutProfileTest {
   class Accessors {
 
     @Test
-    void connect_timeout_accessor_returns_the_connection_establishment_duration() {
+    void connection_establishment_timeout_accessor_returns_the_configured_duration() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(250))
+          .connectionEstablishmentTimeout(Duration.ofMillis(250))
           .build();
 
       // When / Then
-      assertThat(profile.connectTimeout()).isEqualTo(Duration.ofMillis(250));
+      assertThat(profile.connectionEstablishmentTimeout()).isEqualTo(Duration.ofMillis(250));
     }
 
     @Test
-    void response_timeout_accessor_returns_the_read_inactivity_duration() {
+    void read_inactivity_timeout_accessor_returns_the_configured_duration() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .responseTimeout(Duration.ofSeconds(3))
+          .readInactivityTimeout(Duration.ofSeconds(3))
           .build();
 
       // When / Then
-      assertThat(profile.responseTimeout()).isEqualTo(Duration.ofSeconds(3));
+      assertThat(profile.readInactivityTimeout()).isEqualTo(Duration.ofSeconds(3));
     }
 
     @Test
@@ -362,8 +553,8 @@ class InqTimeoutProfileTest {
     void get_timeout_with_explicit_type_returns_the_configured_value() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(250))
-          .responseTimeout(Duration.ofSeconds(3))
+          .connectionEstablishmentTimeout(Duration.ofMillis(250))
+          .readInactivityTimeout(Duration.ofSeconds(3))
           .method(TimeoutCalculation.RSS)
           .safetyMarginFactor(1.3)
           .build();
@@ -379,13 +570,13 @@ class InqTimeoutProfileTest {
 
     @Test
     void unconfigured_timeout_type_returns_duration_zero() {
-      // Given — profile has only connectTimeout set
+      // Given — profile has only connectionEstablishmentTimeout set
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(100))
+          .connectionEstablishmentTimeout(Duration.ofMillis(100))
           .build();
 
       // When / Then — all other types must fall back to ZERO
-      assertThat(profile.responseTimeout()).isEqualTo(Duration.ZERO);
+      assertThat(profile.readInactivityTimeout()).isEqualTo(Duration.ZERO);
       assertThat(profile.connectionAcquireTimeout()).isEqualTo(Duration.ZERO);
       assertThat(profile.writeOperationTimeout()).isEqualTo(Duration.ZERO);
       assertThat(profile.serverResponseTimeout()).isEqualTo(Duration.ZERO);
@@ -395,8 +586,8 @@ class InqTimeoutProfileTest {
     void get_timeout_components_returns_only_the_keys_that_were_explicitly_configured() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(250))
-          .responseTimeout(Duration.ofSeconds(3))
+          .connectionEstablishmentTimeout(Duration.ofMillis(250))
+          .readInactivityTimeout(Duration.ofSeconds(3))
           .build();
 
       // When
@@ -416,27 +607,27 @@ class InqTimeoutProfileTest {
   class DuplicateParameterHandling {
 
     @Test
-    void calling_connect_timeout_twice_replaces_the_first_value_with_the_second() {
+    void calling_connection_establishment_timeout_twice_replaces_the_first_value_with_the_second() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(100)) // first call — will be overwritten
-          .connectTimeout(Duration.ofMillis(500)) // second call — must win
+          .connectionEstablishmentTimeout(Duration.ofMillis(100)) // first call — will be overwritten
+          .connectionEstablishmentTimeout(Duration.ofMillis(500)) // second call — must win
           .build();
 
       // When / Then
-      assertThat(profile.connectTimeout()).isEqualTo(Duration.ofMillis(500));
+      assertThat(profile.connectionEstablishmentTimeout()).isEqualTo(Duration.ofMillis(500));
     }
 
     @Test
-    void calling_response_timeout_twice_replaces_the_first_value_with_the_second() {
+    void calling_read_inactivity_timeout_twice_replaces_the_first_value_with_the_second() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .responseTimeout(Duration.ofSeconds(1))
-          .responseTimeout(Duration.ofSeconds(5))
+          .readInactivityTimeout(Duration.ofSeconds(1))
+          .readInactivityTimeout(Duration.ofSeconds(5))
           .build();
 
       // When / Then
-      assertThat(profile.responseTimeout()).isEqualTo(Duration.ofSeconds(5));
+      assertThat(profile.readInactivityTimeout()).isEqualTo(Duration.ofSeconds(5));
     }
 
     @Test
@@ -452,12 +643,12 @@ class InqTimeoutProfileTest {
     }
 
     @Test
-    void duplicate_connect_timeout_calls_do_not_accumulate_into_the_component_map() {
+    void duplicate_connection_establishment_timeout_calls_do_not_accumulate_into_the_component_map() {
       // Given
       var profile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(100))
-          .connectTimeout(Duration.ofMillis(200))
-          .connectTimeout(Duration.ofMillis(300))
+          .connectionEstablishmentTimeout(Duration.ofMillis(100))
+          .connectionEstablishmentTimeout(Duration.ofMillis(200))
+          .connectionEstablishmentTimeout(Duration.ofMillis(300))
           .build();
 
       // When / Then — map must contain exactly one entry for CONNECTION_ESTABLISHMENT
@@ -465,22 +656,22 @@ class InqTimeoutProfileTest {
           .containsOnlyKeys(AgnosticTimeoutType.CONNECTION_ESTABLISHMENT)
           .hasSize(1);
 
-      assertThat(profile.connectTimeout()).isEqualTo(Duration.ofMillis(300));
+      assertThat(profile.connectionEstablishmentTimeout()).isEqualTo(Duration.ofMillis(300));
     }
 
     @Test
     void overwriting_a_timeout_affects_the_computed_timelimiter_timeout() {
       // Given
       var profileWithSmallConnect = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(100))
+          .connectionEstablishmentTimeout(Duration.ofMillis(100))
           .method(TimeoutCalculation.WORST_CASE)
           .safetyMarginFactor(1.0)
           .build();
 
       // Same chain but the connect timeout is overwritten to a larger value
       var profileWithLargeConnect = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(100))
-          .connectTimeout(Duration.ofMillis(2000)) // overwrites
+          .connectionEstablishmentTimeout(Duration.ofMillis(100))
+          .connectionEstablishmentTimeout(Duration.ofMillis(2000)) // overwrites
           .method(TimeoutCalculation.WORST_CASE)
           .safetyMarginFactor(1.0)
           .build();
@@ -503,16 +694,16 @@ class InqTimeoutProfileTest {
       // Given
       var profile = InqTimeoutProfile.builder()
           .connectionAcquireTimeout(Duration.ofMillis(50))
-          .connectTimeout(Duration.ofMillis(250))
-          .responseTimeout(Duration.ofSeconds(3))
+          .connectionEstablishmentTimeout(Duration.ofMillis(250))
+          .readInactivityTimeout(Duration.ofSeconds(3))
           .writeOperationTimeout(Duration.ofMillis(750))
           .serverResponseTimeout(Duration.ofSeconds(2))
           .build();
 
       // When / Then — each dedicated accessor must return its specific value
       assertThat(profile.connectionAcquireTimeout()).isEqualTo(Duration.ofMillis(50));
-      assertThat(profile.connectTimeout()).isEqualTo(Duration.ofMillis(250));
-      assertThat(profile.responseTimeout()).isEqualTo(Duration.ofSeconds(3));
+      assertThat(profile.connectionEstablishmentTimeout()).isEqualTo(Duration.ofMillis(250));
+      assertThat(profile.readInactivityTimeout()).isEqualTo(Duration.ofSeconds(3));
       assertThat(profile.writeOperationTimeout()).isEqualTo(Duration.ofMillis(750));
       assertThat(profile.serverResponseTimeout()).isEqualTo(Duration.ofSeconds(2));
     }
@@ -545,8 +736,8 @@ class InqTimeoutProfileTest {
     void named_builder_methods_and_generic_timeout_method_map_to_the_same_enum_keys() {
       // Given — two profiles built differently but with identical logical configuration
       var namedProfile = InqTimeoutProfile.builder()
-          .connectTimeout(Duration.ofMillis(300))
-          .responseTimeout(Duration.ofSeconds(2))
+          .connectionEstablishmentTimeout(Duration.ofMillis(300))
+          .readInactivityTimeout(Duration.ofSeconds(2))
           .build();
 
       var genericProfile = InqTimeoutProfile.builder()
@@ -598,8 +789,8 @@ class InqTimeoutProfileTest {
       var emptyProfile = InqTimeoutProfile.builder().build();
 
       // When / Then
-      assertThat(emptyProfile.connectTimeout()).isEqualTo(Duration.ZERO);
-      assertThat(emptyProfile.responseTimeout()).isEqualTo(Duration.ZERO);
+      assertThat(emptyProfile.connectionEstablishmentTimeout()).isEqualTo(Duration.ZERO);
+      assertThat(emptyProfile.readInactivityTimeout()).isEqualTo(Duration.ZERO);
       assertThat(emptyProfile.connectionAcquireTimeout()).isEqualTo(Duration.ZERO);
       assertThat(emptyProfile.writeOperationTimeout()).isEqualTo(Duration.ZERO);
       assertThat(emptyProfile.serverResponseTimeout()).isEqualTo(Duration.ZERO);

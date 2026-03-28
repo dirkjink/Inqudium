@@ -19,8 +19,8 @@ import java.util.Objects;
  * <h2>Usage</h2>
  * <pre>{@code
  * var profile = InqTimeoutProfile.builder()
- *     .connectTimeout(Duration.ofMillis(250))      // → CONNECTION_ESTABLISHMENT
- *     .responseTimeout(Duration.ofSeconds(3))       // → READ_INACTIVITY
+ *     .connectionEstablishmentTimeout(Duration.ofMillis(250)) // → CONNECTION_ESTABLISHMENT
+ *     .readInactivityTimeout(Duration.ofSeconds(3))           // → READ_INACTIVITY
  *     .method(TimeoutCalculation.RSS)
  *     .safetyMarginFactor(1.2)
  *     .build();
@@ -42,10 +42,9 @@ public final class InqTimeoutProfile {
   /** Immutable snapshot of the configured timeout components at build time. */
   private final Map<AgnosticTimeoutType, Duration> timeoutComponents;
 
-  private final TimeoutCalculation method;
   private final double safetyMarginFactor;
 
-  /** Stateless; safe to share. */
+  /** Strategy selected at build time; stateless and safe to share. */
   private final TimeoutCalculator calculator;
 
   // -------------------------------------------------------------------------
@@ -55,9 +54,13 @@ public final class InqTimeoutProfile {
   private InqTimeoutProfile(Builder b) {
     // Defensive copy — the builder's EnumMap is mutable
     this.timeoutComponents = Map.copyOf(b.timeoutComponents);
-    this.method = b.method;
     this.safetyMarginFactor = b.safetyMarginFactor;
-    this.calculator = new TimeoutCalculator();
+    // Select the strategy implementation that matches the chosen TimeoutCalculation
+    this.calculator = switch (b.method) {
+      case RSS -> new RssTimeoutCalculator();
+      case WORST_CASE -> new WorstCaseTimeoutCalculator();
+      case MAX -> new MaxTimeoutCalculator();
+    };
   }
 
   /** Creates a new builder. */
@@ -72,13 +75,12 @@ public final class InqTimeoutProfile {
   /**
    * Computes the recommended TimeLimiter timeout.
    *
-   * <p>Delegates to {@link TimeoutCalculator} using the configured components,
-   * combination method, and safety margin factor.
+   * <p>Delegates to the {@link TimeoutCalculator} strategy selected at build time.
    *
    * @return the computed TimeLimiter timeout
    */
   public Duration timeLimiterTimeout() {
-    return calculator.calculate(timeoutComponents.values(), method, safetyMarginFactor);
+    return calculator.calculate(timeoutComponents.values(), safetyMarginFactor);
   }
 
   /**
@@ -102,7 +104,7 @@ public final class InqTimeoutProfile {
    *
    * @return the value, or {@link Duration#ZERO} if not configured
    */
-  public Duration connectTimeout() {
+  public Duration connectionEstablishmentTimeout() {
     return getTimeout(AgnosticTimeoutType.CONNECTION_ESTABLISHMENT);
   }
 
@@ -111,7 +113,7 @@ public final class InqTimeoutProfile {
    *
    * @return the value, or {@link Duration#ZERO} if not configured
    */
-  public Duration responseTimeout() {
+  public Duration readInactivityTimeout() {
     return getTimeout(AgnosticTimeoutType.READ_INACTIVITY);
   }
 
@@ -167,12 +169,18 @@ public final class InqTimeoutProfile {
   // -------------------------------------------------------------------------
 
   /**
-   * Returns the calculation method used.
+   * Returns the calculation method in use, derived from the active
+   * {@link TimeoutCalculator} strategy.
    *
    * @return {@link TimeoutCalculation#RSS} or {@link TimeoutCalculation#WORST_CASE}
    */
   public TimeoutCalculation getMethod() {
-    return method;
+    return switch (calculator) {
+      case RssTimeoutCalculator ignored -> TimeoutCalculation.RSS;
+      case WorstCaseTimeoutCalculator ignored -> TimeoutCalculation.WORST_CASE;
+      case MaxTimeoutCalculator ignored -> TimeoutCalculation.MAX;
+      default -> throw new IllegalStateException("Unknown calculator type: " + calculator.getClass());
+    };
   }
 
   /**
@@ -220,7 +228,7 @@ public final class InqTimeoutProfile {
      * @param timeout the connect timeout; must not be {@code null}
      * @return this builder
      */
-    public Builder connectTimeout(Duration timeout) {
+    public Builder connectionEstablishmentTimeout(Duration timeout) {
       return timeout(AgnosticTimeoutType.CONNECTION_ESTABLISHMENT, timeout);
     }
 
@@ -233,7 +241,7 @@ public final class InqTimeoutProfile {
      * @param timeout the response / read-inactivity timeout; must not be {@code null}
      * @return this builder
      */
-    public Builder responseTimeout(Duration timeout) {
+    public Builder readInactivityTimeout(Duration timeout) {
       return timeout(AgnosticTimeoutType.READ_INACTIVITY, timeout);
     }
 
@@ -280,8 +288,8 @@ public final class InqTimeoutProfile {
      * Generic setter — sets a timeout for the given {@link AgnosticTimeoutType}.
      *
      * <p>Replaces any previously set value for this type.
-     * Prefer the named convenience methods ({@link #connectTimeout},
-     * {@link #responseTimeout}, etc.) for readability.
+     * Prefer the named convenience methods ({@link #connectionEstablishmentTimeout},
+     * {@link #readInactivityTimeout}, etc.) for readability.
      *
      * @param type    the timeout type; must not be {@code null}
      * @param timeout the duration; must not be {@code null}
