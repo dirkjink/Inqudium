@@ -37,23 +37,23 @@ import java.util.UUID;
 @FunctionalInterface
 public interface InqCallIdGenerator {
 
-    /**
-     * Generates a unique call identifier.
-     *
-     * <p>The returned value must be non-null and should be unique within
-     * the scope of the application. Uniqueness is not enforced — duplicate
-     * IDs will cause event correlation ambiguity but not functional failures.
-     *
-     * @return a unique call identifier
-     */
-    String generate();
+  /**
+   * Returns the default generator backed by {@link UUID#randomUUID()}.
+   *
+   * @return the UUID-based generator
+   */
+  static InqCallIdGenerator uuid() {
+    return () -> UUID.randomUUID().toString();
+  }
 
-    /**
-     * Returns the default generator backed by {@link UUID#randomUUID()}.
-     *
-     * @return the UUID-based generator
-     */
-    static InqCallIdGenerator uuid() {
-        return () -> UUID.randomUUID().toString();
-    }
+  /**
+   * Generates a unique call identifier.
+   *
+   * <p>The returned value must be non-null and should be unique within
+   * the scope of the application. Uniqueness is not enforced — duplicate
+   * IDs will cause event correlation ambiguity but not functional failures.
+   *
+   * @return a unique call identifier
+   */
+  String generate();
 }

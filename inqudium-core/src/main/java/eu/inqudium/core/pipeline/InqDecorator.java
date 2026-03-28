@@ -1,40 +1,29 @@
 package eu.inqudium.core.pipeline;
 
-import eu.inqudium.core.InqElementType;
-
-import java.util.function.Supplier;
+import eu.inqudium.core.InqCall;
+import eu.inqudium.core.InqElement;
 
 /**
  * Decoration contract for resilience elements in a pipeline.
  *
- * <p>Each element that participates in a pipeline implements this interface.
+ * <p>Element interfaces (CircuitBreaker, Retry, etc.) extend this interface.
  * The pipeline composes decorators by nesting: the outermost decorator wraps
  * the next, which wraps the next, down to the original supplier (ADR-002).
  *
+ * <p>The {@link InqCall} carries the callId through the chain — no thread-local,
+ * no hidden state. Every decorator reads {@code call.callId()} for event
+ * correlation and wraps the supplier via {@code call.withSupplier(...)}.
+ *
  * @since 0.1.0
  */
-public interface InqDecorator {
+public interface InqDecorator extends InqElement {
 
-    /**
-     * Wraps a supplier with this element's resilience logic.
-     *
-     * @param supplier the supplier to decorate (may be another decorator's output)
-     * @param <T>      the result type
-     * @return a decorated supplier
-     */
-    <T> Supplier<T> decorate(Supplier<T> supplier);
-
-    /**
-     * Returns the element type for pipeline ordering.
-     *
-     * @return the element type
-     */
-    InqElementType getElementType();
-
-    /**
-     * Returns the element instance name for diagnostics and event correlation.
-     *
-     * @return the element name
-     */
-    String getName();
+  /**
+   * Wraps a call with this element's resilience logic, preserving the callId.
+   *
+   * @param call the call to decorate (carries the shared callId)
+   * @param <T>  the result type
+   * @return a decorated call with the same callId
+   */
+  <T> InqCall<T> decorate(InqCall<T> call);
 }

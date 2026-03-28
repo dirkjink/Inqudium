@@ -19,6 +19,10 @@
  *   <li>{@code InqCallIdGenerator} — functional interface for generating unique call
  *       identifiers. Override for deterministic tests, trace ID integration, or custom
  *       formats. Default: UUID.</li>
+ *   <li>{@code InqCall} — context-carrying wrapper for pipeline calls. Carries the
+ *       {@code callId} through the decoration chain without thread-local state.
+ *       Used by element implementations in pipeline mode; standalone calls generate
+ *       their own callId via {@code InqCallIdGenerator}.</li>
  * </ul>
  *
  * <h2>Design principles</h2>

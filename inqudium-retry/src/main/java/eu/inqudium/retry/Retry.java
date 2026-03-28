@@ -1,7 +1,7 @@
 package eu.inqudium.retry;
 
-import eu.inqudium.core.InqElement;
 import eu.inqudium.core.InqElementType;
+import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.retry.RetryConfig;
 import eu.inqudium.retry.internal.RetryImpl;
 
@@ -23,34 +23,35 @@ import java.util.function.Supplier;
  *
  * @since 0.1.0
  */
-public interface Retry extends InqElement {
+public interface Retry extends InqDecorator {
 
-    static Retry of(String name, RetryConfig config) {
-        return new RetryImpl(name, config);
-    }
+  static Retry of(String name, RetryConfig config) {
+    return new RetryImpl(name, config);
+  }
 
-    static Retry ofDefaults(String name) {
-        return new RetryImpl(name, RetryConfig.ofDefaults());
-    }
+  static Retry ofDefaults(String name) {
+    return new RetryImpl(name, RetryConfig.ofDefaults());
+  }
 
-    RetryConfig getConfig();
+  RetryConfig getConfig();
 
-    <T> Supplier<T> decorateSupplier(Supplier<T> supplier);
+  <T> Supplier<T> decorateSupplier(Supplier<T> supplier);
 
-    <T> Supplier<T> decorateCallable(Callable<T> callable);
 
-    Runnable decorateRunnable(Runnable runnable);
+  <T> Supplier<T> decorateCallable(Callable<T> callable);
 
-    default <T> T executeSupplier(Supplier<T> supplier) {
-        return decorateSupplier(supplier).get();
-    }
+  Runnable decorateRunnable(Runnable runnable);
 
-    default void executeRunnable(Runnable runnable) {
-        decorateRunnable(runnable).run();
-    }
+  default <T> T executeSupplier(Supplier<T> supplier) {
+    return decorateSupplier(supplier).get();
+  }
 
-    @Override
-    default InqElementType getElementType() {
-        return InqElementType.RETRY;
-    }
+  default void executeRunnable(Runnable runnable) {
+    decorateRunnable(runnable).run();
+  }
+
+  @Override
+  default InqElementType getElementType() {
+    return InqElementType.RETRY;
+  }
 }
