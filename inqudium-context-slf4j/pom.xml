@@ -10,10 +10,13 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>inqudium-kotlin</artifactId>
+    <artifactId>inqudium-context-slf4j</artifactId>
 
-    <name>Inqudium Kotlin Coroutines</name>
-    <description>Native Kotlin Coroutine implementation — Mutex, delay(), Flow. All elements, no thread bridges.</description>
+    <name>Inqudium Context Bridge: SLF4J MDC</name>
+    <description>
+        InqContextPropagator implementation for SLF4J MDC.
+        Add to classpath for automatic MDC propagation through resilience elements.
+    </description>
 
     <dependencies>
         <dependency>
@@ -21,12 +24,12 @@
             <artifactId>inqudium-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.jetbrains.kotlinx</groupId>
-            <artifactId>kotlinx-coroutines-core</artifactId>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.jetbrains.kotlinx</groupId>
-            <artifactId>kotlinx-coroutines-test</artifactId>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

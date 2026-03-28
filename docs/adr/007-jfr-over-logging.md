@@ -2,6 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-03-22  
+**Last updated:** 2026-03-23  
 **Deciders:** Core team
 
 ## Context
@@ -26,12 +27,14 @@ Each resilience interaction maps to a JFR event class annotated with `@Name` and
 
 | JFR Event                               | Triggers on                        | Key fields                              |
 |-----------------------------------------|------------------------------------|-----------------------------------------|
-| `io.inqudium.CircuitBreakerCall`        | Every call through a breaker       | duration, success/failure, state        |
-| `io.inqudium.CircuitBreakerStateTransition` | State change (CLOSED→OPEN etc.) | fromState, toState, failureRate         |
-| `io.inqudium.RetryAttempt`              | Each retry attempt                 | attemptNumber, waitDuration, exception  |
-| `io.inqudium.RateLimiterAcquire`        | Permit acquisition attempt         | waitDuration, permitted (boolean)       |
-| `io.inqudium.BulkheadAcquire`           | Concurrency slot acquisition       | waitDuration, concurrentCallCount       |
-| `io.inqudium.TimeLimiterTimeout`        | Timeout triggered                  | configuredDuration, actualDuration      |
+| `eu.inqudium.CircuitBreakerCall`        | Every call through a breaker       | duration, success/failure, state        |
+| `eu.inqudium.CircuitBreakerStateTransition` | State change (CLOSED→OPEN etc.) | fromState, toState, failureRate         |
+| `eu.inqudium.RetryAttempt`              | Each retry attempt                 | attemptNumber, waitDuration, exception  |
+| `eu.inqudium.RateLimiterAcquire`        | Permit acquisition attempt         | waitDuration, permitted (boolean)       |
+| `eu.inqudium.BulkheadAcquire`           | Concurrency slot acquisition       | waitDuration, concurrentCallCount       |
+| `eu.inqudium.TimeLimiterTimeout`        | Timeout triggered                  | configuredDuration, actualDuration      |
+
+Every JFR event also carries `callId` and `elementName` — mapped from the corresponding `InqEvent` fields (ADR-003). The `callId` enables end-to-end correlation of a single call across all resilience elements in a JFR recording. In JDK Mission Control, filtering by `callId` reconstructs the complete lifecycle of one call through the entire pipeline.
 
 Events extend `jdk.jfr.Event` and use `@Threshold("0 ms")` for events that should always be captured when recording is active.
 

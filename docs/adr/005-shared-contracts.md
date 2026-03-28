@@ -39,7 +39,7 @@ Config objects are:
 
 Algorithmic logic that all paradigms share:
 
-- **SlidingWindow** — Computes failure rate from a circular buffer of outcomes. Pure function: input is the buffer state and the new outcome, output is the updated buffer and the current failure rate. No locks, no atomics — the caller is responsible for synchronization in its paradigm's model.
+- **SlidingWindow** — Computes failure rate from a circular buffer of outcomes. Pure function: input is the buffer state and the new outcome, output is the updated buffer and the current failure rate. No locks, no atomics — the caller is responsible for synchronization in its paradigm's model. Two implementations: count-based (circular buffer) and time-based (time buckets), both driven by an injectable `InqClock` for testability (see ADR-016).
 - **BackoffStrategy** — Computes the Duration for the next retry. `FixedBackoff`, `ExponentialBackoff`, `RandomizedBackoff` (jitter decorator). Pure function: input is attempt number and config, output is a `Duration`. The caller decides how to wait (Thread.sleep vs delay() vs Mono.delay()).
 - **TokenBucket** — Computes whether a permit is available and updates the bucket state. Pure function: the caller decides how to synchronize access and how to wait for a permit.
 
