@@ -14,7 +14,7 @@ package eu.inqudium.core.timelimiter;
  * <tr><td>{@link #CONNECTION_ESTABLISHMENT}</td><td>ConnectTimeout</td><td>connectTimeout</td><td>connectTimeout</td><td>CONNECT_TIMEOUT_MILLIS</td></tr>
  * <tr><td>{@link #READ_INACTIVITY}</td><td>ResponseTimeout</td><td>readTimeout</td><td>implicit via timeout</td><td>ReadTimeoutHandler</td></tr>
  * <tr><td>{@link #WRITE_OPERATION}</td><td>n/a (OS-level)</td><td>writeTimeout</td><td>implicit via timeout</td><td>WriteTimeoutHandler</td></tr>
- * <tr><td>{@link #SERVER_RESPONSE}</td><td>n/a</td><td>n/a</td><td>n/a</td><td>responseTimeout</td></tr>
+ * <tr><td>{@link #SERVER_RESPONSE}</td><td>implicit via ResponseTimeout</td><td>implicit via readTimeout</td><td>implicit via total timeout</td><td>responseTimeout</td></tr>
  * </table>
  *
  * @since 0.1.0
