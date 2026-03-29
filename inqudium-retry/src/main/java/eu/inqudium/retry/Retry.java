@@ -1,7 +1,7 @@
 package eu.inqudium.retry;
 
-import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.InqElementType;
+import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.retry.RetryConfig;
 import eu.inqudium.retry.internal.BlockingRetry;
 
@@ -22,18 +22,18 @@ import eu.inqudium.retry.internal.BlockingRetry;
  */
 public interface Retry extends InqDecorator {
 
-    static Retry of(String name, RetryConfig config) {
-        return new BlockingRetry(name, config);
-    }
+  static Retry of(String name, RetryConfig config) {
+    return new BlockingRetry(name, config);
+  }
 
-    static Retry ofDefaults(String name) {
-        return new BlockingRetry(name, RetryConfig.ofDefaults());
-    }
+  static Retry ofDefaults(String name) {
+    return new BlockingRetry(name, RetryConfig.ofDefaults());
+  }
 
-    RetryConfig getConfig();
+  RetryConfig getConfig();
 
-    @Override
-    default InqElementType getElementType() {
-        return InqElementType.RETRY;
-    }
+  @Override
+  default InqElementType getElementType() {
+    return InqElementType.RETRY;
+  }
 }

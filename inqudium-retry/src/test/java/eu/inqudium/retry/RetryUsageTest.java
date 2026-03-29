@@ -1,7 +1,6 @@
 package eu.inqudium.retry;
 
 import eu.inqudium.core.Invocation;
-import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.InvocationVarargs;
 import eu.inqudium.core.exception.InqException;
 import eu.inqudium.core.exception.InqFailure;
@@ -16,336 +15,340 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("Retry — User Perspective")
 class RetryUsageTest {
 
-    interface InventoryApi {
-        String checkStock(String sku);
-        String checkStockDetailed(String sku, String warehouse, int minQuantity, boolean includeReserved);
+  interface InventoryApi {
+    String checkStock(String sku);
+
+    String checkStockDetailed(String sku, String warehouse, int minQuantity, boolean includeReserved);
+  }
+
+  static class InventoryService implements InventoryApi {
+    private final AtomicInteger callCount = new AtomicInteger(0);
+    private int failUntilAttempt;
+
+    InventoryService(int failUntilAttempt) {
+      this.failUntilAttempt = failUntilAttempt;
     }
 
-    static class InventoryService implements InventoryApi {
-        private final AtomicInteger callCount = new AtomicInteger(0);
-        private int failUntilAttempt;
-
-        InventoryService(int failUntilAttempt) {
-            this.failUntilAttempt = failUntilAttempt;
-        }
-
-        @Override
-        public String checkStock(String sku) {
-            int attempt = callCount.incrementAndGet();
-            if (attempt < failUntilAttempt) {
-                throw new RuntimeException("Service temporarily unavailable (attempt " + attempt + ")");
-            }
-            return "in-stock:" + sku;
-        }
-
-        @Override
-        public String checkStockDetailed(String sku, String warehouse, int minQuantity, boolean includeReserved) {
-            int attempt = callCount.incrementAndGet();
-            if (attempt < failUntilAttempt) {
-                throw new RuntimeException("Service temporarily unavailable (attempt " + attempt + ")");
-            }
-            return String.format("%s@%s-min%d-%s", sku, warehouse, minQuantity,
-                    includeReserved ? "incl-reserved" : "available-only");
-        }
-
-        int getCallCount() { return callCount.get(); }
+    @Override
+    public String checkStock(String sku) {
+      int attempt = callCount.incrementAndGet();
+      if (attempt < failUntilAttempt) {
+        throw new RuntimeException("Service temporarily unavailable (attempt " + attempt + ")");
+      }
+      return "in-stock:" + sku;
     }
 
-    @Nested
-    @DisplayName("Standalone usage")
-    class Standalone {
-
-        @Test
-        void should_succeed_on_first_attempt_when_service_is_healthy() {
-            // Given
-            var service = new InventoryService(1);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-100"));
-
-            // When
-            var result = resilientCheck.get();
-
-            // Then
-            assertThat(result).isEqualTo("in-stock:SKU-100");
-            assertThat(service.getCallCount()).isEqualTo(1);
-        }
-
-        @Test
-        void should_retry_and_eventually_succeed_after_transient_failures() {
-            // Given — fails on first 2 attempts, succeeds on 3rd
-            var service = new InventoryService(3);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-200"));
-
-            // When
-            var result = resilientCheck.get();
-
-            // Then
-            assertThat(result).isEqualTo("in-stock:SKU-200");
-            assertThat(service.getCallCount()).isEqualTo(3);
-        }
-
-        @Test
-        void should_throw_retry_exhausted_when_all_attempts_fail() {
-            // Given
-            var service = new InventoryService(Integer.MAX_VALUE);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-300"));
-
-            // When / Then
-            assertThatThrownBy(resilientCheck::get)
-                    .isInstanceOf(InqRetryExhaustedException.class)
-                    .satisfies(ex -> {
-                        var retryEx = (InqRetryExhaustedException) ex;
-                        assertThat(retryEx.getCode()).isEqualTo("INQ-RT-001");
-                        assertThat(retryEx.getAttempts()).isEqualTo(3);
-                        assertThat(retryEx.getLastCause()).hasMessageContaining("temporarily unavailable");
-                    });
-        }
-
-        @Test
-        void should_allow_catching_exhausted_retries_via_inq_failure() {
-            // Given
-            var service = new InventoryService(Integer.MAX_VALUE);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(2)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("fail"));
-
-            // When
-            var handled = new AtomicInteger(0);
-            try {
-                resilientCheck.get();
-            } catch (RuntimeException e) {
-                InqFailure.find(e)
-                        .ifRetryExhausted(info -> {
-                            handled.incrementAndGet();
-                            assertThat(info.getAttempts()).isEqualTo(2);
-                        })
-                        .orElseThrow();
-            }
-
-            // Then
-            assertThat(handled).hasValue(1);
-        }
+    @Override
+    public String checkStockDetailed(String sku, String warehouse, int minQuantity, boolean includeReserved) {
+      int attempt = callCount.incrementAndGet();
+      if (attempt < failUntilAttempt) {
+        throw new RuntimeException("Service temporarily unavailable (attempt " + attempt + ")");
+      }
+      return String.format("%s@%s-min%d-%s", sku, warehouse, minQuantity,
+          includeReserved ? "incl-reserved" : "available-only");
     }
 
-    @Nested
-    @DisplayName("Standalone invocation usage")
-    class StandaloneInvocation {
+    int getCallCount() {
+      return callCount.get();
+    }
+  }
 
-        @Test
-        void should_retry_a_single_argument_invocation_with_different_args() throws Exception {
-            // Given — fails first call, succeeds second per InventoryService counter
-            var service = new InventoryService(2);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            Invocation<String, String> resilientCheck =
-                    retry.decorateInvocation(service::checkStock);
+  @Nested
+  @DisplayName("Standalone usage")
+  class Standalone {
 
-            // When — first invoke triggers 1 failure + 1 success (2 calls)
-            var r1 = resilientCheck.invoke("SKU-100");
+    @Test
+    void should_succeed_on_first_attempt_when_service_is_healthy() {
+      // Given
+      var service = new InventoryService(1);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-100"));
 
-            // Then
-            assertThat(r1).isEqualTo("in-stock:SKU-100");
-            assertThat(service.getCallCount()).isEqualTo(2);
+      // When
+      var result = resilientCheck.get();
 
-            // When — second invoke succeeds immediately (service counter past failUntilAttempt)
-            var r2 = resilientCheck.invoke("SKU-200");
-
-            // Then
-            assertThat(r2).isEqualTo("in-stock:SKU-200");
-        }
-
-        @Test
-        void should_retry_a_four_argument_invocation_via_varargs() throws Exception {
-            // Given
-            var service = new InventoryService(1);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            InvocationVarargs<String> resilientCheck = retry.decorateInvocation(
-                    (InvocationVarargs<String>) args -> service.checkStockDetailed(
-                            (String) args[0], (String) args[1],
-                            (Integer) args[2], (Boolean) args[3]));
-
-            // When
-            var r1 = resilientCheck.invoke("SKU-100", "warehouse-A", 10, true);
-            var r2 = resilientCheck.invoke("SKU-200", "warehouse-B", 5, false);
-
-            // Then
-            assertThat(r1).isEqualTo("SKU-100@warehouse-A-min10-incl-reserved");
-            assertThat(r2).isEqualTo("SKU-200@warehouse-B-min5-available-only");
-        }
+      // Then
+      assertThat(result).isEqualTo("in-stock:SKU-100");
+      assertThat(service.getCallCount()).isEqualTo(1);
     }
 
-    @Nested
-    @DisplayName("Pipeline usage")
-    class Pipeline {
+    @Test
+    void should_retry_and_eventually_succeed_after_transient_failures() {
+      // Given — fails on first 2 attempts, succeeds on 3rd
+      var service = new InventoryService(3);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-200"));
 
-        @Test
-        void should_retry_a_call_through_the_pipeline() {
-            // Given
-            var service = new InventoryService(2);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            Supplier<String> resilient = InqPipeline.of(() -> service.checkStock("pipeline-1"))
-                    .shield(retry)
-                    .decorate();
+      // When
+      var result = resilientCheck.get();
 
-            // When
-            var result = resilient.get();
-
-            // Then
-            assertThat(result).isEqualTo("in-stock:pipeline-1");
-            assertThat(service.getCallCount()).isEqualTo(2);
-        }
-
-        @Test
-        void should_carry_a_pipeline_call_id_on_retry_exhausted() {
-            // Given
-            var service = new InventoryService(Integer.MAX_VALUE);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(2)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-            Supplier<String> resilient = InqPipeline.of(() -> service.checkStock("fail"))
-                    .shield(retry)
-                    .decorate();
-
-            // When / Then
-            assertThatThrownBy(resilient::get)
-                    .isInstanceOf(InqRetryExhaustedException.class)
-                    .satisfies(ex -> assertThat(((InqException) ex).getCallId()).isNotEqualTo("None"));
-        }
+      // Then
+      assertThat(result).isEqualTo("in-stock:SKU-200");
+      assertThat(service.getCallCount()).isEqualTo(3);
     }
 
-    @Nested
-    @DisplayName("Pipeline invocation usage")
-    class PipelineInvocation {
+    @Test
+    void should_throw_retry_exhausted_when_all_attempts_fail() {
+      // Given
+      var service = new InventoryService(Integer.MAX_VALUE);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-300"));
 
-        @Test
-        void should_compose_pipeline_with_single_argument_invocation() throws Exception {
-            // Given
-            var service = new InventoryService(1);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-
-            Invocation<String, String> resilientCheck = sku ->
-                    InqPipeline.of(() -> service.checkStock(sku))
-                            .shield(retry)
-                            .decorate()
-                            .get();
-
-            // When
-            var r1 = resilientCheck.invoke("SKU-100");
-            var r2 = resilientCheck.invoke("SKU-200");
-
-            // Then
-            assertThat(r1).isEqualTo("in-stock:SKU-100");
-            assertThat(r2).isEqualTo("in-stock:SKU-200");
-        }
-
-        @Test
-        void should_compose_pipeline_with_four_argument_invocation() throws Exception {
-            // Given
-            var service = new InventoryService(1);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-
-            InvocationVarargs<String> resilientCheck = args ->
-                    InqPipeline.of(() -> service.checkStockDetailed(
-                                    (String) args[0], (String) args[1],
-                                    (Integer) args[2], (Boolean) args[3]))
-                            .shield(retry)
-                            .decorate()
-                            .get();
-
-            // When
-            var r1 = resilientCheck.invoke("SKU-100", "warehouse-A", 10, true);
-            var r2 = resilientCheck.invoke("SKU-200", "warehouse-B", 5, false);
-
-            // Then
-            assertThat(r1).isEqualTo("SKU-100@warehouse-A-min10-incl-reserved");
-            assertThat(r2).isEqualTo("SKU-200@warehouse-B-min5-available-only");
-        }
+      // When / Then
+      assertThatThrownBy(resilientCheck::get)
+          .isInstanceOf(InqRetryExhaustedException.class)
+          .satisfies(ex -> {
+            var retryEx = (InqRetryExhaustedException) ex;
+            assertThat(retryEx.getCode()).isEqualTo("INQ-RT-001");
+            assertThat(retryEx.getAttempts()).isEqualTo(3);
+            assertThat(retryEx.getLastCause()).hasMessageContaining("temporarily unavailable");
+          });
     }
 
-    // ── Pipeline — Proxy pattern ──
+    @Test
+    void should_allow_catching_exhausted_retries_via_inq_failure() {
+      // Given
+      var service = new InventoryService(Integer.MAX_VALUE);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(2)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("fail"));
 
-    @Nested
-    @DisplayName("Pipeline proxy usage")
-    class PipelineProxy {
+      // When
+      var handled = new AtomicInteger(0);
+      try {
+        resilientCheck.get();
+      } catch (RuntimeException e) {
+        InqFailure.find(e)
+            .ifRetryExhausted(info -> {
+              handled.incrementAndGet();
+              assertThat(info.getAttempts()).isEqualTo(2);
+            })
+            .orElseThrow();
+      }
 
-        @Test
-        void should_create_a_typed_proxy_that_retries_single_argument_calls() {
-            // Given — service fails first attempt, succeeds second
-            var service = new InventoryService(2);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-
-            InventoryApi resilient = InqPipeline.of(service, InventoryApi.class)
-                    .shield(retry)
-                    .decorate();
-
-            // When — call like a normal service
-            var r1 = resilient.checkStock("SKU-100");
-
-            // Then
-            assertThat(r1).isEqualTo("in-stock:SKU-100");
-            assertThat(service.getCallCount()).isEqualTo(2);
-
-            // When — second call succeeds immediately
-            var r2 = resilient.checkStock("SKU-200");
-            assertThat(r2).isEqualTo("in-stock:SKU-200");
-        }
-
-        @Test
-        void should_create_a_typed_proxy_that_retries_four_argument_calls() {
-            // Given
-            var service = new InventoryService(1);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-
-            InventoryApi resilient = InqPipeline.of(service, InventoryApi.class)
-                    .shield(retry)
-                    .decorate();
-
-            // When
-            var r1 = resilient.checkStockDetailed("SKU-100", "warehouse-A", 10, true);
-            var r2 = resilient.checkStockDetailed("SKU-200", "warehouse-B", 5, false);
-
-            // Then
-            assertThat(r1).isEqualTo("SKU-100@warehouse-A-min10-incl-reserved");
-            assertThat(r2).isEqualTo("SKU-200@warehouse-B-min5-available-only");
-        }
+      // Then
+      assertThat(handled).hasValue(1);
     }
+  }
+
+  @Nested
+  @DisplayName("Standalone invocation usage")
+  class StandaloneInvocation {
+
+    @Test
+    void should_retry_a_single_argument_invocation_with_different_args() throws Exception {
+      // Given — fails first call, succeeds second per InventoryService counter
+      var service = new InventoryService(2);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      Invocation<String, String> resilientCheck =
+          retry.decorateInvocation(service::checkStock);
+
+      // When — first invoke triggers 1 failure + 1 success (2 calls)
+      var r1 = resilientCheck.invoke("SKU-100");
+
+      // Then
+      assertThat(r1).isEqualTo("in-stock:SKU-100");
+      assertThat(service.getCallCount()).isEqualTo(2);
+
+      // When — second invoke succeeds immediately (service counter past failUntilAttempt)
+      var r2 = resilientCheck.invoke("SKU-200");
+
+      // Then
+      assertThat(r2).isEqualTo("in-stock:SKU-200");
+    }
+
+    @Test
+    void should_retry_a_four_argument_invocation_via_varargs() throws Exception {
+      // Given
+      var service = new InventoryService(1);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      InvocationVarargs<String> resilientCheck = retry.decorateInvocation(
+          (InvocationVarargs<String>) args -> service.checkStockDetailed(
+              (String) args[0], (String) args[1],
+              (Integer) args[2], (Boolean) args[3]));
+
+      // When
+      var r1 = resilientCheck.invoke("SKU-100", "warehouse-A", 10, true);
+      var r2 = resilientCheck.invoke("SKU-200", "warehouse-B", 5, false);
+
+      // Then
+      assertThat(r1).isEqualTo("SKU-100@warehouse-A-min10-incl-reserved");
+      assertThat(r2).isEqualTo("SKU-200@warehouse-B-min5-available-only");
+    }
+  }
+
+  @Nested
+  @DisplayName("Pipeline usage")
+  class Pipeline {
+
+    @Test
+    void should_retry_a_call_through_the_pipeline() {
+      // Given
+      var service = new InventoryService(2);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      Supplier<String> resilient = InqPipeline.of(() -> service.checkStock("pipeline-1"))
+          .shield(retry)
+          .decorate();
+
+      // When
+      var result = resilient.get();
+
+      // Then
+      assertThat(result).isEqualTo("in-stock:pipeline-1");
+      assertThat(service.getCallCount()).isEqualTo(2);
+    }
+
+    @Test
+    void should_carry_a_pipeline_call_id_on_retry_exhausted() {
+      // Given
+      var service = new InventoryService(Integer.MAX_VALUE);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(2)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+      Supplier<String> resilient = InqPipeline.of(() -> service.checkStock("fail"))
+          .shield(retry)
+          .decorate();
+
+      // When / Then
+      assertThatThrownBy(resilient::get)
+          .isInstanceOf(InqRetryExhaustedException.class)
+          .satisfies(ex -> assertThat(((InqException) ex).getCallId()).isNotEqualTo("None"));
+    }
+  }
+
+  @Nested
+  @DisplayName("Pipeline invocation usage")
+  class PipelineInvocation {
+
+    @Test
+    void should_compose_pipeline_with_single_argument_invocation() throws Exception {
+      // Given
+      var service = new InventoryService(1);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+
+      Invocation<String, String> resilientCheck = sku ->
+          InqPipeline.of(() -> service.checkStock(sku))
+              .shield(retry)
+              .decorate()
+              .get();
+
+      // When
+      var r1 = resilientCheck.invoke("SKU-100");
+      var r2 = resilientCheck.invoke("SKU-200");
+
+      // Then
+      assertThat(r1).isEqualTo("in-stock:SKU-100");
+      assertThat(r2).isEqualTo("in-stock:SKU-200");
+    }
+
+    @Test
+    void should_compose_pipeline_with_four_argument_invocation() throws Exception {
+      // Given
+      var service = new InventoryService(1);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+
+      InvocationVarargs<String> resilientCheck = args ->
+          InqPipeline.of(() -> service.checkStockDetailed(
+                  (String) args[0], (String) args[1],
+                  (Integer) args[2], (Boolean) args[3]))
+              .shield(retry)
+              .decorate()
+              .get();
+
+      // When
+      var r1 = resilientCheck.invoke("SKU-100", "warehouse-A", 10, true);
+      var r2 = resilientCheck.invoke("SKU-200", "warehouse-B", 5, false);
+
+      // Then
+      assertThat(r1).isEqualTo("SKU-100@warehouse-A-min10-incl-reserved");
+      assertThat(r2).isEqualTo("SKU-200@warehouse-B-min5-available-only");
+    }
+  }
+
+  // ── Pipeline — Proxy pattern ──
+
+  @Nested
+  @DisplayName("Pipeline proxy usage")
+  class PipelineProxy {
+
+    @Test
+    void should_create_a_typed_proxy_that_retries_single_argument_calls() {
+      // Given — service fails first attempt, succeeds second
+      var service = new InventoryService(2);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+
+      InventoryApi resilient = InqPipeline.of(service, InventoryApi.class)
+          .shield(retry)
+          .decorate();
+
+      // When — call like a normal service
+      var r1 = resilient.checkStock("SKU-100");
+
+      // Then
+      assertThat(r1).isEqualTo("in-stock:SKU-100");
+      assertThat(service.getCallCount()).isEqualTo(2);
+
+      // When — second call succeeds immediately
+      var r2 = resilient.checkStock("SKU-200");
+      assertThat(r2).isEqualTo("in-stock:SKU-200");
+    }
+
+    @Test
+    void should_create_a_typed_proxy_that_retries_four_argument_calls() {
+      // Given
+      var service = new InventoryService(1);
+      var retry = Retry.of("inventoryService", RetryConfig.builder()
+          .maxAttempts(3)
+          .initialInterval(Duration.ofMillis(10))
+          .build());
+
+      InventoryApi resilient = InqPipeline.of(service, InventoryApi.class)
+          .shield(retry)
+          .decorate();
+
+      // When
+      var r1 = resilient.checkStockDetailed("SKU-100", "warehouse-A", 10, true);
+      var r2 = resilient.checkStockDetailed("SKU-200", "warehouse-B", 5, false);
+
+      // Then
+      assertThat(r1).isEqualTo("SKU-100@warehouse-A-min10-incl-reserved");
+      assertThat(r2).isEqualTo("SKU-200@warehouse-B-min5-available-only");
+    }
+  }
 }
