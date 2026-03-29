@@ -1,6 +1,7 @@
 package eu.inqudium.ratelimiter.internal;
 
 import eu.inqudium.core.InqCall;
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.ratelimiter.*;
@@ -40,7 +41,7 @@ public final class TokenBucketRateLimiter implements RateLimiter {
 
     @Override
     public void acquirePermit() {
-        acquirePermitWithCallId(null);
+        acquirePermitWithCallId(InqCallIdGenerator.NONE);
     }
 
     @Override

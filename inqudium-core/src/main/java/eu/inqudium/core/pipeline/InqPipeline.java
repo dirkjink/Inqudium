@@ -43,23 +43,27 @@ public final class InqPipeline {
     private InqPipeline() {}
 
     /**
-     * Starts building a pipeline for the given supplier.
-     *
-     * @param supplier the operation to protect
-     * @param <T>      the result type
-     * @return a new pipeline builder
-     */
-    public static <T> Builder<T> of(Supplier<T> supplier) {
-        Objects.requireNonNull(supplier, "supplier must not be null");
-        return new Builder<>(supplier::get);
-    }
-
-    /**
      * Starts building a pipeline for the given callable.
      *
-     * <p>Checked exceptions from the callable flow naturally through the
-     * pipeline's decoration chain and are wrapped in {@link InqRuntimeException}
-     * at the {@code Supplier} boundary when {@link Builder#decorate()} is invoked.
+     * <p>This is the primary factory method — use it for lambdas, method references,
+     * and {@link Callable} instances:
+     * <pre>{@code
+     * // Lambda (most common)
+     * InqPipeline.of(() -> service.call())
+     *
+     * // Method reference
+     * InqPipeline.of(service::call)
+     *
+     * // Callable variable
+     * Callable<Payment> op = () -> service.charge(order);
+     * InqPipeline.of(op)
+     * }</pre>
+     *
+     * <p>Checked exceptions flow naturally through the decoration chain and are
+     * wrapped in {@link InqRuntimeException} at the {@code Supplier} boundary
+     * when {@link Builder#decorate()} is invoked.
+     *
+     * <p>If you have a {@link Supplier} variable, use {@link #ofSupplier(Supplier)}.
      *
      * @param callable the operation to protect
      * @param <T>      the result type
@@ -67,6 +71,27 @@ public final class InqPipeline {
      */
     public static <T> Builder<T> of(Callable<T> callable) {
         return new Builder<>(Objects.requireNonNull(callable, "callable must not be null"));
+    }
+
+    /**
+     * Starts building a pipeline for the given supplier.
+     *
+     * <p>Convenience method for when you already have a {@link Supplier} variable.
+     * For lambdas, prefer {@link #of(Callable)} — it handles both checked and
+     * unchecked operations without ambiguity.
+     * <pre>{@code
+     * // Supplier variable
+     * Supplier<Payment> op = () -> service.charge(order);
+     * InqPipeline.ofSupplier(op)
+     * }</pre>
+     *
+     * @param supplier the operation to protect
+     * @param <T>      the result type
+     * @return a new pipeline builder
+     */
+    public static <T> Builder<T> ofSupplier(Supplier<T> supplier) {
+        Objects.requireNonNull(supplier, "supplier must not be null");
+        return new Builder<>(supplier::get);
     }
 
     /**
