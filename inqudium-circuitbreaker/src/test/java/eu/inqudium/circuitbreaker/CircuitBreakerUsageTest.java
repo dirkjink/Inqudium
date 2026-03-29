@@ -20,6 +20,10 @@ import static org.assertj.core.api.Assertions.*;
 
 /**
  * Demonstrates CircuitBreaker usage from a library user's perspective.
+ *
+ * <p>All standalone tests follow the real-world pattern: decorate once, then
+ * invoke the wrapper — just like a Spring bean would be wired once and called
+ * many times.
  */
 @DisplayName("CircuitBreaker — User Perspective")
 class CircuitBreakerUsageTest {
@@ -46,16 +50,17 @@ class CircuitBreakerUsageTest {
 
         @Test
         void should_let_calls_through_when_circuit_is_closed() {
-            // Given
+            // Given — decorate once, reuse the wrapper
             var service = new PaymentService();
             var cb = CircuitBreaker.of("paymentService", CircuitBreakerConfig.builder()
                     .failureRateThreshold(50)
                     .slidingWindowSize(4)
                     .minimumNumberOfCalls(4)
                     .build());
+            Supplier<String> resilientCharge = cb.decorateSupplier(() -> service.charge("order-1"));
 
             // When
-            var result = cb.executeSupplier(() -> service.charge("order-1"));
+            var result = resilientCharge.get();
 
             // Then
             assertThat(result).isEqualTo("receipt-order-1");
@@ -64,27 +69,26 @@ class CircuitBreakerUsageTest {
 
         @Test
         void should_open_after_failure_rate_threshold_is_exceeded() {
-            // Given
+            // Given — a single decorated wrapper reused across all calls
             var service = new PaymentService();
             var cb = CircuitBreaker.of("paymentService", CircuitBreakerConfig.builder()
                     .failureRateThreshold(50)
                     .slidingWindowSize(4)
                     .minimumNumberOfCalls(4)
                     .build());
+            Supplier<String> resilientCharge = cb.decorateSupplier(() -> service.charge("order"));
 
             // When — 2 successes, then 2 failures → 50% failure rate
-            cb.executeSupplier(() -> service.charge("ok-1"));
-            cb.executeSupplier(() -> service.charge("ok-2"));
+            resilientCharge.get();
+            resilientCharge.get();
             service.setFailing(true);
-            catchThrowable(() -> cb.executeSupplier(() -> service.charge("fail-1")));
-            catchThrowable(() -> cb.executeSupplier(() -> service.charge("fail-2")));
+            catchThrowable(resilientCharge::get);
+            catchThrowable(resilientCharge::get);
 
-            // Then — circuit should be OPEN
+            // Then — circuit should be OPEN, subsequent calls rejected without reaching the service
             assertThat(cb.getState()).isEqualTo(CircuitBreakerState.OPEN);
-
-            // Subsequent calls are rejected without reaching the service
             var beforeCount = service.getCallCount();
-            assertThatThrownBy(() -> cb.executeSupplier(() -> service.charge("rejected")))
+            assertThatThrownBy(resilientCharge::get)
                     .isInstanceOf(InqCallNotPermittedException.class)
                     .satisfies(ex -> {
                         var inqEx = (InqCallNotPermittedException) ex;
@@ -96,30 +100,16 @@ class CircuitBreakerUsageTest {
         }
 
         @Test
-        void should_decorate_a_supplier_for_lazy_execution() {
-            // Given
-            var service = new PaymentService();
+        void should_decorate_a_callable_wrapping_checked_exceptions() {
+            // Given — decorate a Callable that throws a checked exception
             var cb = CircuitBreaker.ofDefaults("paymentService");
-
-            // When — decorate returns a Supplier, no call happens yet
-            Supplier<String> resilient = cb.decorateSupplier(() -> service.charge("lazy-1"));
-            assertThat(service.getCallCount()).isZero();
-
-            // Then — calling .get() triggers the actual execution
-            var result = resilient.get();
-            assertThat(result).isEqualTo("receipt-lazy-1");
-            assertThat(service.getCallCount()).isEqualTo(1);
-        }
-
-        @Test
-        void should_wrap_checked_exceptions_in_inq_runtime_exception() {
-            // Given
-            var cb = CircuitBreaker.ofDefaults("paymentService");
+            Supplier<String> resilient = cb.decorateCallable(() -> {
+                throw new java.io.IOException("disk full");
+            });
 
             // When / Then — checked exception is wrapped, not swallowed
-            assertThatThrownBy(() ->
-                    cb.executeCallable(() -> { throw new java.io.IOException("disk full"); })
-            ).isInstanceOf(InqRuntimeException.class)
+            assertThatThrownBy(resilient::get)
+                    .isInstanceOf(InqRuntimeException.class)
                     .hasCauseInstanceOf(java.io.IOException.class)
                     .satisfies(ex -> {
                         var ire = (InqRuntimeException) ex;
@@ -131,15 +121,30 @@ class CircuitBreakerUsageTest {
         }
 
         @Test
+        void should_decorate_a_runnable_for_fire_and_forget() {
+            // Given
+            var executed = new AtomicInteger(0);
+            var cb = CircuitBreaker.ofDefaults("notificationService");
+            Runnable resilientNotify = cb.decorateRunnable(executed::incrementAndGet);
+
+            // When
+            resilientNotify.run();
+
+            // Then
+            assertThat(executed).hasValue(1);
+        }
+
+        @Test
         void should_allow_catching_interventions_via_inq_failure() {
             // Given
             var cb = CircuitBreaker.ofDefaults("paymentService");
             cb.transitionToOpenState();
+            Supplier<String> resilient = cb.decorateSupplier(() -> "should not reach");
 
             // When
             var handled = new AtomicInteger(0);
             try {
-                cb.executeSupplier(() -> "should not reach");
+                resilient.get();
             } catch (RuntimeException e) {
                 InqFailure.find(e)
                         .ifCircuitBreakerOpen(info -> {
@@ -163,7 +168,6 @@ class CircuitBreakerUsageTest {
             // Given
             var service = new PaymentService();
             var cb = CircuitBreaker.ofDefaults("paymentService");
-
             Supplier<String> resilient = InqPipeline.of(() -> service.charge("pipeline-1"))
                     .shield(cb)
                     .decorate();
@@ -180,13 +184,8 @@ class CircuitBreakerUsageTest {
         void should_reject_calls_when_circuit_opens_in_pipeline() {
             // Given
             var service = new PaymentService();
-            var cb = CircuitBreaker.of("paymentService", CircuitBreakerConfig.builder()
-                    .failureRateThreshold(50)
-                    .slidingWindowSize(4)
-                    .minimumNumberOfCalls(4)
-                    .build());
+            var cb = CircuitBreaker.ofDefaults("paymentService");
             cb.transitionToOpenState();
-
             Supplier<String> resilient = InqPipeline.of(() -> service.charge("should-not-reach"))
                     .shield(cb)
                     .decorate();
@@ -207,12 +206,11 @@ class CircuitBreakerUsageTest {
             // Given
             var cb = CircuitBreaker.ofDefaults("paymentService");
             cb.transitionToOpenState();
-
             Supplier<String> resilient = InqPipeline.of(() -> "unreachable")
                     .shield(cb)
                     .decorate();
 
-            // When / Then — the exception carries a pipeline-generated callId
+            // When / Then — the exception carries a pipeline-generated callId (UUID format)
             assertThatThrownBy(resilient::get)
                     .isInstanceOf(InqException.class)
                     .satisfies(ex -> {

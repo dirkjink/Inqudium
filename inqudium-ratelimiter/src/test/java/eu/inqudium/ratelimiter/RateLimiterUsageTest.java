@@ -17,6 +17,9 @@ import static org.assertj.core.api.Assertions.*;
 
 /**
  * Demonstrates RateLimiter usage from a library user's perspective.
+ *
+ * <p>All standalone tests follow the real-world pattern: decorate once, then
+ * invoke the wrapper repeatedly.
  */
 @DisplayName("RateLimiter — User Perspective")
 class RateLimiterUsageTest {
@@ -40,22 +43,23 @@ class RateLimiterUsageTest {
 
         @Test
         void should_permit_calls_within_the_rate_limit() {
-            // Given
+            // Given — decorate once, reuse the wrapper
             var client = new ApiClient();
             var rl = RateLimiter.of("apiGateway", RateLimiterConfig.builder()
                     .limitForPeriod(5)
                     .limitRefreshPeriod(Duration.ofSeconds(1))
                     .build());
+            Supplier<String> resilientFetch = rl.decorateSupplier(() -> client.fetchData("users"));
 
             // When — 3 calls, well within the limit of 5
-            var r1 = rl.executeSupplier(() -> client.fetchData("users"));
-            var r2 = rl.executeSupplier(() -> client.fetchData("orders"));
-            var r3 = rl.executeSupplier(() -> client.fetchData("products"));
+            var r1 = resilientFetch.get();
+            var r2 = resilientFetch.get();
+            var r3 = resilientFetch.get();
 
             // Then
             assertThat(r1).isEqualTo("response-from-users");
-            assertThat(r2).isEqualTo("response-from-orders");
-            assertThat(r3).isEqualTo("response-from-products");
+            assertThat(r2).isEqualTo("response-from-users");
+            assertThat(r3).isEqualTo("response-from-users");
             assertThat(client.getCallCount()).isEqualTo(3);
         }
 
@@ -67,13 +71,14 @@ class RateLimiterUsageTest {
                     .limitForPeriod(2)
                     .limitRefreshPeriod(Duration.ofSeconds(10))
                     .build());
+            Supplier<String> resilientFetch = rl.decorateSupplier(() -> client.fetchData("data"));
 
             // When — exhaust the 2 permits
-            rl.executeSupplier(() -> client.fetchData("call-1"));
-            rl.executeSupplier(() -> client.fetchData("call-2"));
+            resilientFetch.get();
+            resilientFetch.get();
 
             // Then — 3rd call is rejected
-            assertThatThrownBy(() -> rl.executeSupplier(() -> client.fetchData("call-3")))
+            assertThatThrownBy(resilientFetch::get)
                     .isInstanceOf(InqRequestNotPermittedException.class)
                     .satisfies(ex -> {
                         var rlEx = (InqRequestNotPermittedException) ex;
@@ -81,25 +86,7 @@ class RateLimiterUsageTest {
                         assertThat(rlEx.getElementName()).isEqualTo("apiGateway");
                         assertThat(rlEx.getWaitEstimate()).isPositive();
                     });
-
-            // Service was never called for the rejected request
             assertThat(client.getCallCount()).isEqualTo(2);
-        }
-
-        @Test
-        void should_decorate_a_supplier_for_lazy_execution() {
-            // Given
-            var client = new ApiClient();
-            var rl = RateLimiter.ofDefaults("apiGateway");
-
-            // When — decorate, no call yet
-            Supplier<String> resilient = rl.decorateSupplier(() -> client.fetchData("lazy"));
-            assertThat(client.getCallCount()).isZero();
-
-            // Then
-            var result = resilient.get();
-            assertThat(result).isEqualTo("response-from-lazy");
-            assertThat(client.getCallCount()).isEqualTo(1);
         }
 
         @Test
@@ -109,12 +96,13 @@ class RateLimiterUsageTest {
                     .limitForPeriod(1)
                     .limitRefreshPeriod(Duration.ofSeconds(10))
                     .build());
-            rl.executeSupplier(() -> "consume-permit");
+            Supplier<String> resilient = rl.decorateSupplier(() -> "data");
+            resilient.get(); // consume the single permit
 
             // When
             var handled = new AtomicInteger(0);
             try {
-                rl.executeSupplier(() -> "rejected");
+                resilient.get();
             } catch (RuntimeException e) {
                 InqFailure.find(e)
                         .ifRateLimited(info -> {
@@ -158,7 +146,6 @@ class RateLimiterUsageTest {
                     .limitForPeriod(5)
                     .limitRefreshPeriod(Duration.ofSeconds(1))
                     .build());
-
             Supplier<String> resilient = InqPipeline.of(() -> client.fetchData("pipeline"))
                     .shield(rl)
                     .decorate();
@@ -177,13 +164,10 @@ class RateLimiterUsageTest {
                     .limitForPeriod(1)
                     .limitRefreshPeriod(Duration.ofSeconds(10))
                     .build());
-
             Supplier<String> resilient = InqPipeline.of(() -> "data")
                     .shield(rl)
                     .decorate();
-
-            // Exhaust the single permit
-            resilient.get();
+            resilient.get(); // exhaust the single permit
 
             // When / Then
             assertThatThrownBy(resilient::get)

@@ -9,7 +9,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,6 +19,9 @@ import static org.assertj.core.api.Assertions.*;
 
 /**
  * Demonstrates Bulkhead usage from a library user's perspective.
+ *
+ * <p>All standalone tests follow the real-world pattern: decorate once, then
+ * invoke the wrapper. The bulkhead limits concurrent access to the decorated call.
  */
 @DisplayName("Bulkhead — User Perspective")
 class BulkheadUsageTest {
@@ -53,14 +55,15 @@ class BulkheadUsageTest {
 
         @Test
         void should_let_calls_through_when_bulkhead_has_capacity() {
-            // Given
+            // Given — decorate once, reuse the wrapper
             var service = new OrderService();
             var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
                     .maxConcurrentCalls(5)
                     .build());
+            Supplier<String> resilientProcess = bh.decorateSupplier(() -> service.processOrder("order-1"));
 
             // When
-            var result = bh.executeSupplier(() -> service.processOrder("order-1"));
+            var result = resilientProcess.get();
 
             // Then
             assertThat(result).isEqualTo("processed-order-1");
@@ -75,12 +78,13 @@ class BulkheadUsageTest {
             var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
                     .maxConcurrentCalls(2)
                     .build());
+            Supplier<String> resilientProcess = bh.decorateSupplier(() -> service.processOrder("order"));
 
-            // When — two sequential calls
-            bh.executeSupplier(() -> service.processOrder("order-1"));
-            bh.executeSupplier(() -> service.processOrder("order-2"));
+            // When — two sequential calls through the same wrapper
+            resilientProcess.get();
+            resilientProcess.get();
 
-            // Then — permits are released
+            // Then — permits are released after each call
             assertThat(bh.getAvailablePermits()).isEqualTo(2);
             assertThat(service.getCallCount()).isEqualTo(2);
         }
@@ -91,10 +95,12 @@ class BulkheadUsageTest {
             var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
                     .maxConcurrentCalls(2)
                     .build());
+            Supplier<String> resilient = bh.decorateSupplier(() -> {
+                throw new RuntimeException("boom");
+            });
 
             // When — call that throws
-            catchThrowable(() ->
-                    bh.executeSupplier(() -> { throw new RuntimeException("boom"); }));
+            catchThrowable(resilient::get);
 
             // Then — permit was still released
             assertThat(bh.getAvailablePermits()).isEqualTo(2);
@@ -102,21 +108,24 @@ class BulkheadUsageTest {
 
         @Test
         void should_reject_calls_when_bulkhead_is_full() throws Exception {
-            // Given
+            // Given — decorate two suppliers: one slow (to hold the permit), one fast
             var service = new OrderService();
             var holdLatch = new CountDownLatch(1);
             var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
                     .maxConcurrentCalls(1)
                     .build());
+            Supplier<String> slowCall = bh.decorateSupplier(
+                    () -> service.processOrderSlowly("blocking", holdLatch));
+            Supplier<String> fastCall = bh.decorateSupplier(
+                    () -> service.processOrder("rejected"));
 
-            // When — one concurrent call holds the single permit
+            // When — slow call holds the single permit
             ExecutorService executor = Executors.newSingleThreadExecutor();
-            executor.submit(() -> bh.executeSupplier(
-                    () -> service.processOrderSlowly("blocking", holdLatch)));
-            Thread.sleep(50); // allow the blocking call to acquire the permit
+            executor.submit(slowCall::get);
+            Thread.sleep(50);
 
-            // Then — subsequent call is rejected
-            assertThatThrownBy(() -> bh.executeSupplier(() -> service.processOrder("rejected")))
+            // Then — fast call is rejected
+            assertThatThrownBy(fastCall::get)
                     .isInstanceOf(InqBulkheadFullException.class)
                     .satisfies(ex -> {
                         var bhEx = (InqBulkheadFullException) ex;
@@ -135,10 +144,10 @@ class BulkheadUsageTest {
             // Given
             var executed = new AtomicInteger(0);
             var bh = Bulkhead.ofDefaults("orderService");
+            Runnable resilientTask = bh.decorateRunnable(executed::incrementAndGet);
 
             // When
-            Runnable resilient = bh.decorateRunnable(executed::incrementAndGet);
-            resilient.run();
+            resilientTask.run();
 
             // Then
             assertThat(executed).hasValue(1);
@@ -152,18 +161,20 @@ class BulkheadUsageTest {
             var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
                     .maxConcurrentCalls(1)
                     .build());
-
-            ExecutorService executor = Executors.newSingleThreadExecutor();
-            executor.submit(() -> bh.executeSupplier(() -> {
+            Supplier<String> slowCall = bh.decorateSupplier(() -> {
                 try { holdLatch.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                 return "done";
-            }));
+            });
+            Supplier<String> nextCall = bh.decorateSupplier(() -> "rejected");
+
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            executor.submit(slowCall::get);
             Thread.sleep(50);
 
             // When
             var handled = new AtomicInteger(0);
             try {
-                bh.executeSupplier(() -> "rejected");
+                nextCall.get();
             } catch (RuntimeException e) {
                 InqFailure.find(e)
                         .ifBulkheadFull(info -> {
@@ -192,7 +203,6 @@ class BulkheadUsageTest {
             var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
                     .maxConcurrentCalls(5)
                     .build());
-
             Supplier<String> resilient = InqPipeline.of(() -> service.processOrder("pipeline-1"))
                     .shield(bh)
                     .decorate();
@@ -213,16 +223,16 @@ class BulkheadUsageTest {
                     .maxConcurrentCalls(1)
                     .build());
 
-            // Hold the single permit
+            // Hold the single permit via pipeline
+            Supplier<String> blocking = InqPipeline.of(() -> {
+                        try { holdLatch.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                        return "blocking";
+                    })
+                    .shield(bh)
+                    .decorate();
+
             ExecutorService executor = Executors.newSingleThreadExecutor();
-            executor.submit(() ->
-                    InqPipeline.of(() -> {
-                                try { holdLatch.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                                return "blocking";
-                            })
-                            .shield(bh)
-                            .decorate()
-                            .get());
+            executor.submit(blocking::get);
             Thread.sleep(50);
 
             Supplier<String> resilient = InqPipeline.of(() -> "rejected")

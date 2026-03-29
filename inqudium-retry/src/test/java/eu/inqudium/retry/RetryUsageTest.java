@@ -18,6 +18,9 @@ import static org.assertj.core.api.Assertions.*;
 
 /**
  * Demonstrates Retry usage from a library user's perspective.
+ *
+ * <p>All standalone tests follow the real-world pattern: decorate once, then
+ * invoke the wrapper.
  */
 @DisplayName("Retry — User Perspective")
 class RetryUsageTest {
@@ -55,9 +58,10 @@ class RetryUsageTest {
                     .maxAttempts(3)
                     .initialInterval(Duration.ofMillis(10))
                     .build());
+            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-100"));
 
             // When
-            var result = retry.executeSupplier(() -> service.checkStock("SKU-100"));
+            var result = resilientCheck.get();
 
             // Then
             assertThat(result).isEqualTo("in-stock:SKU-100");
@@ -72,9 +76,10 @@ class RetryUsageTest {
                     .maxAttempts(3)
                     .initialInterval(Duration.ofMillis(10))
                     .build());
+            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-200"));
 
             // When
-            var result = retry.executeSupplier(() -> service.checkStock("SKU-200"));
+            var result = resilientCheck.get();
 
             // Then
             assertThat(result).isEqualTo("in-stock:SKU-200");
@@ -89,9 +94,10 @@ class RetryUsageTest {
                     .maxAttempts(3)
                     .initialInterval(Duration.ofMillis(10))
                     .build());
+            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("SKU-300"));
 
             // When / Then
-            assertThatThrownBy(() -> retry.executeSupplier(() -> service.checkStock("SKU-300")))
+            assertThatThrownBy(resilientCheck::get)
                     .isInstanceOf(InqRetryExhaustedException.class)
                     .satisfies(ex -> {
                         var retryEx = (InqRetryExhaustedException) ex;
@@ -107,15 +113,17 @@ class RetryUsageTest {
 
         @Test
         void should_carry_checked_exceptions_as_last_cause_of_retry_exhausted() {
-            // Given
+            // Given — Callable that throws a checked exception
             var retry = Retry.of("inventoryService", RetryConfig.builder()
                     .maxAttempts(1)
                     .build());
+            Supplier<String> resilient = retry.decorateCallable(() -> {
+                throw new java.io.IOException("network error");
+            });
 
-            // When / Then — checked exception is unwrapped and stored as lastCause
-            assertThatThrownBy(() ->
-                    retry.executeCallable(() -> { throw new java.io.IOException("network error"); })
-            ).isInstanceOf(InqRetryExhaustedException.class)
+            // When / Then — checked exception appears as unwrapped lastCause
+            assertThatThrownBy(resilient::get)
+                    .isInstanceOf(InqRetryExhaustedException.class)
                     .satisfies(ex -> {
                         var retryEx = (InqRetryExhaustedException) ex;
                         assertThat(retryEx.getCode()).isEqualTo("INQ-RT-001");
@@ -135,11 +143,12 @@ class RetryUsageTest {
                     .maxAttempts(2)
                     .initialInterval(Duration.ofMillis(10))
                     .build());
+            Supplier<String> resilientCheck = retry.decorateSupplier(() -> service.checkStock("fail"));
 
             // When
             var handled = new AtomicInteger(0);
             try {
-                retry.executeSupplier(() -> service.checkStock("fail"));
+                resilientCheck.get();
             } catch (RuntimeException e) {
                 InqFailure.find(e)
                         .ifRetryExhausted(info -> {
@@ -152,25 +161,6 @@ class RetryUsageTest {
 
             // Then
             assertThat(handled).hasValue(1);
-        }
-
-        @Test
-        void should_decorate_a_supplier_for_lazy_execution() {
-            // Given
-            var service = new InventoryService(2);
-            var retry = Retry.of("inventoryService", RetryConfig.builder()
-                    .maxAttempts(3)
-                    .initialInterval(Duration.ofMillis(10))
-                    .build());
-
-            // When — decorate, no call yet
-            Supplier<String> resilient = retry.decorateSupplier(() -> service.checkStock("lazy"));
-            assertThat(service.getCallCount()).isZero();
-
-            // Then — calling .get() triggers execution with retries
-            var result = resilient.get();
-            assertThat(result).isEqualTo("in-stock:lazy");
-            assertThat(service.getCallCount()).isEqualTo(2);
         }
     }
 
@@ -186,7 +176,6 @@ class RetryUsageTest {
                     .maxAttempts(3)
                     .initialInterval(Duration.ofMillis(10))
                     .build());
-
             Supplier<String> resilient = InqPipeline.of(() -> service.checkStock("pipeline-1"))
                     .shield(retry)
                     .decorate();
@@ -207,7 +196,6 @@ class RetryUsageTest {
                     .maxAttempts(2)
                     .initialInterval(Duration.ofMillis(10))
                     .build());
-
             Supplier<String> resilient = InqPipeline.of(() -> service.checkStock("fail"))
                     .shield(retry)
                     .decorate();

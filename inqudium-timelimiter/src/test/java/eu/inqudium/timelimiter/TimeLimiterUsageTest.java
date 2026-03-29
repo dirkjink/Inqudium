@@ -18,6 +18,10 @@ import static org.assertj.core.api.Assertions.*;
 
 /**
  * Demonstrates TimeLimiter usage from a library user's perspective.
+ *
+ * <p>All standalone tests follow the real-world pattern: decorate once, then
+ * invoke the wrapper. The time limiter bounds the caller's wait time without
+ * interrupting the downstream operation.
  */
 @DisplayName("TimeLimiter — User Perspective")
 class TimeLimiterUsageTest {
@@ -56,9 +60,11 @@ class TimeLimiterUsageTest {
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofSeconds(2))
                     .build());
+            Supplier<String> resilientCalc = tl.decorateSupplier(
+                    () -> service.calculateShipping("order-1"));
 
             // When
-            var result = tl.executeSupplier(() -> service.calculateShipping("order-1"));
+            var result = resilientCalc.get();
 
             // Then
             assertThat(result).isEqualTo("shipping-order-1");
@@ -72,9 +78,11 @@ class TimeLimiterUsageTest {
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofMillis(100))
                     .build());
+            Supplier<String> resilientCalc = tl.decorateSupplier(
+                    () -> service.calculateShipping("slow"));
 
             // When / Then
-            assertThatThrownBy(() -> tl.executeSupplier(() -> service.calculateShipping("slow")))
+            assertThatThrownBy(resilientCalc::get)
                     .isInstanceOf(InqTimeLimitExceededException.class)
                     .satisfies(ex -> {
                         var tlEx = (InqTimeLimitExceededException) ex;
@@ -86,35 +94,19 @@ class TimeLimiterUsageTest {
         }
 
         @Test
-        void should_decorate_a_supplier_for_lazy_execution() {
-            // Given
-            var service = new ShippingService(50);
-            var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
-                    .timeoutDuration(Duration.ofSeconds(2))
-                    .build());
-
-            // When — decorate, no call yet
-            Supplier<String> resilient = tl.decorateSupplier(() -> service.calculateShipping("lazy"));
-            assertThat(service.getCallCount()).isZero();
-
-            // Then
-            var result = resilient.get();
-            assertThat(result).isEqualTo("shipping-lazy");
-            assertThat(service.getCallCount()).isEqualTo(1);
-        }
-
-        @Test
         void should_allow_catching_timeouts_via_inq_failure() {
             // Given
             var service = new ShippingService(2000);
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofMillis(100))
                     .build());
+            Supplier<String> resilientCalc = tl.decorateSupplier(
+                    () -> service.calculateShipping("timeout"));
 
             // When
             var handled = new AtomicInteger(0);
             try {
-                tl.executeSupplier(() -> service.calculateShipping("timeout"));
+                resilientCalc.get();
             } catch (RuntimeException e) {
                 InqFailure.find(e)
                         .ifTimeLimitExceeded(info -> {
@@ -134,30 +126,32 @@ class TimeLimiterUsageTest {
     class StandaloneFuture {
 
         @Test
-        void should_return_result_from_a_future_supplier_within_timeout() {
-            // Given
+        void should_return_result_from_a_decorated_future_supplier() {
+            // Given — decorate once, reuse the wrapper
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofSeconds(2))
                     .build());
-
-            // When — using decorateFutureSupplier with a pre-completed future
-            Supplier<String> resilient = tl.decorateFutureSupplier(
+            Supplier<String> resilientFuture = tl.decorateFutureSupplier(
                     () -> CompletableFuture.completedFuture("immediate-result"));
 
+            // When
+            var result = resilientFuture.get();
+
             // Then
-            assertThat(resilient.get()).isEqualTo("immediate-result");
+            assertThat(result).isEqualTo("immediate-result");
         }
 
         @Test
-        void should_execute_a_future_supplier_directly() {
+        void should_return_result_from_an_async_future_supplier() {
             // Given
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofSeconds(2))
                     .build());
+            Supplier<String> resilientFuture = tl.decorateFutureSupplier(
+                    () -> CompletableFuture.supplyAsync(() -> "async-result"));
 
             // When
-            var result = tl.executeFutureSupplier(
-                    () -> CompletableFuture.supplyAsync(() -> "async-result"));
+            var result = resilientFuture.get();
 
             // Then
             assertThat(result).isEqualTo("async-result");
@@ -169,14 +163,15 @@ class TimeLimiterUsageTest {
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofMillis(100))
                     .build());
-
-            // When / Then
-            assertThatThrownBy(() -> tl.executeFutureSupplier(
+            Supplier<String> resilientFuture = tl.decorateFutureSupplier(
                     () -> CompletableFuture.supplyAsync(() -> {
                         try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                         return "too-slow";
-                    })
-            )).isInstanceOf(InqTimeLimitExceededException.class);
+                    }));
+
+            // When / Then
+            assertThatThrownBy(resilientFuture::get)
+                    .isInstanceOf(InqTimeLimitExceededException.class);
         }
     }
 
@@ -191,8 +186,8 @@ class TimeLimiterUsageTest {
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofSeconds(2))
                     .build());
-
-            Supplier<String> resilient = InqPipeline.of(() -> service.calculateShipping("pipeline-1"))
+            Supplier<String> resilient = InqPipeline.of(
+                            () -> service.calculateShipping("pipeline-1"))
                     .shield(tl)
                     .decorate();
 
@@ -210,8 +205,8 @@ class TimeLimiterUsageTest {
             var tl = TimeLimiter.of("shippingService", TimeLimiterConfig.builder()
                     .timeoutDuration(Duration.ofMillis(100))
                     .build());
-
-            Supplier<String> resilient = InqPipeline.of(() -> service.calculateShipping("slow"))
+            Supplier<String> resilient = InqPipeline.of(
+                            () -> service.calculateShipping("slow"))
                     .shield(tl)
                     .decorate();
 
