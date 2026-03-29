@@ -4,12 +4,12 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Global registry for {@link InqEventExporter} instances.
+ * Registry for {@link InqEventExporter} instances.
  *
- * <p>Exporters receive all events from all elements in the application.
+ * <p>Exporters receive all events from all elements that use this registry.
  * Registration follows ADR-014 conventions:
  * <ul>
- *   <li>ServiceLoader discovery: lazy on first access, cached for JVM lifetime.</li>
+ *   <li>ServiceLoader discovery: lazy on first access, cached for lifetime.</li>
  *   <li>Comparable ordering: Comparable exporters sorted first, then non-Comparable,
  *       then programmatically registered.</li>
  *   <li>Error isolation: a failing exporter is caught and logged, never affects
@@ -18,18 +18,15 @@ import java.util.concurrent.atomic.AtomicReference;
  *       the first {@link #export(InqEvent)} call.</li>
  * </ul>
  *
+ * <h2>Instance-based design</h2>
+ * <p>The registry is an instance — not a static utility. A shared global instance
+ * is available via {@link #getDefault()} for production use. Tests create isolated
+ * instances via the constructor, avoiding cross-test pollution in parallel execution.
+ *
  * <h2>Thread safety</h2>
  * <p>All state is held in a single {@link AtomicReference AtomicReference&lt;RegistryState&gt;}.
- * Both {@link #register(InqEventExporter)} and {@link #getExporters()} use CAS
- * operations — no {@code synchronized}, no locks, safe for virtual threads.
- *
- * <p>The state transitions are:
- * <pre>{@code
- * Open(programmatic=[])  ──register()──►  Open(programmatic=[a])
- *                         ──register()──►  Open(programmatic=[a, b])
- *                         ──getExporters()──►  Frozen(resolved=[...])
- * }</pre>
- * Once frozen, any {@code register()} call fails with {@link IllegalStateException}.
+ * Both {@link #register(InqEventExporter)} and resolution use CAS operations —
+ * no {@code synchronized}, no locks, safe for virtual threads.
  *
  * @since 0.1.0
  */
@@ -37,80 +34,50 @@ public final class InqEventExporterRegistry {
 
   private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(InqEventExporterRegistry.class);
 
+  // ── Global default instance ──
+
+  private static volatile InqEventExporterRegistry defaultInstance;
+  private final AtomicReference<RegistryState> state = new AtomicReference<>(new Open());
+
+  /**
+   * Creates a new, empty registry.
+   *
+   * <p>Use for testing or when you need isolated exporter scopes.
+   * For production, use {@link #getDefault()}.
+   */
+  public InqEventExporterRegistry() {
+  }
+
   // ── State machine ──
-  private static final AtomicReference<RegistryState> STATE = new AtomicReference<>(new Open());
-
-  private InqEventExporterRegistry() {
-    // utility class
-  }
 
   /**
-   * Registers an exporter programmatically.
+   * Returns the shared global registry instance.
    *
-   * <p>Must be called before the first event is exported. Registrations after
-   * the first export throw {@link IllegalStateException} (ADR-014, Convention 5).
+   * <p>Created lazily on first access. For production use — all elements
+   * share this instance by default.
    *
-   * <p>Lock-free: uses CAS to append to the immutable programmatic list.
-   *
-   * @param exporter the exporter to register
-   * @throws IllegalStateException if the registry is already frozen
+   * @return the global default registry
    */
-  public static void register(InqEventExporter exporter) {
-    Objects.requireNonNull(exporter, "exporter must not be null");
-    while (true) {
-      var current = STATE.get();
-      if (current instanceof Frozen) {
-        throw new IllegalStateException(
-            "InqEventExporterRegistry is frozen — exporters must be registered " +
-                "before the first event is exported.");
-      }
-      var open = (Open) current;
-      // Build a new immutable list with the new exporter appended
-      var updated = new ArrayList<>(open.programmatic);
-      updated.add(exporter);
-      var next = new Open(List.copyOf(updated));
-      if (STATE.compareAndSet(current, next)) {
-        return;
-      }
-      // CAS failed — another thread modified state concurrently, retry
+  public static InqEventExporterRegistry getDefault() {
+    var instance = defaultInstance;
+    if (instance != null) {
+      return instance;
     }
+    // Benign race — multiple threads may create an instance, but only one wins
+    defaultInstance = new InqEventExporterRegistry();
+    return defaultInstance;
   }
 
   /**
-   * Exports an event to all registered exporters.
+   * Replaces the global default registry.
    *
-   * <p>On first call, triggers ServiceLoader discovery and freezes the registry.
-   * Exporter exceptions are caught and logged — they never propagate.
+   * <p><strong>For testing only.</strong> Allows tests to install an isolated
+   * registry or reset the global state between test runs.
    *
-   * @param event the event to export
+   * @param registry the new default registry (or {@code null} to reset to lazy creation)
    */
-  static void export(InqEvent event) {
-    for (var exporter : getExporters()) {
-      try {
-        if (isSubscribed(exporter, event)) {
-          exporter.export(event);
-        }
-      } catch (Throwable t) {
-        rethrowIfFatal(t);
-        LOGGER.warn(
-            "[{}] InqEventExporter {} threw on event {}: {}",
-            event.getCallId(), exporter.getClass().getName(),
-            event.getClass().getSimpleName(), t.getMessage());
-      }
-    }
-  }
-
-  /**
-   * Rethrows errors that indicate a fatal JVM condition which must not be swallowed.
-   *
-   * <ul>
-   *   <li>{@link VirtualMachineError} — OutOfMemoryError, StackOverflowError, InternalError</li>
-   *   <li>{@link LinkageError} — NoSuchMethodError, NoClassDefFoundError, class loading failures</li>
-   * </ul>
-   */
-  private static void rethrowIfFatal(Throwable t) {
-    if (t instanceof VirtualMachineError) throw (VirtualMachineError) t;
-    if (t instanceof LinkageError) throw (LinkageError) t;
+  public static void setDefault(InqEventExporterRegistry registry) {
+    defaultInstance = registry;
   }
 
   private static boolean isSubscribed(InqEventExporter exporter, InqEvent event) {
@@ -126,39 +93,10 @@ public final class InqEventExporterRegistry {
     return false;
   }
 
-  /**
-   * Returns the resolved exporter list, triggering discovery on first access.
-   *
-   * <p>Uses a CAS retry loop to atomically transition from {@code Open} to
-   * {@code Frozen}. If a concurrent {@code register()} changes the {@code Open}
-   * state between our read and our CAS, we re-read and retry — the new
-   * registration is included in the next discovery attempt.
-   */
-  private static List<InqEventExporter> getExporters() {
-    while (true) {
-      var current = STATE.get();
-      if (current instanceof Frozen frozen) {
-        return frozen.resolved;
-      }
-      // Transition from Open → Frozen via CAS
-      var open = (Open) current;
-      var resolved = discoverAndMerge(open.programmatic);
-      var frozen = new Frozen(resolved);
-      if (STATE.compareAndSet(current, frozen)) {
-        return resolved;
-      }
-      // CAS failed — either register() changed Open, or another thread froze.
-      // Loop back: re-read STATE and check again.
-    }
-  }
-
   @SuppressWarnings("unchecked")
   private static List<InqEventExporter> discoverAndMerge(List<InqEventExporter> programmatic) {
     var serviceLoaderExporters = new ArrayList<InqEventExporter>();
 
-    // Use explicit Iterator and catch Throwable — ServiceLoader throws
-    // ServiceConfigurationError (an Error, not Exception) when a provider
-    // cannot be instantiated.
     try {
       var loader = ServiceLoader.load(InqEventExporter.class);
       Iterator<InqEventExporter> iterator = loader.iterator();
@@ -170,15 +108,14 @@ public final class InqEventExporterRegistry {
           serviceLoaderExporters.add(iterator.next());
         } catch (Throwable t) {
           rethrowIfFatal(t);
-          LOGGER.warn("Failed to load InqEventExporter provider: {} — Provider skipped.",
-              t.getMessage());
-          logProviderError(t);
+          LOGGER.warn("Failed to load InqEventExporter provider — Provider skipped. " +
+              "Type: {}, Message: {}", t.getClass().getName(), t.getMessage());
         }
       }
     } catch (Throwable t) {
       rethrowIfFatal(t);
-      LOGGER.warn("ServiceLoader discovery for InqEventExporter failed: {}", t.getMessage());
-      logProviderError(t);
+      LOGGER.warn("ServiceLoader discovery for InqEventExporter failed. " +
+          "Type: {}, Message: {}", t.getClass().getName(), t.getMessage());
     }
 
     // Sort: Comparable first (ascending), then non-Comparable
@@ -200,56 +137,97 @@ public final class InqEventExporterRegistry {
     return List.copyOf(result);
   }
 
-  /**
-   * Logs a provider error for diagnostics.
-   * Called during discovery — best-effort, never crashes the discovery process.
-   */
-  private static void logProviderError(Throwable t) {
-    try {
-      var phase = (t instanceof java.util.ServiceConfigurationError) ? "construction" : "execution";
-      var className = extractProviderClassName(t);
-      LOGGER.warn("Provider error [{}]: {} in phase '{}' — {}",
-          InqEventExporter.class.getSimpleName(), className, phase, t.getMessage());
-    } catch (Throwable suppressed) {
-      // Best-effort — never let provider error reporting crash discovery
-      LOGGER.debug("Could not log provider error: {}", suppressed.getMessage());
-    }
+  private static void rethrowIfFatal(Throwable t) {
+    if (t instanceof VirtualMachineError) throw (VirtualMachineError) t;
+    if (t instanceof ThreadDeath) throw (ThreadDeath) t;
+    if (t instanceof LinkageError) throw (LinkageError) t;
   }
 
-  private static String extractProviderClassName(Throwable t) {
-    var msg = t.getMessage();
-    if (msg != null && msg.startsWith("Provider ")) {
-      var end = msg.indexOf(' ', 9);
-      if (end > 0) {
-        return msg.substring(9, end);
+  /**
+   * Registers an exporter programmatically.
+   *
+   * <p>Must be called before the first event is exported. Registrations after
+   * the first export throw {@link IllegalStateException} (ADR-014, Convention 5).
+   *
+   * <p>Lock-free: uses CAS to append to the immutable programmatic list.
+   *
+   * @param exporter the exporter to register
+   * @throws IllegalStateException if the registry is already frozen
+   */
+  public void register(InqEventExporter exporter) {
+    Objects.requireNonNull(exporter, "exporter must not be null");
+    while (true) {
+      var current = state.get();
+      if (current instanceof Frozen) {
+        throw new IllegalStateException(
+            "InqEventExporterRegistry is frozen — exporters must be registered " +
+                "before the first event is exported.");
+      }
+      var open = (Open) current;
+      var updated = new ArrayList<>(open.programmatic);
+      updated.add(exporter);
+      var next = new Open(List.copyOf(updated));
+      if (state.compareAndSet(current, next)) {
+        return;
       }
     }
-    return "(unknown)";
   }
 
   /**
-   * Resets the registry for testing purposes.
-   * <strong>Not for production use.</strong>
+   * Exports an event to all registered exporters.
+   *
+   * <p>On first call, triggers ServiceLoader discovery and freezes the registry.
+   * Exporter exceptions are caught and logged — they never propagate.
+   *
+   * @param event the event to export
    */
-  static void reset() {
-    STATE.set(new Open());
+  public void export(InqEvent event) {
+    for (var exporter : getExporters()) {
+      try {
+        if (isSubscribed(exporter, event)) {
+          exporter.export(event);
+        }
+      } catch (Throwable t) {
+        rethrowIfFatal(t);
+        LOGGER.warn(
+            "[{}] InqEventExporter {} threw on event {}: {}",
+            event.getCallId(), exporter.getClass().getName(),
+            event.getClass().getSimpleName(), t.getMessage());
+      }
+    }
+  }
+
+  /**
+   * Returns the resolved exporter list, triggering discovery on first access.
+   *
+   * <p>Uses a CAS retry loop to atomically transition from {@code Open} to
+   * {@code Frozen}. If a concurrent {@code register()} changes the {@code Open}
+   * state between our read and our CAS, we re-read and retry.
+   */
+  private List<InqEventExporter> getExporters() {
+    while (true) {
+      var current = state.get();
+      if (current instanceof Frozen frozen) {
+        return frozen.resolved;
+      }
+      var open = (Open) current;
+      var resolved = discoverAndMerge(open.programmatic);
+      var frozen = new Frozen(resolved);
+      if (state.compareAndSet(current, frozen)) {
+        return resolved;
+      }
+    }
   }
 
   private sealed interface RegistryState permits Open, Frozen {
   }
 
-  /**
-   * Accepts registrations. Contains the accumulated programmatic exporters.
-   */
   private record Open(List<InqEventExporter> programmatic) implements RegistryState {
     Open() {
       this(List.of());
     }
   }
 
-  /**
-   * Resolved and frozen. No more registrations accepted.
-   */
   private record Frozen(List<InqEventExporter> resolved) implements RegistryState {
   }
 }

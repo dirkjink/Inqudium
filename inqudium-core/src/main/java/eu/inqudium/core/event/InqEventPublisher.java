@@ -11,13 +11,17 @@ import java.util.function.Consumer;
  * from the publisher (ADR-003):
  * <ul>
  *   <li>To local consumers registered via {@link #onEvent}</li>
- *   <li>To global exporters registered in {@link InqEventExporterRegistry}</li>
+ *   <li>To global exporters registered in the {@link InqEventExporterRegistry}</li>
  * </ul>
  *
  * <h2>Creating a publisher</h2>
  * <pre>{@code
- * // Inside element construction — automatic, no external wiring needed
+ * // Production — uses the global default registry
  * var publisher = InqEventPublisher.create("paymentService", InqElementType.CIRCUIT_BREAKER);
+ *
+ * // Testing — uses an isolated registry
+ * var testRegistry = new InqEventExporterRegistry();
+ * var publisher = InqEventPublisher.create("paymentService", InqElementType.CIRCUIT_BREAKER, testRegistry);
  * }</pre>
  *
  * <h2>Subscribing to events</h2>
@@ -34,17 +38,30 @@ import java.util.function.Consumer;
 public interface InqEventPublisher {
 
   /**
-   * Creates a new publisher for an element instance.
-   *
-   * <p>The publisher bridges local consumers (registered via {@link #onEvent})
-   * and global exporters (registered in {@link InqEventExporterRegistry}).
+   * Creates a new publisher for an element instance, using the
+   * {@linkplain InqEventExporterRegistry#getDefault() global default registry}.
    *
    * @param elementName the name of the element instance
    * @param elementType the type of the element
-   * @return a new publisher wired to the global exporter registry
+   * @return a new publisher
    */
   static InqEventPublisher create(String elementName, InqElementType elementType) {
-    return new DefaultInqEventPublisher(elementName, elementType);
+    return new DefaultInqEventPublisher(elementName, elementType, InqEventExporterRegistry.getDefault());
+  }
+
+  /**
+   * Creates a new publisher for an element instance, using the specified registry.
+   *
+   * <p>Useful for testing — pass an isolated registry to avoid cross-test pollution.
+   *
+   * @param elementName the name of the element instance
+   * @param elementType the type of the element
+   * @param registry    the exporter registry to use
+   * @return a new publisher
+   */
+  static InqEventPublisher create(String elementName, InqElementType elementType,
+                                  InqEventExporterRegistry registry) {
+    return new DefaultInqEventPublisher(elementName, elementType, registry);
   }
 
   /**
