@@ -1,6 +1,7 @@
 package eu.inqudium.core.exception;
 
 import eu.inqudium.core.bulkhead.InqBulkheadFullException;
+import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
 
 import eu.inqudium.core.circuitbreaker.InqCallNotPermittedException;
 import eu.inqudium.core.ratelimiter.InqRequestNotPermittedException;
@@ -202,6 +203,20 @@ public final class InqFailure {
      */
     public InqFailure ifBulkheadFull(Consumer<InqBulkheadFullException> consumer) {
         if (found instanceof InqBulkheadFullException ex) {
+            consumer.accept(ex);
+            handled = true;
+        }
+        return this;
+    }
+
+    /**
+     * Invokes the consumer if the found exception is a {@link InqBulkheadInterruptedException}.
+     *
+     * @param consumer the handler for bulkhead interrupt events
+     * @return this instance for chaining
+     */
+    public InqFailure ifBulkheadInterrupted(Consumer<InqBulkheadInterruptedException> consumer) {
+        if (found instanceof InqBulkheadInterruptedException ex) {
             consumer.accept(ex);
             handled = true;
         }

@@ -26,15 +26,10 @@ public final class SemaphoreBulkhead extends AbstractBulkhead implements Bulkhea
     }
 
     @Override
-    protected boolean tryAcquirePermit(Duration timeout) {
-        try {
-            return timeout.isZero()
-                    ? semaphore.tryAcquire()
-                    : semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
+    protected boolean tryAcquirePermit(Duration timeout) throws InterruptedException {
+        return timeout.isZero()
+                ? semaphore.tryAcquire()
+                : semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
     }
 
     @Override

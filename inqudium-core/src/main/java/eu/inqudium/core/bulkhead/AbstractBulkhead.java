@@ -9,6 +9,7 @@ import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.pipeline.InqDecorator;
 
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * Base implementation for all bulkhead paradigms (imperative, Reactor, Kotlin, RxJava).
@@ -21,11 +22,23 @@ import java.time.Duration;
  * contract are implemented <strong>once</strong> in the core, not duplicated across
  * every paradigm module.
  *
+ * <h2>Safety guarantees</h2>
+ * <ul>
+ *   <li><strong>No permit leaks:</strong> Once a permit is acquired, it is guaranteed
+ *       to be released via {@code finally} — even if event publishing throws.</li>
+ *   <li><strong>Interrupt-aware:</strong> Thread interruption during permit acquisition
+ *       is reported as {@link InqBulkheadInterruptedException}, not masked as
+ *       {@link InqBulkheadFullException}.</li>
+ *   <li><strong>Snapshot-consistent:</strong> Timestamps and concurrent-call counts are
+ *       captured once per acquire/release and reused consistently across events and
+ *       exceptions.</li>
+ * </ul>
+ *
  * <h2>Subclass contract</h2>
  * <ul>
  *   <li>{@link #tryAcquirePermit(Duration)} — attempt to acquire a permit within the
  *       given timeout. Return {@code true} if acquired, {@code false} if denied.
- *       Must handle {@link InterruptedException} internally.</li>
+ *       Throw {@link InterruptedException} if the thread is interrupted during wait.</li>
  *   <li>{@link #releasePermit()} — release a previously acquired permit. Called exactly
  *       once per successful acquire, in a {@code finally} block.</li>
  *   <li>{@link #getConcurrentCalls()} — current number of in-flight calls.</li>
@@ -68,58 +81,93 @@ public abstract class AbstractBulkhead implements InqDecorator {
     }
 
     // ── Decoration — template method ──
+    //
+    // The acquire event is published INSIDE the try-finally block so that a
+    // failing event publisher cannot leak the permit. The sequence is:
+    //
+    //   1. tryAcquirePermit(timeout) — may throw InterruptedException
+    //   2. try {
+    //        publish(AcquireEvent)    ← if this throws, finally still releases
+    //        call.callable().call()
+    //      } finally {
+    //        releasePermit()
+    //        publish(ReleaseEvent)
+    //      }
 
     @Override
     public <T> InqCall<T> decorate(InqCall<T> call) {
         return call.withCallable(() -> {
-            doAcquire(call.callId());
+            acquire(call.callId());
+            // Permit is now held — finally guarantees release even if events throw
             try {
+                var acquireSnapshot = snapshot();
+                eventPublisher.publish(new BulkheadOnAcquireEvent(
+                        call.callId(), name,
+                        acquireSnapshot.concurrentCalls, acquireSnapshot.timestamp));
                 return call.callable().call();
             } finally {
-                doRelease(call.callId());
+                releasePermit();
+                var releaseSnapshot = snapshot();
+                eventPublisher.publish(new BulkheadOnReleaseEvent(
+                        call.callId(), name,
+                        releaseSnapshot.concurrentCalls, releaseSnapshot.timestamp));
             }
         });
     }
 
-    private void doAcquire(String callId) {
-        boolean acquired = tryAcquirePermit(config.getMaxWaitDuration());
-
-        if (!acquired) {
-            int concurrent = getConcurrentCalls();
+    /**
+     * Acquires a permit or throws. Does NOT publish events — the caller is
+     * responsible for entering a try-finally before publishing.
+     */
+    private void acquire(String callId) {
+        boolean acquired;
+        try {
+            acquired = tryAcquirePermit(config.getMaxWaitDuration());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            var snap = snapshot();
             eventPublisher.publish(new BulkheadOnRejectEvent(
-                    callId, name, concurrent, config.getClock().instant()));
-            throw new InqBulkheadFullException(
-                    callId, name, concurrent, config.getMaxConcurrentCalls());
+                    callId, name, snap.concurrentCalls, snap.timestamp));
+            throw new InqBulkheadInterruptedException(
+                    callId, name, snap.concurrentCalls, config.getMaxConcurrentCalls());
         }
 
-        eventPublisher.publish(new BulkheadOnAcquireEvent(
-                callId, name, getConcurrentCalls(), config.getClock().instant()));
+        if (!acquired) {
+            var snap = snapshot();
+            eventPublisher.publish(new BulkheadOnRejectEvent(
+                    callId, name, snap.concurrentCalls, snap.timestamp));
+            throw new InqBulkheadFullException(
+                    callId, name, snap.concurrentCalls, config.getMaxConcurrentCalls());
+        }
     }
 
-    private void doRelease(String callId) {
-        releasePermit();
-        eventPublisher.publish(new BulkheadOnReleaseEvent(
-                callId, name, getConcurrentCalls(), config.getClock().instant()));
+    /** Captures a consistent point-in-time view of concurrent calls and clock. */
+    private Snapshot snapshot() {
+        return new Snapshot(getConcurrentCalls(), config.getClock().instant());
     }
+
+    private record Snapshot(int concurrentCalls, Instant timestamp) {}
 
     // ── Abstract — paradigm-specific permit mechanism ──
 
     /**
      * Attempts to acquire a permit within the given timeout.
      *
-     * <p>Implementations must handle {@link InterruptedException} internally
-     * (restore interrupt flag and return {@code false}).
+     * <p>Implementations must propagate {@link InterruptedException} — do NOT catch
+     * it internally. The base class handles interrupt semantics (restoring the flag,
+     * publishing reject events, and throwing {@link InqBulkheadInterruptedException}).
      *
-     * @param timeout the maximum time to wait for a permit ({@link Duration#ZERO} for no waiting)
+     * @param timeout the maximum time to wait ({@link Duration#ZERO} for non-blocking)
      * @return {@code true} if the permit was acquired, {@code false} if denied
+     * @throws InterruptedException if the thread is interrupted while waiting
      */
-    protected abstract boolean tryAcquirePermit(Duration timeout);
+    protected abstract boolean tryAcquirePermit(Duration timeout) throws InterruptedException;
 
     /**
      * Releases a previously acquired permit.
      *
      * <p>Called exactly once per successful {@link #tryAcquirePermit} in a
-     * {@code finally} block. Implementations must be idempotent-safe.
+     * {@code finally} block. Must not throw.
      */
     protected abstract void releasePermit();
 
