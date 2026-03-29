@@ -1,6 +1,7 @@
 package eu.inqudium.timelimiter.internal;
 
 import eu.inqudium.core.InqCall;
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.exception.InqException;
@@ -46,22 +47,27 @@ public final class FutureTimeLimiter implements TimeLimiter {
     @Override public TimeLimiterConfig getConfig() { return config; }
     @Override public InqEventPublisher getEventPublisher() { return eventPublisher; }
 
+    /**
+     * Decorates a future supplier for standalone (single-element) use.
+     *
+     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+     * Use {@link eu.inqudium.core.pipeline.InqPipeline} to compose elements.
+     */
     @Override
     public <T> Supplier<T> decorateFutureSupplier(Supplier<CompletionStage<T>> futureSupplier) {
         return () -> {
-            var callId = config.getCallIdGenerator().generate();
             try {
-                return executeFuture(callId, futureSupplier);
+                return executeFuture(InqCallIdGenerator.NONE, futureSupplier);
             } catch (InqException ie) {
                 throw ie;
             } catch (RuntimeException re) {
-                config.getLogger().error("[{}] {} '{}': {}",
-                        callId, InqElementType.TIME_LIMITER, name, re.toString());
+                config.getLogger().error("{} '{}': {}",
+                        InqElementType.TIME_LIMITER, name, re.toString());
                 throw re;
             } catch (Exception e) {
-                config.getLogger().error("[{}] {} '{}': {}",
-                        callId, InqElementType.TIME_LIMITER, name, e.toString());
-                throw new InqRuntimeException(callId, name, InqElementType.TIME_LIMITER, e);
+                config.getLogger().error("{} '{}': {}",
+                        InqElementType.TIME_LIMITER, name, e.toString());
+                throw new InqRuntimeException(InqCallIdGenerator.NONE, name, InqElementType.TIME_LIMITER, e);
             }
         };
     }

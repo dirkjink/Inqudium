@@ -1,5 +1,6 @@
 package eu.inqudium.core.exception;
 
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqElementType;
 
 /**
@@ -36,7 +37,7 @@ public abstract class InqException extends RuntimeException {
     /**
      * Creates a new exception with call identity, error code, and element context.
      *
-     * @param callId      the unique call identifier (may be null for system-level exceptions)
+     * @param callId      the unique call identifier, or {@link InqCallIdGenerator#NONE} for standalone use
      * @param code        the structured error code (e.g. "INQ-CB-001")
      * @param elementName the name of the element instance (e.g. "paymentService")
      * @param elementType the type of the element
@@ -54,7 +55,7 @@ public abstract class InqException extends RuntimeException {
     /**
      * Creates a new exception with call identity, error code, element context, and a cause.
      *
-     * @param callId      the unique call identifier (may be null for system-level exceptions)
+     * @param callId      the unique call identifier, or {@link InqCallIdGenerator#NONE} for standalone use
      * @param code        the structured error code
      * @param elementName the name of the element instance
      * @param elementType the type of the element
@@ -74,8 +75,8 @@ public abstract class InqException extends RuntimeException {
      * Returns the unique call identifier.
      *
      * <p>All events and exceptions from the same pipeline invocation share
-     * this callId (ADR-022). May be null for system-level exceptions that
-     * occur outside a call context.
+     * this callId (ADR-022). Returns {@link InqCallIdGenerator#NONE} for standalone calls that
+     * are not pipeline-correlated.
      *
      * @return the callId, or null
      */
@@ -115,9 +116,6 @@ public abstract class InqException extends RuntimeException {
     }
 
     private static String formatMessage(String callId, String code, String message) {
-        if (callId != null) {
-            return "[" + callId + "] " + code + ": " + message;
-        }
-        return code + ": " + message;
+        return "[" + callId + "] " + code + ": " + message;
     }
 }

@@ -1,6 +1,7 @@
 package eu.inqudium.core.pipeline;
 
 import eu.inqudium.core.InqCall;
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqConfig;
 import eu.inqudium.core.InqElement;
 import eu.inqudium.core.exception.InqException;
@@ -14,36 +15,37 @@ import java.util.function.Supplier;
  *
  * <p>Provides two decoration modes:
  * <ul>
- *   <li><strong>Standalone:</strong> {@link #decorateCallable(Callable)},
- *       {@link #decorateSupplier(Supplier)}, and {@link #decorateRunnable(Runnable)}
- *       for direct use without a pipeline. Each call generates its own {@code callId}.</li>
- *   <li><strong>Pipeline:</strong> {@link #decorate(InqCall)} for use inside an
- *       {@link InqPipeline}. The {@link InqCall} carries the shared {@code callId}
- *       through the entire decoration chain (ADR-022).</li>
+ *   <li><strong>Pipeline mode</strong> ({@link #decorate(InqCall)}): For composing multiple
+ *       elements into a single decoration chain via {@link InqPipeline}. The pipeline
+ *       generates a callId and passes it through all decorators via {@link InqCall}
+ *       (ADR-022). <strong>This is the only supported way to compose multiple elements.</strong></li>
+ *   <li><strong>Standalone mode</strong> ({@link #decorateCallable}, {@link #decorateSupplier},
+ *       {@link #decorateRunnable}): For using a single element without a pipeline.
+ *       No callId is generated — standalone calls are not pipeline-correlated.</li>
  * </ul>
  *
- * <h2>Method hierarchy</h2>
- * <p>Implementations must provide only two methods:
+ * <h2>Composition: use InqPipeline, not manual nesting</h2>
+ * <pre>{@code
+ * // ✓ Correct — pipeline generates one shared callId
+ * Supplier<Result> resilient = InqPipeline.of(() -> service.call())
+ *     .shield(circuitBreaker)
+ *     .shield(retry)
+ *     .decorate();
+ *
+ * // ✗ UNSUPPORTED — each element has no callId, no correlation
+ * Supplier<Result> broken = cb.decorateSupplier(
+ *     () -> retry.executeSupplier(
+ *         () -> service.call()));
+ * }</pre>
+ *
+ * <h2>Implementation contract</h2>
+ * <p>Element implementations must provide only two methods:
  * <ul>
- *   <li>{@link #decorate(InqCall)} — pipeline-mode decoration</li>
- *   <li>{@link #getConfig()} — configuration access for callId generation and logging</li>
+ *   <li>{@link #decorate(InqCall)} — the element-specific resilience logic</li>
+ *   <li>{@link #getConfig()} — configuration access for logging</li>
  * </ul>
- *
- * <p>All standalone methods are provided as defaults that delegate to
- * {@link #decorate(InqCall)}:
- * <pre>
- * decorate(InqCall)      ← abstract, implemented by each element
- *   ↑ decorateCallable   — generates callId, creates InqCall, delegates, wraps boundary
- *     ↑ decorateSupplier — wraps supplier as callable, delegates
- *     ↑ decorateRunnable — wraps runnable as callable, delegates
- * </pre>
- *
- * <p>Each decoration method has a corresponding execution method:
- * <pre>
- * decorateCallable  → executeCallable
- * decorateSupplier  → executeSupplier
- * decorateRunnable  → executeRunnable
- * </pre>
+ * <p>All standalone methods ({@code decorateCallable}, {@code decorateSupplier},
+ * {@code decorateRunnable}) and all execute methods are provided as defaults.
  *
  * @since 0.1.0
  */
@@ -54,11 +56,8 @@ public interface InqDecorator extends InqElement {
     /**
      * Returns the element's configuration.
      *
-     * <p>Used by the default {@link #decorateCallable(Callable)} implementation
-     * to access the {@code InqCallIdGenerator} and the SLF4J {@code Logger}.
-     *
-     * <p>Element interfaces override the return type covariantly
-     * (e.g. {@code CircuitBreakerConfig getConfig()}).
+     * <p>Used by the default {@link #decorateCallable(Callable)} to access
+     * the SLF4J logger for error logging.
      *
      * @return the element configuration
      */
@@ -74,8 +73,7 @@ public interface InqDecorator extends InqElement {
      * element reads {@code call.callId()} for event correlation.
      *
      * <p>This is the only method that element implementations must provide.
-     * All standalone decoration methods delegate to this method via the
-     * default {@link #decorateCallable(Callable)} template.
+     * All standalone decoration methods delegate to this method.
      *
      * @param call the call to decorate (carries the shared callId)
      * @param <T>  the result type
@@ -83,26 +81,21 @@ public interface InqDecorator extends InqElement {
      */
     <T> InqCall<T> decorate(InqCall<T> call);
 
-    // ── Standalone mode — template method ──
+    // ── Standalone mode — single element only ──
 
     /**
-     * Decorates a callable with this element's resilience logic.
+     * Decorates a callable for standalone (single-element) use.
      *
-     * <p>This is the Supplier boundary — the point where checked exceptions
-     * from the {@link Callable} are converted to unchecked exceptions. The
-     * default implementation:
-     * <ol>
-     *   <li>Generates a fresh callId via {@code getConfig().getCallIdGenerator()}</li>
-     *   <li>Wraps the callable in an {@link InqCall}</li>
-     *   <li>Delegates to {@link #decorate(InqCall)} for the element-specific logic</li>
-     *   <li>Executes the decorated call</li>
-     *   <li>At the boundary: logs and rethrows runtime exceptions, wraps checked
-     *       exceptions in {@link InqRuntimeException}</li>
-     * </ol>
+     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+     * Use {@link InqPipeline} to compose elements — it generates a shared callId
+     * and passes it through the decoration chain. Standalone decoration does not
+     * generate a callId.
      *
-     * <p>{@link InqException} subclasses (circuit breaker open, rate limit denied, etc.)
-     * are <em>not</em> error-logged because they represent expected element behavior,
-     * not downstream failures.
+     * <p>This is the Supplier boundary — checked exceptions from the {@link Callable}
+     * are wrapped in {@link InqRuntimeException}. Runtime exceptions are logged with
+     * element context before being rethrown. {@link InqException} subclasses (circuit
+     * breaker open, bulkhead full, etc.) are rethrown without logging because they
+     * represent expected element behavior.
      *
      * @param callable the callable to decorate
      * @param <T>      the result type
@@ -110,32 +103,29 @@ public interface InqDecorator extends InqElement {
      */
     default <T> Supplier<T> decorateCallable(Callable<T> callable) {
         return () -> {
-            var callId = getConfig().getCallIdGenerator().generate();
-            var call = InqCall.of(callId, callable);
+            var call = InqCall.standalone(callable);
             try {
                 return decorate(call).execute();
             } catch (InqException ie) {
                 // Expected element behavior (CB open, BH full, etc.) — rethrow without logging
                 throw ie;
             } catch (RuntimeException re) {
-                getConfig().getLogger().error("[{}] {} '{}': {}",
-                        callId, getElementType(), getName(), re.toString());
+                getConfig().getLogger().error("{} '{}': {}",
+                        getElementType(), getName(), re.toString());
                 throw re;
             } catch (Exception e) {
-                getConfig().getLogger().error("[{}] {} '{}': {}",
-                        callId, getElementType(), getName(), e.toString());
-                throw new InqRuntimeException(callId, getName(), getElementType(), e);
+                getConfig().getLogger().error("{} '{}': {}",
+                        getElementType(), getName(), e.toString());
+                throw new InqRuntimeException(InqCallIdGenerator.NONE, getName(), getElementType(), e);
             }
         };
     }
 
-    // ── Standalone mode — delegating methods ──
-
     /**
-     * Decorates a supplier with this element's resilience logic.
+     * Decorates a supplier for standalone (single-element) use.
      *
-     * <p>Default implementation wraps the supplier as a callable and delegates
-     * to {@link #decorateCallable(Callable)}.
+     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+     * Use {@link InqPipeline} to compose elements.
      *
      * @param supplier the supplier to decorate
      * @param <T>      the result type
@@ -146,10 +136,10 @@ public interface InqDecorator extends InqElement {
     }
 
     /**
-     * Decorates a runnable with this element's resilience logic.
+     * Decorates a runnable for standalone (single-element) use.
      *
-     * <p>Default implementation wraps the runnable as a callable and delegates
-     * to {@link #decorateCallable(Callable)}.
+     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+     * Use {@link InqPipeline} to compose elements.
      *
      * @param runnable the runnable to decorate
      * @return a decorated runnable
@@ -167,6 +157,9 @@ public interface InqDecorator extends InqElement {
     /**
      * Decorates and immediately executes a callable.
      *
+     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+     * Use {@link InqPipeline} to compose elements.
+     *
      * @param callable the callable to execute
      * @param <T>      the result type
      * @return the result
@@ -178,6 +171,9 @@ public interface InqDecorator extends InqElement {
     /**
      * Decorates and immediately executes a supplier.
      *
+     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+     * Use {@link InqPipeline} to compose elements.
+     *
      * @param supplier the supplier to execute
      * @param <T>      the result type
      * @return the result
@@ -188,6 +184,9 @@ public interface InqDecorator extends InqElement {
 
     /**
      * Decorates and immediately executes a runnable.
+     *
+     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+     * Use {@link InqPipeline} to compose elements.
      *
      * @param runnable the runnable to execute
      */

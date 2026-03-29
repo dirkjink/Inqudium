@@ -1,5 +1,6 @@
 package eu.inqudium.core.exception;
 
+import eu.inqudium.core.InqCallIdGenerator;
 import eu.inqudium.core.InqElementType;
 
 import java.util.Locale;
@@ -74,7 +75,7 @@ public class InqRuntimeException extends InqException {
      * @param cause the checked exception to wrap
      */
     InqRuntimeException(Throwable cause) {
-        super(null, "INQ-SY-000", null, null,
+        super(InqCallIdGenerator.NONE, "INQ-SY-000", null, null,
                 cause.getMessage(),
                 cause);
     }

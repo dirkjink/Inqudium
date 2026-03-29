@@ -40,7 +40,7 @@ public final class TokenBucketRateLimiter implements RateLimiter {
 
     @Override
     public void acquirePermit() {
-        acquirePermitWithCallId(config.getCallIdGenerator().generate());
+        acquirePermitWithCallId(null);
     }
 
     @Override

@@ -38,6 +38,18 @@ import java.util.UUID;
 public interface InqCallIdGenerator {
 
     /**
+     * Sentinel value for calls without a pipeline-assigned identity.
+     *
+     * <p>Used by standalone decoration methods ({@code decorateCallable},
+     * {@code decorateSupplier}, {@code decorateRunnable}) and by system-level
+     * exception constructors that have no call context. Appears in log messages
+     * and exception messages as-is.
+     *
+     * <p>This is not a valid callId — it signals "no correlation available".
+     */
+    String NONE = "None";
+
+    /**
      * Generates a unique call identifier.
      *
      * <p>The returned value must be non-null and should be unique within

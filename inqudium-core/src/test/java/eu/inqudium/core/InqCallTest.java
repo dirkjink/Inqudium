@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 
+import static eu.inqudium.core.InqCallIdGenerator.NONE;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -28,9 +30,13 @@ class InqCallTest {
         }
 
         @Test
-        void should_reject_null_call_id() {
-            assertThatThrownBy(() -> InqCall.of(null, () -> "x"))
-                    .isInstanceOf(NullPointerException.class);
+        void should_allow_null_call_id_for_standalone_use() throws Exception {
+            // Given
+            var call = InqCall.standalone(() -> "standalone");
+
+            // Then
+            assertThat(call.callId()).isEqualTo(NONE);
+            assertThat(call.execute()).isEqualTo("standalone");
         }
 
         @Test
