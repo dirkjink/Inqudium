@@ -105,8 +105,6 @@ public interface CircuitBreaker extends InqDecorator {
     <T> Supplier<T> decorateSupplier(Supplier<T> supplier);
 
     /**
-
-    /**
      * Decorates a callable with circuit breaker protection.
      *
      * @param callable the callable to decorate

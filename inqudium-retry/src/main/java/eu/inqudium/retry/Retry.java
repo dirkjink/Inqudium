@@ -37,7 +37,6 @@ public interface Retry extends InqDecorator {
 
     <T> Supplier<T> decorateSupplier(Supplier<T> supplier);
 
-
     <T> Supplier<T> decorateCallable(Callable<T> callable);
 
     Runnable decorateRunnable(Runnable runnable);
