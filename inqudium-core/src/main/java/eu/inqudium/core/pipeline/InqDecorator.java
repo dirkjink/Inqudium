@@ -51,146 +51,146 @@ import java.util.function.Supplier;
  */
 public interface InqDecorator extends InqElement {
 
-    // ── Configuration access ──
+  // ── Configuration access ──
 
-    /**
-     * Returns the element's configuration.
-     *
-     * <p>Used by the default {@link #decorateCallable(Callable)} to access
-     * the SLF4J logger for error logging.
-     *
-     * @return the element configuration
-     */
-    InqConfig getConfig();
+  /**
+   * Returns the element's configuration.
+   *
+   * <p>Used by the default {@link #decorateCallable(Callable)} to access
+   * the SLF4J logger for error logging.
+   *
+   * @return the element configuration
+   */
+  InqConfig getConfig();
 
-    // ── Pipeline mode ──
+  // ── Pipeline mode ──
 
-    /**
-     * Wraps a call with this element's resilience logic, preserving the callId.
-     *
-     * <p>Used by {@link InqPipeline} to compose multiple elements into a single
-     * decoration chain. The {@link InqCall} carries the shared callId — each
-     * element reads {@code call.callId()} for event correlation.
-     *
-     * <p>This is the only method that element implementations must provide.
-     * All standalone decoration methods delegate to this method.
-     *
-     * @param call the call to decorate (carries the shared callId)
-     * @param <T>  the result type
-     * @return a decorated call with the same callId
-     */
-    <T> InqCall<T> decorate(InqCall<T> call);
+  /**
+   * Wraps a call with this element's resilience logic, preserving the callId.
+   *
+   * <p>Used by {@link InqPipeline} to compose multiple elements into a single
+   * decoration chain. The {@link InqCall} carries the shared callId — each
+   * element reads {@code call.callId()} for event correlation.
+   *
+   * <p>This is the only method that element implementations must provide.
+   * All standalone decoration methods delegate to this method.
+   *
+   * @param call the call to decorate (carries the shared callId)
+   * @param <T>  the result type
+   * @return a decorated call with the same callId
+   */
+  <T> InqCall<T> decorate(InqCall<T> call);
 
-    // ── Standalone mode — single element only ──
+  // ── Standalone mode — single element only ──
 
-    /**
-     * Decorates a callable for standalone (single-element) use.
-     *
-     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-     * Use {@link InqPipeline} to compose elements — it generates a shared callId
-     * and passes it through the decoration chain. Standalone decoration does not
-     * generate a callId.
-     *
-     * <p>This is the Supplier boundary — checked exceptions from the {@link Callable}
-     * are wrapped in {@link InqRuntimeException}. Runtime exceptions are logged with
-     * element context before being rethrown. {@link InqException} subclasses (circuit
-     * breaker open, bulkhead full, etc.) are rethrown without logging because they
-     * represent expected element behavior.
-     *
-     * @param callable the callable to decorate
-     * @param <T>      the result type
-     * @return a decorated supplier (checked exceptions wrapped in InqRuntimeException)
-     */
-    default <T> Supplier<T> decorateCallable(Callable<T> callable) {
-        return () -> {
-            var call = InqCall.standalone(callable);
-            try {
-                return decorate(call).execute();
-            } catch (InqException ie) {
-                // Expected element behavior (CB open, BH full, etc.) — rethrow without logging
-                throw ie;
-            } catch (RuntimeException re) {
-                getConfig().getLogger().error("{} '{}': {}",
-                        getElementType(), getName(), re.toString());
-                throw re;
-            } catch (Exception e) {
-                getConfig().getLogger().error("{} '{}': {}",
-                        getElementType(), getName(), e.toString());
-                throw new InqRuntimeException(InqCallIdGenerator.NONE, getName(), getElementType(), e);
-            }
-        };
-    }
+  /**
+   * Decorates a callable for standalone (single-element) use.
+   *
+   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+   * Use {@link InqPipeline} to compose elements — it generates a shared callId
+   * and passes it through the decoration chain. Standalone decoration does not
+   * generate a callId.
+   *
+   * <p>This is the Supplier boundary — checked exceptions from the {@link Callable}
+   * are wrapped in {@link InqRuntimeException}. Runtime exceptions are logged with
+   * element context before being rethrown. {@link InqException} subclasses (circuit
+   * breaker open, bulkhead full, etc.) are rethrown without logging because they
+   * represent expected element behavior.
+   *
+   * @param callable the callable to decorate
+   * @param <T>      the result type
+   * @return a decorated supplier (checked exceptions wrapped in InqRuntimeException)
+   */
+  default <T> Supplier<T> decorateCallable(Callable<T> callable) {
+    return () -> {
+      var call = InqCall.standalone(callable);
+      try {
+        return decorate(call).execute();
+      } catch (InqException ie) {
+        // Expected element behavior (CB open, BH full, etc.) — rethrow without logging
+        throw ie;
+      } catch (RuntimeException re) {
+        getConfig().getLogger().error("{} '{}': {}",
+            getElementType(), getName(), re.toString());
+        throw re;
+      } catch (Exception e) {
+        getConfig().getLogger().error("{} '{}': {}",
+            getElementType(), getName(), e.toString());
+        throw new InqRuntimeException(InqCallIdGenerator.NONE, getName(), getElementType(), e);
+      }
+    };
+  }
 
-    /**
-     * Decorates a supplier for standalone (single-element) use.
-     *
-     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-     * Use {@link InqPipeline} to compose elements.
-     *
-     * @param supplier the supplier to decorate
-     * @param <T>      the result type
-     * @return a decorated supplier
-     */
-    default <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
-        return decorateCallable(supplier::get);
-    }
+  /**
+   * Decorates a supplier for standalone (single-element) use.
+   *
+   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+   * Use {@link InqPipeline} to compose elements.
+   *
+   * @param supplier the supplier to decorate
+   * @param <T>      the result type
+   * @return a decorated supplier
+   */
+  default <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
+    return decorateCallable(supplier::get);
+  }
 
-    /**
-     * Decorates a runnable for standalone (single-element) use.
-     *
-     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-     * Use {@link InqPipeline} to compose elements.
-     *
-     * @param runnable the runnable to decorate
-     * @return a decorated runnable
-     */
-    default Runnable decorateRunnable(Runnable runnable) {
-        Supplier<Void> decorated = decorateCallable(() -> {
-            runnable.run();
-            return null;
-        });
-        return decorated::get;
-    }
+  /**
+   * Decorates a runnable for standalone (single-element) use.
+   *
+   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+   * Use {@link InqPipeline} to compose elements.
+   *
+   * @param runnable the runnable to decorate
+   * @return a decorated runnable
+   */
+  default Runnable decorateRunnable(Runnable runnable) {
+    Supplier<Void> decorated = decorateCallable(() -> {
+      runnable.run();
+      return null;
+    });
+    return decorated::get;
+  }
 
-    // ── Execute methods — decorate and immediately invoke ──
+  // ── Execute methods — decorate and immediately invoke ──
 
-    /**
-     * Decorates and immediately executes a callable.
-     *
-     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-     * Use {@link InqPipeline} to compose elements.
-     *
-     * @param callable the callable to execute
-     * @param <T>      the result type
-     * @return the result
-     */
-    default <T> T executeCallable(Callable<T> callable) {
-        return decorateCallable(callable).get();
-    }
+  /**
+   * Decorates and immediately executes a callable.
+   *
+   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+   * Use {@link InqPipeline} to compose elements.
+   *
+   * @param callable the callable to execute
+   * @param <T>      the result type
+   * @return the result
+   */
+  default <T> T executeCallable(Callable<T> callable) {
+    return decorateCallable(callable).get();
+  }
 
-    /**
-     * Decorates and immediately executes a supplier.
-     *
-     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-     * Use {@link InqPipeline} to compose elements.
-     *
-     * @param supplier the supplier to execute
-     * @param <T>      the result type
-     * @return the result
-     */
-    default <T> T executeSupplier(Supplier<T> supplier) {
-        return decorateSupplier(supplier).get();
-    }
+  /**
+   * Decorates and immediately executes a supplier.
+   *
+   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+   * Use {@link InqPipeline} to compose elements.
+   *
+   * @param supplier the supplier to execute
+   * @param <T>      the result type
+   * @return the result
+   */
+  default <T> T executeSupplier(Supplier<T> supplier) {
+    return decorateSupplier(supplier).get();
+  }
 
-    /**
-     * Decorates and immediately executes a runnable.
-     *
-     * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-     * Use {@link InqPipeline} to compose elements.
-     *
-     * @param runnable the runnable to execute
-     */
-    default void executeRunnable(Runnable runnable) {
-        decorateRunnable(runnable).run();
-    }
+  /**
+   * Decorates and immediately executes a runnable.
+   *
+   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
+   * Use {@link InqPipeline} to compose elements.
+   *
+   * @param runnable the runnable to execute
+   */
+  default void executeRunnable(Runnable runnable) {
+    decorateRunnable(runnable).run();
+  }
 }

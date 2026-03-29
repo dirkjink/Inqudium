@@ -1,8 +1,7 @@
 package eu.inqudium.core.retry;
 
-import eu.inqudium.core.exception.InqException;
-
 import eu.inqudium.core.InqElementType;
+import eu.inqudium.core.exception.InqException;
 
 import java.util.Locale;
 
@@ -17,42 +16,44 @@ import java.util.Locale;
  */
 public class InqRetryExhaustedException extends InqException {
 
-    /** All retry attempts exhausted. */
-    public static final String CODE = InqElementType.RETRY.errorCode(1);
+  /**
+   * All retry attempts exhausted.
+   */
+  public static final String CODE = InqElementType.RETRY.errorCode(1);
 
-    private final int attempts;
+  private final int attempts;
 
-    /**
-     * Creates a new exception indicating that all retry attempts have failed.
-     *
-     * @param callId      the unique call identifier
-     * @param elementName the retry instance name
-     * @param attempts    total number of attempts made (including the initial call)
-     * @param lastCause   the exception from the final attempt
-     */
-    public InqRetryExhaustedException(String callId, String elementName, int attempts, Throwable lastCause) {
-        super(callId, CODE, elementName, InqElementType.RETRY,
-                String.format(Locale.ROOT, "Retry '%s' exhausted after %d attempts", elementName, attempts),
-                lastCause);
-        this.attempts = attempts;
-    }
+  /**
+   * Creates a new exception indicating that all retry attempts have failed.
+   *
+   * @param callId      the unique call identifier
+   * @param elementName the retry instance name
+   * @param attempts    total number of attempts made (including the initial call)
+   * @param lastCause   the exception from the final attempt
+   */
+  public InqRetryExhaustedException(String callId, String elementName, int attempts, Throwable lastCause) {
+    super(callId, CODE, elementName, InqElementType.RETRY,
+        String.format(Locale.ROOT, "Retry '%s' exhausted after %d attempts", elementName, attempts),
+        lastCause);
+    this.attempts = attempts;
+  }
 
-    /**
-     * Returns the total number of attempts made, including the initial call.
-     *
-     * @return the attempt count (e.g. 3 means initial call + 2 retries)
-     */
-    public int getAttempts() {
-        return attempts;
-    }
+  /**
+   * Returns the total number of attempts made, including the initial call.
+   *
+   * @return the attempt count (e.g. 3 means initial call + 2 retries)
+   */
+  public int getAttempts() {
+    return attempts;
+  }
 
-    /**
-     * Returns the exception from the final attempt.
-     * Equivalent to {@link #getCause()}.
-     *
-     * @return the last cause
-     */
-    public Throwable getLastCause() {
-        return getCause();
-    }
+  /**
+   * Returns the exception from the final attempt.
+   * Equivalent to {@link #getCause()}.
+   *
+   * @return the last cause
+   */
+  public Throwable getLastCause() {
+    return getCause();
+  }
 }
