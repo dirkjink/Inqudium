@@ -58,9 +58,9 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
         consumer.accept(event);
       } catch (Throwable t) {
         rethrowIfFatal(t);
-        LOGGER.warn("[{}] Event consumer {} threw on event {}: {}",
+        LOGGER.warn("[{}] Event consumer {} threw on event {}",
             event.getCallId(), consumer.getClass().getName(),
-            event.getClass().getSimpleName(), t.getMessage());
+            event.getClass().getSimpleName(), t);
       }
     }
 

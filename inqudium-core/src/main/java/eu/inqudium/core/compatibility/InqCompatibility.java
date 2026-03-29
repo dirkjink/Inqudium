@@ -166,13 +166,13 @@ public final class InqCompatibility {
           } catch (Exception e) {
             org.slf4j.LoggerFactory.getLogger(InqCompatibility.class)
                 .warn(
-                    "Failed to load InqCompatibilityOptions provider: {}", e.getMessage());
+                    "Failed to load InqCompatibilityOptions provider", e);
           }
         }
       } catch (Exception e) {
         org.slf4j.LoggerFactory.getLogger(InqCompatibility.class)
             .warn(
-                "ServiceLoader discovery for InqCompatibilityOptions failed: {}", e.getMessage());
+                "ServiceLoader discovery for InqCompatibilityOptions failed", e);
       }
 
       // Sort: Comparable providers first (ascending), then non-Comparable
@@ -207,7 +207,7 @@ public final class InqCompatibility {
       } catch (Exception e) {
         org.slf4j.LoggerFactory.getLogger(InqCompatibility.class)
             .warn(
-                "InqCompatibilityOptions.flags() threw: {}", e.getMessage());
+                "InqCompatibilityOptions.flags() threw", e);
       }
     }
   }

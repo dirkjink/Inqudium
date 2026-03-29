@@ -25,8 +25,17 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <h2>Thread safety</h2>
  * <p>All state is held in a single {@link AtomicReference AtomicReference&lt;RegistryState&gt;}.
- * Both {@link #register(InqEventExporter)} and resolution use CAS operations —
- * no {@code synchronized}, no locks, safe for virtual threads.
+ * The state machine transitions are:
+ * <pre>{@code
+ * Open(programmatic=[])
+ *   ──register(a)──►  Open(programmatic=[a])       (CAS: Open→Open)
+ *   ──getExporters()──►  Resolving                   (CAS: Open→Resolving, one thread wins)
+ *                        ──discovery──►  Frozen(resolved=[...])
+ * }</pre>
+ * <p>Only the thread that successfully CAS-es from {@code Open} to {@code Resolving}
+ * performs ServiceLoader I/O. All other threads seeing {@code Resolving} yield until
+ * {@code Frozen} appears. This prevents a thundering-herd of concurrent I/O operations
+ * during application startup.
  *
  * @since 0.1.0
  */
@@ -36,7 +45,7 @@ public final class InqEventExporterRegistry {
 
   // ── Global default instance ──
 
-  private static volatile InqEventExporterRegistry defaultInstance;
+  private static final AtomicReference<InqEventExporterRegistry> DEFAULT_INSTANCE = new AtomicReference<>();
   private final AtomicReference<RegistryState> state = new AtomicReference<>(new Open());
 
   /**
@@ -53,19 +62,17 @@ public final class InqEventExporterRegistry {
   /**
    * Returns the shared global registry instance.
    *
-   * <p>Created lazily on first access. For production use — all elements
-   * share this instance by default.
+   * <p>Created atomically on first access via CAS — no split-brain risk.
    *
    * @return the global default registry
    */
   public static InqEventExporterRegistry getDefault() {
-    var instance = defaultInstance;
+    var instance = DEFAULT_INSTANCE.get();
     if (instance != null) {
       return instance;
     }
-    // Benign race — multiple threads may create an instance, but only one wins
-    defaultInstance = new InqEventExporterRegistry();
-    return defaultInstance;
+    DEFAULT_INSTANCE.compareAndSet(null, new InqEventExporterRegistry());
+    return DEFAULT_INSTANCE.get();
   }
 
   /**
@@ -77,7 +84,7 @@ public final class InqEventExporterRegistry {
    * @param registry the new default registry (or {@code null} to reset to lazy creation)
    */
   public static void setDefault(InqEventExporterRegistry registry) {
-    defaultInstance = registry;
+    DEFAULT_INSTANCE.set(registry);
   }
 
   private static boolean isSubscribed(InqEventExporter exporter, InqEvent event) {
@@ -101,21 +108,31 @@ public final class InqEventExporterRegistry {
       var loader = ServiceLoader.load(InqEventExporter.class);
       Iterator<InqEventExporter> iterator = loader.iterator();
       while (true) {
+        // hasNext() and next() are separated — a stuck hasNext() breaks
+        // the loop instead of spinning forever
+        boolean hasNext;
         try {
-          if (!iterator.hasNext()) {
-            break;
-          }
+          hasNext = iterator.hasNext();
+        } catch (Throwable t) {
+          rethrowIfFatal(t);
+          LOGGER.warn("ServiceLoader iterator.hasNext() failed for InqEventExporter " +
+              "— remaining providers skipped.", t);
+          break; // iterator is stuck — cannot advance past broken provider
+        }
+        if (!hasNext) {
+          break;
+        }
+        try {
           serviceLoaderExporters.add(iterator.next());
         } catch (Throwable t) {
           rethrowIfFatal(t);
-          LOGGER.warn("Failed to load InqEventExporter provider — Provider skipped. " +
-              "Type: {}, Message: {}", t.getClass().getName(), t.getMessage());
+          LOGGER.warn("Failed to load InqEventExporter provider — provider skipped.", t);
+          // next() failed but iterator may have advanced — continue
         }
       }
     } catch (Throwable t) {
       rethrowIfFatal(t);
-      LOGGER.warn("ServiceLoader discovery for InqEventExporter failed. " +
-          "Type: {}, Message: {}", t.getClass().getName(), t.getMessage());
+      LOGGER.warn("ServiceLoader discovery for InqEventExporter failed.", t);
     }
 
     // Sort: Comparable first (ascending), then non-Comparable
@@ -151,24 +168,26 @@ public final class InqEventExporterRegistry {
    * <p>Lock-free: uses CAS to append to the immutable programmatic list.
    *
    * @param exporter the exporter to register
-   * @throws IllegalStateException if the registry is already frozen
+   * @throws IllegalStateException if the registry is already frozen or resolving
    */
   public void register(InqEventExporter exporter) {
     Objects.requireNonNull(exporter, "exporter must not be null");
     while (true) {
       var current = state.get();
-      if (current instanceof Frozen) {
-        throw new IllegalStateException(
-            "InqEventExporterRegistry is frozen — exporters must be registered " +
-                "before the first event is exported.");
+      if (current instanceof Open open) {
+        var updated = new ArrayList<>(open.programmatic);
+        updated.add(exporter);
+        var next = new Open(List.copyOf(updated));
+        if (state.compareAndSet(current, next)) {
+          return;
+        }
+        // CAS failed — another thread modified state, retry
+        continue;
       }
-      var open = (Open) current;
-      var updated = new ArrayList<>(open.programmatic);
-      updated.add(exporter);
-      var next = new Open(List.copyOf(updated));
-      if (state.compareAndSet(current, next)) {
-        return;
-      }
+      // Resolving or Frozen — too late
+      throw new IllegalStateException(
+          "InqEventExporterRegistry is frozen — exporters must be registered " +
+              "before the first event is exported.");
     }
   }
 
@@ -188,10 +207,9 @@ public final class InqEventExporterRegistry {
         }
       } catch (Throwable t) {
         rethrowIfFatal(t);
-        LOGGER.warn(
-            "[{}] InqEventExporter {} threw on event {}: {}",
+        LOGGER.warn("[{}] InqEventExporter {} threw on event {}",
             event.getCallId(), exporter.getClass().getName(),
-            event.getClass().getSimpleName(), t.getMessage());
+            event.getClass().getSimpleName(), t);
       }
     }
   }
@@ -199,34 +217,57 @@ public final class InqEventExporterRegistry {
   /**
    * Returns the resolved exporter list, triggering discovery on first access.
    *
-   * <p>Uses a CAS retry loop to atomically transition from {@code Open} to
-   * {@code Frozen}. If a concurrent {@code register()} changes the {@code Open}
-   * state between our read and our CAS, we re-read and retry.
+   * <p>Only the thread that successfully CAS-es {@code Open → Resolving}
+   * performs the (potentially expensive) ServiceLoader I/O. All other threads
+   * yield until the resolver publishes {@code Frozen}.
    */
   private List<InqEventExporter> getExporters() {
     while (true) {
       var current = state.get();
+
       if (current instanceof Frozen frozen) {
         return frozen.resolved;
       }
-      var open = (Open) current;
-      var resolved = discoverAndMerge(open.programmatic);
-      var frozen = new Frozen(resolved);
-      if (state.compareAndSet(current, frozen)) {
-        return resolved;
+
+      if (current instanceof Open open) {
+        // Try to claim the resolver role
+        var resolving = new Resolving(open.programmatic);
+        if (state.compareAndSet(current, resolving)) {
+          // We won — perform discovery (outside CAS loop, only once)
+          var resolved = discoverAndMerge(open.programmatic);
+          state.set(new Frozen(resolved));
+          return resolved;
+        }
+        // CAS failed — someone else changed state, re-read
+        continue;
       }
+
+      // Resolving — another thread is doing discovery, yield and retry
+      Thread.yield();
     }
   }
 
-  private sealed interface RegistryState permits Open, Frozen {
+  private sealed interface RegistryState permits Open, Resolving, Frozen {
   }
 
+  /**
+   * Accepts registrations. Contains the accumulated programmatic exporters.
+   */
   private record Open(List<InqEventExporter> programmatic) implements RegistryState {
     Open() {
       this(List.of());
     }
   }
 
+  /**
+   * Discovery in progress. Only one thread performs I/O; others yield.
+   */
+  private record Resolving(List<InqEventExporter> programmatic) implements RegistryState {
+  }
+
+  /**
+   * Resolved and frozen. No more registrations accepted.
+   */
   private record Frozen(List<InqEventExporter> resolved) implements RegistryState {
   }
 }

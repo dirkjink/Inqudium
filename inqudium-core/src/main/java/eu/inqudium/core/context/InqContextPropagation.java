@@ -55,8 +55,8 @@ public final class InqContextPropagation {
         scopes.add(scope);
       } catch (Exception e) {
         org.slf4j.LoggerFactory.getLogger(InqContextPropagation.class)
-            .warn("[{}] Context propagator {} failed during restore/enrich: {}",
-                callId, propagator.getClass().getName(), e.getMessage());
+            .warn("[{}] Context propagator {} failed during restore/enrich",
+                callId, propagator.getClass().getName(), e);
       }
     }
 
@@ -83,8 +83,8 @@ public final class InqContextPropagation {
       } catch (Exception e) {
         org.slf4j.LoggerFactory.getLogger(InqContextPropagation.class)
             .warn(
-                "Context propagator {} failed during capture: {}",
-                propagator.getClass().getName(), e.getMessage());
+                "Context propagator {} failed during capture",
+                propagator.getClass().getName(), e);
         snapshots.add(NoopSnapshot.INSTANCE);
       }
     }
@@ -119,8 +119,8 @@ public final class InqContextPropagation {
         scopes.add(scope);
       } catch (Exception e) {
         org.slf4j.LoggerFactory.getLogger(InqContextPropagation.class)
-            .warn("[{}] Context propagator {} failed during restore/enrich: {}",
-                callId, propagator.getClass().getName(), e.getMessage());
+            .warn("[{}] Context propagator {} failed during restore/enrich",
+                callId, propagator.getClass().getName(), e);
       }
     }
 
@@ -142,7 +142,7 @@ public final class InqContextPropagation {
         } catch (Exception e) {
           org.slf4j.LoggerFactory.getLogger(InqContextPropagation.class)
               .warn(
-                  "Context scope close failed: {}", e.getMessage());
+                  "Context scope close failed", e);
         }
       }
     };

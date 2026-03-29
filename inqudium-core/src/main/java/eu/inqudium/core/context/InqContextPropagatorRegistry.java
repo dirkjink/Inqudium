@@ -17,8 +17,16 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <h2>Thread safety</h2>
  * <p>All state is held in a single {@link AtomicReference AtomicReference&lt;RegistryState&gt;}.
- * Both {@link #register(InqContextPropagator)} and resolution use CAS operations —
- * no {@code synchronized}, no locks, safe for virtual threads.
+ * The state machine transitions are:
+ * <pre>{@code
+ * Open(programmatic=[])
+ *   ──register(p)──►  Open(programmatic=[p])       (CAS: Open→Open)
+ *   ──getPropagators()──►  Resolving                 (CAS: Open→Resolving, one thread wins)
+ *                          ──discovery──►  Frozen(resolved=[...])
+ * }</pre>
+ * <p>Only the thread that successfully CAS-es from {@code Open} to {@code Resolving}
+ * performs ServiceLoader I/O. All other threads seeing {@code Resolving} yield until
+ * {@code Frozen} appears.
  *
  * @since 0.1.0
  */
@@ -28,7 +36,7 @@ public final class InqContextPropagatorRegistry {
 
   // ── Global default instance ──
 
-  private static volatile InqContextPropagatorRegistry defaultInstance;
+  private static final AtomicReference<InqContextPropagatorRegistry> DEFAULT_INSTANCE = new AtomicReference<>();
   private final AtomicReference<RegistryState> state = new AtomicReference<>(new Open());
 
   /**
@@ -45,18 +53,17 @@ public final class InqContextPropagatorRegistry {
   /**
    * Returns the shared global registry instance.
    *
-   * <p>Created lazily on first access. For production use — all elements
-   * share this instance by default.
+   * <p>Created atomically on first access via CAS — no split-brain risk.
    *
    * @return the global default registry
    */
   public static InqContextPropagatorRegistry getDefault() {
-    var instance = defaultInstance;
+    var instance = DEFAULT_INSTANCE.get();
     if (instance != null) {
       return instance;
     }
-    defaultInstance = new InqContextPropagatorRegistry();
-    return defaultInstance;
+    DEFAULT_INSTANCE.compareAndSet(null, new InqContextPropagatorRegistry());
+    return DEFAULT_INSTANCE.get();
   }
 
   /**
@@ -68,7 +75,7 @@ public final class InqContextPropagatorRegistry {
    * @param registry the new default registry (or {@code null} to reset to lazy creation)
    */
   public static void setDefault(InqContextPropagatorRegistry registry) {
-    defaultInstance = registry;
+    DEFAULT_INSTANCE.set(registry);
   }
 
   @SuppressWarnings("unchecked")
@@ -79,21 +86,28 @@ public final class InqContextPropagatorRegistry {
       var loader = ServiceLoader.load(InqContextPropagator.class);
       Iterator<InqContextPropagator> iterator = loader.iterator();
       while (true) {
+        boolean hasNext;
         try {
-          if (!iterator.hasNext()) {
-            break;
-          }
+          hasNext = iterator.hasNext();
+        } catch (Throwable t) {
+          rethrowIfFatal(t);
+          LOGGER.warn("ServiceLoader iterator.hasNext() failed for InqContextPropagator " +
+              "— remaining providers skipped.", t);
+          break;
+        }
+        if (!hasNext) {
+          break;
+        }
+        try {
           serviceLoaderPropagators.add(iterator.next());
         } catch (Throwable t) {
           rethrowIfFatal(t);
-          LOGGER.warn("Failed to load InqContextPropagator provider — Provider skipped. " +
-              "Type: {}, Message: {}", t.getClass().getName(), t.getMessage());
+          LOGGER.warn("Failed to load InqContextPropagator provider — provider skipped.", t);
         }
       }
     } catch (Throwable t) {
       rethrowIfFatal(t);
-      LOGGER.warn("ServiceLoader discovery for InqContextPropagator failed. " +
-          "Type: {}, Message: {}", t.getClass().getName(), t.getMessage());
+      LOGGER.warn("ServiceLoader discovery for InqContextPropagator failed.", t);
     }
 
     // Sort: Comparable first (ascending), then non-Comparable
@@ -126,27 +140,25 @@ public final class InqContextPropagatorRegistry {
    * <p>Must be called before the first context propagation occurs.
    * Registrations after the first access throw {@link IllegalStateException}.
    *
-   * <p>Lock-free: uses CAS to append to the immutable programmatic list.
-   *
    * @param propagator the propagator to register
-   * @throws IllegalStateException if the registry is already frozen
+   * @throws IllegalStateException if the registry is already frozen or resolving
    */
   public void register(InqContextPropagator propagator) {
     Objects.requireNonNull(propagator, "propagator must not be null");
     while (true) {
       var current = state.get();
-      if (current instanceof Frozen) {
-        throw new IllegalStateException(
-            "InqContextPropagatorRegistry is frozen — propagators must be registered " +
-                "before the first context propagation.");
+      if (current instanceof Open open) {
+        var updated = new ArrayList<>(open.programmatic);
+        updated.add(propagator);
+        var next = new Open(List.copyOf(updated));
+        if (state.compareAndSet(current, next)) {
+          return;
+        }
+        continue;
       }
-      var open = (Open) current;
-      var updated = new ArrayList<>(open.programmatic);
-      updated.add(propagator);
-      var next = new Open(List.copyOf(updated));
-      if (state.compareAndSet(current, next)) {
-        return;
-      }
+      throw new IllegalStateException(
+          "InqContextPropagatorRegistry is frozen — propagators must be registered " +
+              "before the first context propagation.");
     }
   }
 
@@ -154,33 +166,43 @@ public final class InqContextPropagatorRegistry {
    * Returns the ordered list of all registered propagators.
    *
    * <p>On first call, triggers ServiceLoader discovery and freezes the registry.
-   * Uses a CAS retry loop to atomically transition from {@code Open} to
-   * {@code Frozen}.
+   * Only the thread that claims the {@code Resolving} state performs I/O.
    *
    * @return unmodifiable list of propagators
    */
   public List<InqContextPropagator> getPropagators() {
     while (true) {
       var current = state.get();
+
       if (current instanceof Frozen frozen) {
         return frozen.resolved;
       }
-      var open = (Open) current;
-      var resolved = discoverAndMerge(open.programmatic);
-      var frozen = new Frozen(resolved);
-      if (state.compareAndSet(current, frozen)) {
-        return resolved;
+
+      if (current instanceof Open open) {
+        var resolving = new Resolving(open.programmatic);
+        if (state.compareAndSet(current, resolving)) {
+          var resolved = discoverAndMerge(open.programmatic);
+          state.set(new Frozen(resolved));
+          return resolved;
+        }
+        continue;
       }
+
+      // Resolving — another thread is doing discovery, yield and retry
+      Thread.yield();
     }
   }
 
-  private sealed interface RegistryState permits Open, Frozen {
+  private sealed interface RegistryState permits Open, Resolving, Frozen {
   }
 
   private record Open(List<InqContextPropagator> programmatic) implements RegistryState {
     Open() {
       this(List.of());
     }
+  }
+
+  private record Resolving(List<InqContextPropagator> programmatic) implements RegistryState {
   }
 
   private record Frozen(List<InqContextPropagator> resolved) implements RegistryState {
