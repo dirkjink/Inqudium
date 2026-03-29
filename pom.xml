@@ -76,6 +76,10 @@
         <reactor-bom.version>2024.0.4</reactor-bom.version>
         <rxjava3.version>3.1.10</rxjava3.version>
 
+        <!-- Logging -->
+        <slf4j.version>2.0.16</slf4j.version>
+        <logback.version>1.5.16</logback.version>
+
         <!-- Spring Boot (for spring-boot3 module) -->
         <spring-boot.version>3.4.3</spring-boot.version>
 
@@ -130,6 +134,18 @@
                 <groupId>io.reactivex.rxjava3</groupId>
                 <artifactId>rxjava</artifactId>
                 <version>${rxjava3.version}</version>
+            </dependency>
+
+            <!-- Logging (MDC propagation, ADR-011) -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
             </dependency>
 
             <!-- Spring Boot -->
@@ -201,6 +217,11 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

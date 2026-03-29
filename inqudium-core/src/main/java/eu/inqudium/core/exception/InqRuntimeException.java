@@ -44,48 +44,59 @@ import java.util.Locale;
  */
 public class InqRuntimeException extends InqException {
 
-  /**
-   * Wraps a checked exception with call identity and element context.
-   *
-   * <p>The error code is derived from the element type: {@code INQ-XX-000}.
-   *
-   * @param callId      the unique call identifier
-   * @param elementName the element instance name
-   * @param elementType the element type
-   * @param cause       the checked exception to wrap
-   */
-  public InqRuntimeException(String callId, String elementName, InqElementType elementType, Throwable cause) {
-    super(callId,
-        elementType != null ? elementType.errorCode(0) : "INQ-SY-000",
-        elementName, elementType,
-        elementType != null
-            ? String.format(Locale.ROOT, "Checked exception in %s '%s': %s",
-            elementType, elementName, cause.getMessage())
-            : String.format(Locale.ROOT, "Checked exception in '%s': %s",
-            elementName, cause.getMessage()),
-        cause);
-  }
+    /**
+     * Wraps a checked exception with call identity and element context.
+     *
+     * <p>The cause is {@linkplain InqFailure#unwrap(Throwable) unwrapped} to strip
+     * common wrapper exceptions (ExecutionException, CompletionException, etc.)
+     * before storing. The error code is derived from the element type: {@code INQ-XX-000}.
+     *
+     * @param callId      the unique call identifier
+     * @param elementName the element instance name
+     * @param elementType the element type
+     * @param cause       the checked exception to wrap (unwrapped automatically)
+     */
+    public InqRuntimeException(String callId, String elementName, InqElementType elementType, Throwable cause) {
+        super(callId,
+                elementType != null ? elementType.errorCode(0) : "INQ-SY-000",
+                elementName, elementType,
+                formatCauseMessage(elementName, elementType, InqFailure.unwrap(cause)),
+                InqFailure.unwrap(cause));
+    }
 
-  /**
-   * Wraps a checked exception without element context.
-   *
-   * <p>Package-private — used only by {@link InqFailure} which lives in the same package.
-   * The error code is {@code "INQ-SY-000"} (system-level wrapping).
-   *
-   * @param cause the checked exception to wrap
-   */
-  InqRuntimeException(Throwable cause) {
-    super(InqCallIdGenerator.NONE, "INQ-SY-000", null, null,
-        cause.getMessage(),
-        cause);
-  }
+    private static String formatCauseMessage(String elementName, InqElementType elementType, Throwable unwrapped) {
+        if (elementType != null) {
+            return String.format(Locale.ROOT, "Checked exception in %s '%s': %s",
+                    elementType, elementName, unwrapped.getMessage());
+        }
+        if (elementName != null) {
+            return String.format(Locale.ROOT, "Checked exception in '%s': %s",
+                    elementName, unwrapped.getMessage());
+        }
+        return unwrapped.getMessage();
+    }
 
-  /**
-   * Returns whether this exception carries element context.
-   *
-   * @return true if element name and type are set
-   */
-  public boolean hasElementContext() {
-    return getElementName() != null && getElementType() != null;
-  }
+    /**
+     * Wraps a checked exception without element context.
+     *
+     * <p>Package-private — used only by {@link InqFailure} which lives in the same package.
+     * The cause is {@linkplain InqFailure#unwrap(Throwable) unwrapped} before storing.
+     * The error code is {@code "INQ-SY-000"} (system-level wrapping).
+     *
+     * @param cause the checked exception to wrap (unwrapped automatically)
+     */
+    InqRuntimeException(Throwable cause) {
+        super(InqCallIdGenerator.NONE, "INQ-SY-000", null, null,
+                formatCauseMessage(null, null, InqFailure.unwrap(cause)),
+                InqFailure.unwrap(cause));
+    }
+
+    /**
+     * Returns whether this exception carries element context.
+     *
+     * @return true if element name and type are set
+     */
+    public boolean hasElementContext() {
+        return getElementName() != null && getElementType() != null;
+    }
 }
