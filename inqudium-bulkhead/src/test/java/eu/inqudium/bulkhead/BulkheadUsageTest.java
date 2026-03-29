@@ -1,5 +1,8 @@
 package eu.inqudium.bulkhead;
 
+import eu.inqudium.bulkhead.event.BulkheadOnAcquireEvent;
+import eu.inqudium.bulkhead.event.BulkheadOnRejectEvent;
+import eu.inqudium.bulkhead.event.BulkheadOnReleaseEvent;
 import eu.inqudium.core.Invocation;
 import eu.inqudium.core.InvocationVarargs;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
@@ -386,14 +389,14 @@ class BulkheadUsageTest {
       var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
           .maxConcurrentCalls(5)
           .build());
-      var acquireEvents = new java.util.ArrayList<eu.inqudium.bulkhead.event.BulkheadOnAcquireEvent>();
-      var releaseEvents = new java.util.ArrayList<eu.inqudium.bulkhead.event.BulkheadOnReleaseEvent>();
+      var acquireEvents = new java.util.ArrayList<BulkheadOnAcquireEvent>();
+      var releaseEvents = new java.util.ArrayList<BulkheadOnReleaseEvent>();
 
       bh.getEventPublisher().onEvent(
-          eu.inqudium.bulkhead.event.BulkheadOnAcquireEvent.class,
+          BulkheadOnAcquireEvent.class,
           acquireEvents::add);
       bh.getEventPublisher().onEvent(
-          eu.inqudium.bulkhead.event.BulkheadOnReleaseEvent.class,
+          BulkheadOnReleaseEvent.class,
           releaseEvents::add);
 
       Supplier<String> resilient = bh.decorateSupplier(() -> service.processOrder("order-1"));
@@ -413,10 +416,10 @@ class BulkheadUsageTest {
       var bh = Bulkhead.of("orderService", BulkheadConfig.builder()
           .maxConcurrentCalls(1)
           .build());
-      var rejectEvents = new java.util.ArrayList<eu.inqudium.bulkhead.event.BulkheadOnRejectEvent>();
+      var rejectEvents = new java.util.ArrayList<BulkheadOnRejectEvent>();
 
       bh.getEventPublisher().onEvent(
-          eu.inqudium.bulkhead.event.BulkheadOnRejectEvent.class,
+          BulkheadOnRejectEvent.class,
           rejectEvents::add);
 
       Supplier<String> slowCall = bh.decorateSupplier(() -> {
