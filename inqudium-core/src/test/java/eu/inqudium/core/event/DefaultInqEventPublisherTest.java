@@ -33,7 +33,10 @@ class DefaultInqEventPublisherTest {
     void should_throw_exception_when_publishing_null_event() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       // When & Then
@@ -46,7 +49,10 @@ class DefaultInqEventPublisherTest {
     void should_throw_exception_when_registering_null_consumer() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       // When & Then
@@ -59,7 +65,10 @@ class DefaultInqEventPublisherTest {
     void should_throw_exception_when_registering_null_event_type_for_typed_consumer() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       // When & Then
@@ -77,7 +86,10 @@ class DefaultInqEventPublisherTest {
     void should_collect_and_rethrow_only_the_first_fatal_error() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       VirtualMachineError firstFatalError = new OutOfMemoryError("First fatal");
@@ -112,7 +124,10 @@ class DefaultInqEventPublisherTest {
       });
 
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, throwingRegistry
+          "test",
+          InqElementType.NO_ELEMENT,
+          throwingRegistry,
+          InqPublisherConfig.defaultConfig()
       );
 
       TestEvent event = new TestEvent();
@@ -135,7 +150,10 @@ class DefaultInqEventPublisherTest {
       registry.register(registryReceivedEvents::add);
 
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, registry
+          "test",
+          InqElementType.NO_ELEMENT,
+          registry,
+          InqPublisherConfig.defaultConfig()
       );
 
       List<InqEvent> consumerReceivedEvents = new ArrayList<>();
@@ -162,7 +180,10 @@ class DefaultInqEventPublisherTest {
     void should_deliver_only_specific_events_to_typed_consumer() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       List<TestEvent> specificEventsReceived = new ArrayList<>();
@@ -189,7 +210,10 @@ class DefaultInqEventPublisherTest {
     void should_fail_fast_fatal_errors_until_all_consumers_processed_event() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       List<InqEvent> processedAfterError = new ArrayList<>();
@@ -217,7 +241,10 @@ class DefaultInqEventPublisherTest {
     void should_silently_swallow_non_fatal_exceptions_from_consumers() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       List<InqEvent> processedEvents = new ArrayList<>();
@@ -246,7 +273,10 @@ class DefaultInqEventPublisherTest {
     void should_successfully_remove_consumer_when_cancelled() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       List<InqEvent> receivedEvents = new ArrayList<>();

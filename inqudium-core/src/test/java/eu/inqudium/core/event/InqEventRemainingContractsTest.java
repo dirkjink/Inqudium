@@ -70,7 +70,10 @@ class InqEventRemainingContractsTest {
     void should_ignore_multiple_cancellations_of_the_same_subscription() {
       // Given
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          "test", InqElementType.NO_ELEMENT, new InqEventExporterRegistry()
+          "test",
+          InqElementType.NO_ELEMENT,
+          new InqEventExporterRegistry(),
+          InqPublisherConfig.defaultConfig()
       );
 
       List<InqEvent> receivedEvents = new ArrayList<>();

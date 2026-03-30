@@ -94,6 +94,16 @@ class AbstractBulkheadStateMachineTest {
     public <E extends InqEvent> InqSubscription onEvent(Class<E> eventType, Consumer<E> consumer) {
       return null;
     }
+
+    @Override
+    public InqSubscription onEvent(InqEventConsumer consumer, Duration ttl) {
+      return null;
+    }
+
+    @Override
+    public <E extends InqEvent> InqSubscription onEvent(Class<E> eventType, Consumer<E> consumer, Duration ttl) {
+      return null;
+    }
   }
 
   // A fake publisher that crashes on specific event types
@@ -113,6 +123,16 @@ class AbstractBulkheadStateMachineTest {
 
     @Override
     public <E extends InqEvent> InqSubscription onEvent(Class<E> eventType, Consumer<E> consumer) {
+      return null;
+    }
+
+    @Override
+    public InqSubscription onEvent(InqEventConsumer consumer, Duration ttl) {
+      return null;
+    }
+
+    @Override
+    public <E extends InqEvent> InqSubscription onEvent(Class<E> eventType, Consumer<E> consumer, Duration ttl) {
       return null;
     }
   }

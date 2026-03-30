@@ -124,7 +124,10 @@ class InqEventConcurrencyAndInfrastructureTest {
       InqEventExporterRegistry registry = new InqEventExporterRegistry();
       String expectedElementName = "my-special-breaker";
       DefaultInqEventPublisher publisher = new DefaultInqEventPublisher(
-          expectedElementName, InqElementType.NO_ELEMENT, registry
+          expectedElementName,
+          InqElementType.NO_ELEMENT,
+          registry,
+          InqPublisherConfig.defaultConfig()
       );
 
       // Add a consumer to alter the 'consumers' count in the toString output

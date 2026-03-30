@@ -49,10 +49,16 @@ public class InqEventSystemBenchmark {
     InqEventExporterRegistry emptyRegistry = new InqEventExporterRegistry();
     // Force registry to freeze into an empty state
     emptyRegistry.export(preAllocatedEvent);
-    emptyPublisher = new DefaultInqEventPublisher("empty", InqElementType.NO_ELEMENT, emptyRegistry);
+    emptyPublisher = new DefaultInqEventPublisher("empty",
+        InqElementType.NO_ELEMENT,
+        emptyRegistry,
+        InqPublisherConfig.defaultConfig());
 
     // 2. Local Only Publisher (2 Consumers, no Exporters)
-    localOnlyPublisher = new DefaultInqEventPublisher("local", InqElementType.NO_ELEMENT, emptyRegistry);
+    localOnlyPublisher = new DefaultInqEventPublisher("local",
+        InqElementType.NO_ELEMENT,
+        emptyRegistry,
+        InqPublisherConfig.defaultConfig());
     localOnlyPublisher.onEvent(blackhole::consume);
     localOnlyPublisher.onEvent(blackhole::consume);
 
@@ -62,10 +68,16 @@ public class InqEventSystemBenchmark {
     populatedRegistry.register(blackhole::consume);
     // Force registry to freeze to avoid measuring discovery phase
     populatedRegistry.export(preAllocatedEvent);
-    globalOnlyPublisher = new DefaultInqEventPublisher("global", InqElementType.NO_ELEMENT, populatedRegistry);
+    globalOnlyPublisher = new DefaultInqEventPublisher("global",
+        InqElementType.NO_ELEMENT,
+        populatedRegistry,
+        InqPublisherConfig.defaultConfig());
 
     // 4. Mixed Publisher (2 Consumers, 2 Exporters)
-    mixedPublisher = new DefaultInqEventPublisher("mixed", InqElementType.NO_ELEMENT, populatedRegistry);
+    mixedPublisher = new DefaultInqEventPublisher("mixed",
+        InqElementType.NO_ELEMENT,
+        populatedRegistry,
+        InqPublisherConfig.defaultConfig());
     mixedPublisher.onEvent(blackhole::consume);
     mixedPublisher.onEvent(blackhole::consume);
   }

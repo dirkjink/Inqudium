@@ -3,6 +3,8 @@ package eu.inqudium.core.event;
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.exception.InqException;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
@@ -17,6 +19,25 @@ import java.util.function.Consumer;
  * wrapped in an {@link AtomicReference}. This guarantees lock-free, zero-allocation
  * publishing with optimal CPU cache locality.
  *
+ * <h2>Consumer limits</h2>
+ * <p>Configurable via {@link InqPublisherConfig}:
+ * <ul>
+ *   <li><strong>Soft limit</strong> — logs a warning when crossed. No rejection.</li>
+ *   <li><strong>Hard limit</strong> — rejects new registrations with
+ *       {@link IllegalStateException} when reached.</li>
+ * </ul>
+ * Both limits are evaluated after expired TTL consumers have been swept.
+ *
+ * <h2>TTL-based subscriptions</h2>
+ * <p>Consumers registered with a {@link Duration} TTL are automatically removed
+ * after the specified time by a background {@link InqConsumerExpiryWatchdog}.
+ * The watchdog runs on a virtual thread and is started lazily on the first
+ * TTL subscription — no overhead if TTL is never used.
+ *
+ * <p>The {@link #publish(InqEvent)} hot path is completely free of expiry logic.
+ * All sweep operations are handled asynchronously by the watchdog and synchronously
+ * during {@link #addConsumer} for accurate limit enforcement.
+ *
  * <h2>Double registration</h2>
  * <p>Registering the same consumer instance multiple times is allowed and results in
  * the consumer being called once per registration on each event. Each registration
@@ -26,18 +47,14 @@ import java.util.function.Consumer;
  */
 final class DefaultInqEventPublisher implements InqEventPublisher {
 
+  // Pre-allocated empty array to avoid allocations when resetting to empty
+  static final ConsumerEntry[] EMPTY_CONSUMERS = new ConsumerEntry[0];
   private static final org.slf4j.Logger LOGGER =
       org.slf4j.LoggerFactory.getLogger(DefaultInqEventPublisher.class);
-
-  // Pre-allocated empty array to avoid allocations when resetting to empty
-  private static final ConsumerEntry[] EMPTY_CONSUMERS = new ConsumerEntry[0];
-
-  // FIX #9: Threshold at which a warning is logged to detect potential subscription leaks
-  private static final int CONSUMER_COUNT_WARNING_THRESHOLD = 256;
-
   private final String elementName;
   private final InqElementType elementType;
   private final InqEventExporterRegistry registry;
+  private final InqPublisherConfig config;
 
   /**
    * Copy-on-write array holding the local consumers. Array iteration is significantly
@@ -50,18 +67,84 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
    */
   private final AtomicLong subscriptionCounter = new AtomicLong(0);
 
+  /**
+   * Lazily initialized watchdog for sweeping expired TTL consumers.
+   * Null until the first TTL subscription is registered.
+   */
+  private final AtomicReference<InqConsumerExpiryWatchdog> watchdog = new AtomicReference<>();
+
   DefaultInqEventPublisher(String elementName, InqElementType elementType,
-                           InqEventExporterRegistry registry) {
+                           InqEventExporterRegistry registry, InqPublisherConfig config) {
     this.elementName = Objects.requireNonNull(elementName, "elementName must not be null");
     this.elementType = Objects.requireNonNull(elementType, "elementType must not be null");
     this.registry = Objects.requireNonNull(registry, "registry must not be null");
+    this.config = Objects.requireNonNull(config, "config must not be null");
+  }
+
+  // ── Publishing (hot path — no expiry logic) ──
+
+  /**
+   * Validates the TTL duration and computes the absolute expiry instant.
+   *
+   * @param ttl the time-to-live (must be positive and non-null)
+   * @return the absolute expiry instant
+   */
+  private static Instant validateTtlAndComputeExpiry(Duration ttl) {
+    Objects.requireNonNull(ttl, "ttl must not be null");
+    if (ttl.isNegative() || ttl.isZero()) {
+      throw new IllegalArgumentException("ttl must be positive, was: " + ttl);
+    }
+    return Instant.now().plus(ttl);
+  }
+
+  // ── Permanent subscriptions ──
+
+  /**
+   * Returns a new array with all expired entries removed. If no entries are expired,
+   * returns the input array unchanged (no allocation). If all entries are expired,
+   * returns the shared {@link #EMPTY_CONSUMERS} sentinel.
+   *
+   * @param arr the current consumer array
+   * @return a cleaned array (same reference if nothing expired)
+   */
+  static ConsumerEntry[] sweepExpired(ConsumerEntry[] arr) {
+    // Fast path: count expired entries
+    int expiredCount = 0;
+    for (ConsumerEntry entry : arr) {
+      if (entry.isExpired()) {
+        expiredCount++;
+      }
+    }
+
+    // Nothing expired — return same array reference (no allocation)
+    if (expiredCount == 0) {
+      return arr;
+    }
+
+    // All expired — return shared empty sentinel
+    if (expiredCount == arr.length) {
+      return EMPTY_CONSUMERS;
+    }
+
+    // Build compacted array without expired entries
+    ConsumerEntry[] result = new ConsumerEntry[arr.length - expiredCount];
+    int idx = 0;
+    for (ConsumerEntry entry : arr) {
+      if (!entry.isExpired()) {
+        result[idx++] = entry;
+      }
+    }
+    return result;
   }
 
   @Override
   public void publish(InqEvent event) {
     Objects.requireNonNull(event, "event must not be null");
 
-    // Deliver to local consumers using a cache-friendly array iteration
+    // Snapshot the array — any concurrent add/remove produces a new array instance,
+    // so this iteration is safe without synchronization.
+    // No expiry checks here: the background watchdog handles all cleanup asynchronously,
+    // keeping the publish path as lean as possible.
     ConsumerEntry[] currentConsumers = consumers.get();
 
     for (int i = 0; i < currentConsumers.length; i++) {
@@ -70,12 +153,12 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
         entry.consumer().accept(event);
       } catch (Throwable t) {
         InqException.rethrowIfFatal(t);
-        // FIX #5: Use entry's description for meaningful logging instead of lambda class names
         LOGGER.warn("[{}] Event consumer [{}] threw on event {}",
             event.getCallId(), entry.description(),
             event.getClass().getSimpleName(), t);
       }
     }
+
     // Forward to exporters
     try {
       registry.export(event);
@@ -86,13 +169,14 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
     }
   }
 
+  // ── TTL-based subscriptions ──
+
   @Override
   public InqSubscription onEvent(InqEventConsumer consumer) {
     Objects.requireNonNull(consumer, "consumer must not be null");
     long subscriptionId = subscriptionCounter.incrementAndGet();
-    // FIX #5: Capture the actual consumer class name for meaningful diagnostics
     String description = consumer.getClass().getName();
-    addConsumer(new ConsumerEntry(subscriptionId, consumer, description));
+    addConsumer(new ConsumerEntry(subscriptionId, consumer, description, null));
     return () -> removeConsumer(subscriptionId);
   }
 
@@ -100,38 +184,124 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
   public <E extends InqEvent> InqSubscription onEvent(Class<E> eventType, Consumer<E> consumer) {
     Objects.requireNonNull(eventType, "eventType must not be null");
     Objects.requireNonNull(consumer, "consumer must not be null");
+    return registerTyped(eventType, consumer, null);
+  }
 
-    // FIX #5: Named wrapper with meaningful toString instead of anonymous lambda.
-    // The description captures both the event type filter and the actual consumer class
-    // so log output is useful for debugging (instead of "Lambda$42/0x00000008001a3c40").
+  // ── Lifecycle ──
+
+  @Override
+  public InqSubscription onEvent(InqEventConsumer consumer, Duration ttl) {
+    Objects.requireNonNull(consumer, "consumer must not be null");
+    Instant expiresAt = validateTtlAndComputeExpiry(ttl);
+    long subscriptionId = subscriptionCounter.incrementAndGet();
+    String description = consumer.getClass().getName() + " [TTL=" + ttl + "]";
+    addConsumer(new ConsumerEntry(subscriptionId, consumer, description, expiresAt));
+    ensureWatchdogStarted();
+    return () -> removeConsumer(subscriptionId);
+  }
+
+  // ── Internal registration ──
+
+  @Override
+  public <E extends InqEvent> InqSubscription onEvent(Class<E> eventType, Consumer<E> consumer,
+                                                      Duration ttl) {
+    Objects.requireNonNull(eventType, "eventType must not be null");
+    Objects.requireNonNull(consumer, "consumer must not be null");
+    Instant expiresAt = validateTtlAndComputeExpiry(ttl);
+    InqSubscription subscription = registerTyped(eventType, consumer, expiresAt);
+    ensureWatchdogStarted();
+    return subscription;
+  }
+
+  @Override
+  public void close() {
+    InqConsumerExpiryWatchdog current = watchdog.getAndSet(null);
+    if (current != null) {
+      current.close();
+    }
+  }
+
+  // ── Copy-on-write array management ──
+
+  /**
+   * Shared registration logic for typed consumers with optional TTL.
+   */
+  private <E extends InqEvent> InqSubscription registerTyped(Class<E> eventType,
+                                                             Consumer<E> consumer,
+                                                             Instant expiresAt) {
+    // Capture description before wrapping — the wrapper lambda class name is meaningless
+    String ttlSuffix = expiresAt != null ? ", TTL expires=" + expiresAt : "";
     String description = "TypedConsumer[eventType=" + eventType.getSimpleName()
-        + ", consumer=" + consumer.getClass().getName() + "]";
+        + ", consumer=" + consumer.getClass().getName() + ttlSuffix + "]";
 
     InqEventConsumer wrapper = event -> {
       if (eventType.isInstance(event)) {
         consumer.accept(eventType.cast(event));
       }
     };
+
     long subscriptionId = subscriptionCounter.incrementAndGet();
-    addConsumer(new ConsumerEntry(subscriptionId, wrapper, description));
+    addConsumer(new ConsumerEntry(subscriptionId, wrapper, description, expiresAt));
     return () -> removeConsumer(subscriptionId);
   }
 
+  /**
+   * Adds a consumer entry using a CAS loop. Before adding, expired entries are
+   * swept and consumer limits are checked against the <em>active</em> count.
+   *
+   * <p>The synchronous sweep during add ensures that expired consumers do not
+   * inflate the count and falsely trigger hard limit rejections.
+   *
+   * @param entry the entry to add
+   * @throws IllegalStateException if the hard consumer limit is reached
+   */
   private void addConsumer(ConsumerEntry entry) {
-    consumers.updateAndGet(arr -> {
-      ConsumerEntry[] newArr = Arrays.copyOf(arr, arr.length + 1);
-      newArr[arr.length] = entry;
+    boolean softLimitCrossed = false;
 
-      // FIX #9: Warn when consumer count exceeds threshold — potential subscription leak
-      if (newArr.length == CONSUMER_COUNT_WARNING_THRESHOLD) {
-        LOGGER.warn("Publisher '{}' ({}) has reached {} consumers — possible subscription leak. " +
-                "Ensure InqSubscription.cancel() is called when consumers are no longer needed.",
-            elementName, elementType, CONSUMER_COUNT_WARNING_THRESHOLD);
+    while (true) {
+      ConsumerEntry[] current = consumers.get();
+
+      // Sweep expired entries before limit evaluation — expired consumers
+      // must not count towards either threshold.
+      ConsumerEntry[] cleaned = sweepExpired(current);
+      int activeCount = cleaned.length;
+
+      // Hard limit check — reject before adding
+      if (activeCount >= config.hardLimit()) {
+        throw new IllegalStateException(
+            "Publisher '" + elementName + "' (" + elementType + ") has reached the hard " +
+                "consumer limit of " + config.hardLimit() + ". Ensure InqSubscription.cancel() " +
+                "is called when consumers are no longer needed, or increase the limit via " +
+                "InqPublisherConfig.");
       }
 
-      return newArr;
-    });
+      // Soft limit check — detect threshold crossing (log outside CAS to avoid
+      // duplicate logs on retries, but accept that concurrent adds may both log)
+      if (activeCount >= config.softLimit() && !softLimitCrossed) {
+        softLimitCrossed = true;
+      }
+
+      // Build new array from cleaned base + new entry
+      ConsumerEntry[] newArr = Arrays.copyOf(cleaned, activeCount + 1);
+      newArr[activeCount] = entry;
+
+      // CAS: compare against the original snapshot (not cleaned). If another
+      // thread modified consumers in between, CAS fails and we retry with a
+      // fresh snapshot — including a fresh sweep.
+      if (consumers.compareAndSet(current, newArr)) {
+        if (softLimitCrossed) {
+          LOGGER.warn("Publisher '{}' ({}) has reached {} active consumers (soft limit: {}). " +
+                  "Possible subscription leak — ensure InqSubscription.cancel() is called " +
+                  "when consumers are no longer needed.",
+              elementName, elementType, newArr.length, config.softLimit());
+        }
+        return;
+      }
+      // CAS failed — retry with fresh snapshot
+    }
   }
+
+  // ── Expiry sweep (called by watchdog and addConsumer) ──
 
   private void removeConsumer(long id) {
     consumers.updateAndGet(arr -> {
@@ -161,19 +331,90 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
     });
   }
 
+  /**
+   * Performs a single-attempt CAS sweep of expired entries from the consumer array.
+   *
+   * <p>Called by the {@link InqConsumerExpiryWatchdog} on its virtual thread.
+   * Uses a single CAS attempt per invocation — if a concurrent modification
+   * caused the CAS to fail, the next watchdog cycle will retry.
+   */
+  void performExpirySweep() {
+    ConsumerEntry[] current = consumers.get();
+    ConsumerEntry[] cleaned = sweepExpired(current);
+    if (cleaned != current) {
+      if (consumers.compareAndSet(current, cleaned)) {
+        int removed = current.length - cleaned.length;
+        LOGGER.debug("Expiry watchdog swept {} expired consumer(s) from '{}'",
+            removed, elementName);
+      }
+      // CAS failure is fine — next cycle retries with a fresh snapshot
+    }
+  }
+
+  // ── Watchdog lifecycle ──
+
+  /**
+   * Lazily starts the expiry watchdog on the first TTL subscription registration.
+   *
+   * <p>Thread-safe via CAS — if two TTL registrations race, only one watchdog is
+   * created. The losing thread's duplicate is immediately closed.
+   */
+  private void ensureWatchdogStarted() {
+    if (watchdog.get() != null) {
+      return;
+    }
+
+    var newWatchdog = new InqConsumerExpiryWatchdog(
+        elementName, config.expiryCheckInterval(), this::performExpirySweep);
+
+    if (!watchdog.compareAndSet(null, newWatchdog)) {
+      // Another thread started the watchdog concurrently — close our duplicate
+      newWatchdog.close();
+    }
+  }
+
+  // ── Object methods ──
+
   @Override
   public String toString() {
+    ConsumerEntry[] current = consumers.get();
+    long activeCount = 0;
+    for (ConsumerEntry entry : current) {
+      if (!entry.isExpired()) {
+        activeCount++;
+      }
+    }
+    InqConsumerExpiryWatchdog wd = watchdog.get();
     return "InqEventPublisher{" +
         "elementName='" + elementName + '\'' +
         ", elementType=" + elementType +
-        ", consumers=" + consumers.get().length +
+        ", consumers=" + activeCount +
+        (current.length != activeCount ? " (+" + (current.length - activeCount) + " expired)" : "") +
+        ", watchdog=" + (wd != null && wd.isRunning() ? "active" : "inactive") +
+        ", config=" + config +
         '}';
   }
 
+  // ── Inner types ──
+
   /**
-   * Pairs a subscription ID with its consumer and a human-readable description
-   * for diagnostic logging.
+   * Pairs a subscription ID with its consumer, a human-readable description for
+   * diagnostic logging, and an optional expiry instant for TTL-based subscriptions.
+   *
+   * @param id          unique subscription identifier
+   * @param consumer    the actual event consumer
+   * @param description human-readable description for log output
+   * @param expiresAt   expiry instant, or {@code null} for permanent subscriptions
    */
-  private record ConsumerEntry(long id, InqEventConsumer consumer, String description) {
+  record ConsumerEntry(long id, InqEventConsumer consumer, String description,
+                       Instant expiresAt) {
+
+    /**
+     * Returns {@code true} if this entry has a TTL and the TTL has elapsed.
+     * Permanent subscriptions (expiresAt == null) never expire.
+     */
+    boolean isExpired() {
+      return expiresAt != null && Instant.now().isAfter(expiresAt);
+    }
   }
 }
