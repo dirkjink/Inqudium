@@ -1,4 +1,4 @@
-package eu.inqudium.retry.event;
+package eu.inqudium.core.retry.event;
 
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.event.InqEvent;

@@ -366,10 +366,10 @@ class RetryUsageTest {
           .maxAttempts(3)
           .initialInterval(Duration.ofMillis(10))
           .build());
-      var retryEvents = new java.util.ArrayList<eu.inqudium.retry.event.RetryOnRetryEvent>();
+      var retryEvents = new java.util.ArrayList<eu.inqudium.core.retry.event.RetryOnRetryEvent>();
 
       retry.getEventPublisher().onEvent(
-          eu.inqudium.retry.event.RetryOnRetryEvent.class,
+          eu.inqudium.core.retry.event.RetryOnRetryEvent.class,
           retryEvents::add);
 
       Supplier<String> resilient = retry.decorateSupplier(() -> service.checkStock("SKU"));
@@ -392,10 +392,10 @@ class RetryUsageTest {
           .maxAttempts(3)
           .initialInterval(Duration.ofMillis(10))
           .build());
-      var successEvents = new java.util.ArrayList<eu.inqudium.retry.event.RetryOnSuccessEvent>();
+      var successEvents = new java.util.ArrayList<eu.inqudium.core.retry.event.RetryOnSuccessEvent>();
 
       retry.getEventPublisher().onEvent(
-          eu.inqudium.retry.event.RetryOnSuccessEvent.class,
+          eu.inqudium.core.retry.event.RetryOnSuccessEvent.class,
           successEvents::add);
 
       Supplier<String> resilient = retry.decorateSupplier(() -> service.checkStock("SKU"));

@@ -1,4 +1,4 @@
-package eu.inqudium.retry.event;
+package eu.inqudium.core.retry.event;
 
 import java.time.Duration;
 import java.time.Instant;
