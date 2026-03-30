@@ -106,19 +106,41 @@ public abstract class AbstractBulkhead implements InqDecorator {
   public <T> InqCall<T> decorate(InqCall<T> call) {
     return call.withCallable(() -> {
       acquire(call.callId());
-      // Permit is now held — finally guarantees release even if events throw
+
+      // Permit is now held — finally guarantees release even if events throw.
+      // We track potential business exceptions to prevent them from being masked.
+      Throwable businessError = null;
       try {
         var acquireSnapshot = snapshot();
         eventPublisher.publish(new BulkheadOnAcquireEvent(
             call.callId(), name,
-            acquireSnapshot.concurrentCalls, acquireSnapshot.timestamp));
+            acquireSnapshot.concurrentCalls(), acquireSnapshot.timestamp()));
         return call.callable().call();
+      } catch (Throwable t) {
+        businessError = t;
+        throw t;
       } finally {
+        // 1. Unconditionally release the permit first
         releasePermit();
-        var releaseSnapshot = snapshot();
-        eventPublisher.publish(new BulkheadOnReleaseEvent(
-            call.callId(), name,
-            releaseSnapshot.concurrentCalls, releaseSnapshot.timestamp));
+
+        // 2. Attempt to publish the release event safely
+        try {
+          var releaseSnapshot = snapshot();
+          eventPublisher.publish(new BulkheadOnReleaseEvent(
+              call.callId(), name,
+              releaseSnapshot.concurrentCalls(), releaseSnapshot.timestamp()));
+        } catch (RuntimeException publisherError) {
+          // If the business logic failed AND the publisher fails, attach the
+          // publisher error to the original error instead of overwriting it.
+          if (businessError != null) {
+            // Prevent "Self-suppression not permitted" if the exact same instance is thrown twice
+            if (businessError != publisherError) {
+              businessError.addSuppressed(publisherError);
+            }
+          } else {
+            throw publisherError;
+          }
+        }
       }
     });
   }
