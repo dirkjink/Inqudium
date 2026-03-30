@@ -1,5 +1,6 @@
 package eu.inqudium.core.event;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.Instant;
@@ -61,13 +62,16 @@ public final class InqEventExporterRegistry {
 
   // FIX #2: volatile ensures cross-thread visibility when nulled after freeze,
   // independent of the AtomicReference happens-before on `state`.
-  private volatile ClassLoader spiClassLoader;
+  private volatile WeakReference<ClassLoader> spiClassLoaderRef;
 
   // ── State machine ──
 
   public InqEventExporterRegistry() {
     var tccl = Thread.currentThread().getContextClassLoader();
-    this.spiClassLoader = tccl != null ? tccl : InqEventExporter.class.getClassLoader();
+    // Wir erfassen den TCCL zur Erstellungszeit, halten ihn aber nicht stark fest
+    this.spiClassLoaderRef = new WeakReference<>(
+        tccl != null ? tccl : InqEventExporter.class.getClassLoader()
+    );
   }
 
   public static InqEventExporterRegistry getDefault() {
@@ -228,6 +232,21 @@ public final class InqEventExporterRegistry {
     return new DiscoveryResult(List.copyOf(cached), List.copyOf(providerErrors));
   }
 
+  private ClassLoader getClassLoader() {
+    ClassLoader classLoader = null;
+    WeakReference<ClassLoader> ref = this.spiClassLoaderRef;
+    if (ref != null) {
+      classLoader = ref.get();
+    }
+
+    // Fallback if the garbage collector has already cleared it
+    // (or if tccl was null in the constructor and the fallback applies)
+    if (classLoader == null) {
+      classLoader = InqEventExporter.class.getClassLoader();
+    }
+    return classLoader;
+  }
+
   /**
    * Registers an exporter programmatically.
    *
@@ -309,12 +328,12 @@ public final class InqEventExporterRegistry {
       if (current instanceof Open open) {
         var resolving = new Resolving(open.programmatic);
         if (state.compareAndSet(current, resolving)) {
-          // FIX #4: Separate try-blocks so that a replay failure does not
+          // Separate try-blocks so that a replay failure does not
           // reset the successfully frozen registry back to Open.
           List<CachedExporter> exporters;
           List<InqProviderErrorEvent> providerErrors;
           try {
-            var result = discoverAndMerge(open.programmatic, spiClassLoader);
+            var result = discoverAndMerge(open.programmatic, getClassLoader());
             exporters = result.exporters;
             providerErrors = result.providerErrors;
           } catch (Throwable t) {
@@ -325,7 +344,7 @@ public final class InqEventExporterRegistry {
             return List.of();
           }
 
-          // FIX #1: Use CAS instead of unconditional set. If another thread
+          // Use CAS instead of unconditional set. If another thread
           // performed a timeout-reset (Resolving→Open) while we were discovering,
           // our resolving instance is no longer current. In that case, discard our
           // result and use whatever state the winning thread established.
@@ -336,11 +355,11 @@ public final class InqEventExporterRegistry {
             continue;
           }
 
-          // FIX #2: Only null the classloader after successful CAS — guaranteed
+          // Only null the classloader after successful CAS — guaranteed
           // that we are the thread that actually froze the registry.
-          this.spiClassLoader = null;
+          this.spiClassLoaderRef = null;
 
-          // FIX #4: Replay errors in a separate try-block. A failure here must
+          // Replay errors in a separate try-block. A failure here must
           // not undo the successfully frozen state.
           try {
             replayProviderErrors(exporters, providerErrors);
@@ -396,7 +415,7 @@ public final class InqEventExporterRegistry {
   }
 
   /**
-   * FIX #10: Resets this registry to its initial open state.
+   * Resets this registry to its initial open state.
    *
    * <p><strong>Testing only.</strong> This method is intended for test isolation —
    * it allows a frozen registry to be reused across test methods without creating
@@ -409,7 +428,9 @@ public final class InqEventExporterRegistry {
   public void reset() {
     state.set(new Open());
     var tccl = Thread.currentThread().getContextClassLoader();
-    this.spiClassLoader = tccl != null ? tccl : InqEventExporter.class.getClassLoader();
+    this.spiClassLoaderRef = new WeakReference<>(
+        tccl != null ? tccl : InqEventExporter.class.getClassLoader()
+    );
   }
 
   private sealed interface RegistryState permits Open, Resolving, Frozen {

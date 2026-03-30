@@ -23,7 +23,7 @@ import java.time.Duration;
  *
  * <h2>Usage</h2>
  * <pre>{@code
- * // Default — soft limit 256, no hard limit, 1s expiry check
+ * // Default — soft limit 256, no hard limit, 60s expiry check
  * var config = InqPublisherConfig.defaultConfig();
  *
  * // Custom — warn at 64, reject at 128, sweep every 500ms
@@ -55,7 +55,7 @@ public record InqPublisherConfig(int softLimit, int hardLimit, Duration expiryCh
   private static final Duration DEFAULT_EXPIRY_CHECK_INTERVAL = Duration.ofSeconds(60);
 
   /**
-   * Default configuration — warns at 256 consumers, no hard limit, 1s expiry check.
+   * Default configuration — warns at 256 consumers, no hard limit, 60s expiry check.
    */
   private static final InqPublisherConfig DEFAULT =
       new InqPublisherConfig(DEFAULT_SOFT_LIMIT, Integer.MAX_VALUE, DEFAULT_EXPIRY_CHECK_INTERVAL);
@@ -81,7 +81,7 @@ public record InqPublisherConfig(int softLimit, int hardLimit, Duration expiryCh
   }
 
   /**
-   * Returns the default configuration: soft limit 256, no hard limit, 1s expiry check.
+   * Returns the default configuration: soft limit 256, no hard limit, 60s expiry check.
    *
    * @return the default configuration
    */
@@ -102,7 +102,7 @@ public record InqPublisherConfig(int softLimit, int hardLimit, Duration expiryCh
   }
 
   /**
-   * Creates a configuration with soft and hard limits, using the default expiry interval (1s).
+   * Creates a configuration with soft and hard limits, using the default expiry interval (60s).
    *
    * @param softLimit the consumer count at which a warning is logged
    * @param hardLimit the consumer count at which new registrations are rejected

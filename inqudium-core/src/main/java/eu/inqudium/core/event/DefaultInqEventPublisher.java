@@ -2,6 +2,8 @@ package eu.inqudium.core.event;
 
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.exception.InqException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -49,8 +51,7 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
 
   // Pre-allocated empty array to avoid allocations when resetting to empty
   static final ConsumerEntry[] EMPTY_CONSUMERS = new ConsumerEntry[0];
-  private static final org.slf4j.Logger LOGGER =
-      org.slf4j.LoggerFactory.getLogger(DefaultInqEventPublisher.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(DefaultInqEventPublisher.class);
   private final String elementName;
   private final InqElementType elementType;
   private final InqEventExporterRegistry registry;
@@ -107,30 +108,21 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
    * @param arr the current consumer array
    * @return a cleaned array (same reference if nothing expired)
    */
-  static ConsumerEntry[] sweepExpired(ConsumerEntry[] arr) {
-    // Fast path: count expired entries
+  static ConsumerEntry[] sweepExpired(ConsumerEntry[] arr, Instant now) {
     int expiredCount = 0;
     for (ConsumerEntry entry : arr) {
-      if (entry.isExpired()) {
+      if (entry.isExpired(now)) {
         expiredCount++;
       }
     }
 
-    // Nothing expired — return same array reference (no allocation)
-    if (expiredCount == 0) {
-      return arr;
-    }
+    if (expiredCount == 0) return arr;
+    if (expiredCount == arr.length) return EMPTY_CONSUMERS;
 
-    // All expired — return shared empty sentinel
-    if (expiredCount == arr.length) {
-      return EMPTY_CONSUMERS;
-    }
-
-    // Build compacted array without expired entries
     ConsumerEntry[] result = new ConsumerEntry[arr.length - expiredCount];
     int idx = 0;
     for (ConsumerEntry entry : arr) {
-      if (!entry.isExpired()) {
+      if (!entry.isExpired(now)) {
         result[idx++] = entry;
       }
     }
@@ -258,12 +250,14 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
   private void addConsumer(ConsumerEntry entry) {
     boolean softLimitCrossed = false;
 
+    final Instant now = Instant.now();
     while (true) {
       ConsumerEntry[] current = consumers.get();
+      // Capture the time once per CAS iteration
+      ConsumerEntry[] cleaned = sweepExpired(current, now);
 
       // Sweep expired entries before limit evaluation — expired consumers
       // must not count towards either threshold.
-      ConsumerEntry[] cleaned = sweepExpired(current);
       int activeCount = cleaned.length;
 
       // Hard limit check — reject before adding
@@ -339,8 +333,9 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
    * caused the CAS to fail, the next watchdog cycle will retry.
    */
   void performExpirySweep() {
+    final Instant now = Instant.now();
     ConsumerEntry[] current = consumers.get();
-    ConsumerEntry[] cleaned = sweepExpired(current);
+    ConsumerEntry[] cleaned = sweepExpired(current, now);
     if (cleaned != current) {
       if (consumers.compareAndSet(current, cleaned)) {
         int removed = current.length - cleaned.length;
@@ -364,12 +359,16 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
       return;
     }
 
+    // Do not start the thread in the constructor of InqConsumerExpiryWatchdog anymore.
+    // Add a separate start() method to the watchdog class.
     var newWatchdog = new InqConsumerExpiryWatchdog(
-        elementName, config.expiryCheckInterval(), this::performExpirySweep);
+        elementName,
+        config.expiryCheckInterval(),
+        this::performExpirySweep);
 
-    if (!watchdog.compareAndSet(null, newWatchdog)) {
-      // Another thread started the watchdog concurrently — close our duplicate
-      newWatchdog.close();
+    if (watchdog.compareAndSet(null, newWatchdog)) {
+      // Only start the thread if this thread successfully registered the watchdog
+      newWatchdog.startThread();
     }
   }
 
@@ -377,10 +376,11 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
 
   @Override
   public String toString() {
+    final Instant now = Instant.now();
     ConsumerEntry[] current = consumers.get();
     long activeCount = 0;
     for (ConsumerEntry entry : current) {
-      if (!entry.isExpired()) {
+      if (!entry.isExpired(now)) {
         activeCount++;
       }
     }
@@ -406,15 +406,19 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
    * @param description human-readable description for log output
    * @param expiresAt   expiry instant, or {@code null} for permanent subscriptions
    */
-  record ConsumerEntry(long id, InqEventConsumer consumer, String description,
-                       Instant expiresAt) {
+  record ConsumerEntry(
+      long id,
+      InqEventConsumer consumer,
+      String description,
+      Instant expiresAt
+  ) {
 
     /**
      * Returns {@code true} if this entry has a TTL and the TTL has elapsed.
      * Permanent subscriptions (expiresAt == null) never expire.
      */
-    boolean isExpired() {
-      return expiresAt != null && Instant.now().isAfter(expiresAt);
+    boolean isExpired(Instant now) {
+      return expiresAt != null && now.isAfter(expiresAt);
     }
   }
 }

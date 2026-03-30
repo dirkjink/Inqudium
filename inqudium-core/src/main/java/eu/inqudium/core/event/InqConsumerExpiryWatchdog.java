@@ -1,5 +1,8 @@
 package eu.inqudium.core.event;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Duration;
 import java.util.Objects;
 
@@ -27,12 +30,12 @@ import java.util.Objects;
  */
 final class InqConsumerExpiryWatchdog implements AutoCloseable {
 
-  private static final org.slf4j.Logger LOGGER =
-      org.slf4j.LoggerFactory.getLogger(InqConsumerExpiryWatchdog.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(InqConsumerExpiryWatchdog.class);
 
   private final Duration interval;
   private final Runnable sweepAction;
-  private final Thread watchdogThread;
+  private volatile Thread watchdogThread;
+  private final String ownerName;
 
   /**
    * Flag to signal the watchdog to stop. Volatile ensures visibility across
@@ -59,6 +62,17 @@ final class InqConsumerExpiryWatchdog implements AutoCloseable {
 
     this.interval = interval;
     this.sweepAction = sweepAction;
+    this.ownerName = ownerName;
+  }
+
+  /**
+   * Starts the virtual background thread.
+   * May only be called if the watchdog has been successfully registered via CAS.
+   */
+  void startThread() {
+    if (this.watchdogThread != null) {
+      return; // Bereits gestartet (Idempotenz)
+    }
 
     // Virtual threads are daemon threads by default — they will not prevent
     // JVM shutdown even if close() is never called.
@@ -102,7 +116,8 @@ final class InqConsumerExpiryWatchdog implements AutoCloseable {
    * Returns {@code true} if the watchdog is still running.
    */
   boolean isRunning() {
-    return running && watchdogThread.isAlive();
+    Thread t = watchdogThread;
+    return running && t != null && t.isAlive();
   }
 
   /**
@@ -121,7 +136,13 @@ final class InqConsumerExpiryWatchdog implements AutoCloseable {
       return;
     }
     running = false;
-    watchdogThread.interrupt();
-    LOGGER.debug("Expiry watchdog stopped (thread: {})", watchdogThread.getName());
-  }
-}
+
+    Thread t = watchdogThread;
+    if (t != null) {
+      t.interrupt();
+      LOGGER.debug("Expiry watchdog stopped (thread: {})", t.getName());
+    } else {
+      // Thread was never started (e.g. due to discarded CAS)
+      LOGGER.debug("Expiry watchdog closed before thread was started");
+    }
+  }}
