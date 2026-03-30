@@ -100,10 +100,20 @@ public final class InqCompatibility {
    */
   public static final class Builder {
 
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(InqCompatibility.class);
+
     private final EnumMap<InqFlag, Boolean> programmaticFlags = new EnumMap<>(InqFlag.class);
+    private final ClassLoader spiClassLoader;
     private boolean ignoreServiceLoader = false;
 
     private Builder() {
+      var tccl = Thread.currentThread().getContextClassLoader();
+      this.spiClassLoader = tccl != null ? tccl : InqCompatibilityOptions.class.getClassLoader();
+    }
+
+    private static void rethrowIfFatal(Throwable t) {
+      if (t instanceof VirtualMachineError) throw (VirtualMachineError) t;
+      if (t instanceof LinkageError) throw (LinkageError) t;
     }
 
     /**
@@ -159,20 +169,31 @@ public final class InqCompatibility {
       var providers = new ArrayList<InqCompatibilityOptions>();
 
       try {
-        var loader = ServiceLoader.load(InqCompatibilityOptions.class);
-        for (var provider : loader) {
+        var loader = ServiceLoader.load(InqCompatibilityOptions.class, spiClassLoader);
+        var iterator = loader.iterator();
+        while (true) {
+          boolean hasNext;
           try {
-            providers.add(provider);
-          } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger(InqCompatibility.class)
-                .warn(
-                    "Failed to load InqCompatibilityOptions provider", e);
+            hasNext = iterator.hasNext();
+          } catch (Throwable t) {
+            rethrowIfFatal(t);
+            LOGGER.warn("ServiceLoader iterator.hasNext() failed for InqCompatibilityOptions " +
+                "— remaining providers skipped.", t);
+            break;
+          }
+          if (!hasNext) {
+            break;
+          }
+          try {
+            providers.add(iterator.next());
+          } catch (Throwable t) {
+            rethrowIfFatal(t);
+            LOGGER.warn("Failed to load InqCompatibilityOptions provider — provider skipped.", t);
           }
         }
-      } catch (Exception e) {
-        org.slf4j.LoggerFactory.getLogger(InqCompatibility.class)
-            .warn(
-                "ServiceLoader discovery for InqCompatibilityOptions failed", e);
+      } catch (Throwable t) {
+        rethrowIfFatal(t);
+        LOGGER.warn("ServiceLoader discovery for InqCompatibilityOptions failed.", t);
       }
 
       // Sort: Comparable providers first (ascending), then non-Comparable
@@ -204,10 +225,9 @@ public final class InqCompatibility {
         if (flags != null) {
           target.putAll(flags);
         }
-      } catch (Exception e) {
-        org.slf4j.LoggerFactory.getLogger(InqCompatibility.class)
-            .warn(
-                "InqCompatibilityOptions.flags() threw", e);
+      } catch (Throwable t) {
+        rethrowIfFatal(t);
+        LOGGER.warn("InqCompatibilityOptions.flags() threw", t);
       }
     }
   }

@@ -22,11 +22,10 @@ import java.util.function.Consumer;
  * during the consumer loop so that every consumer and every global exporter
  * gets a chance to see the event. If a fatal error occurs, it is deferred
  * and rethrown <strong>after</strong> the entire publish cycle completes.
- * This ensures the event chain is never silently truncated.
  *
  * <h2>Subscription identity</h2>
- * <p>Subscriptions are keyed by a monotonic counter (not UUID) — zero allocation,
- * zero GC pressure for high-frequency subscribe/unsubscribe patterns.
+ * <p>Subscriptions are keyed by a per-publisher monotonic counter — zero allocation,
+ * zero GC pressure, no cross-publisher cache-line contention.
  *
  * @since 0.1.0
  */
@@ -35,15 +34,15 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
   private static final org.slf4j.Logger LOGGER =
       org.slf4j.LoggerFactory.getLogger(DefaultInqEventPublisher.class);
 
-  /**
-   * Monotonic subscription ID generator — lighter than UUID.randomUUID().
-   */
-  private static final AtomicLong SUBSCRIPTION_COUNTER = new AtomicLong(0);
-
   private final String elementName;
   private final InqElementType elementType;
   private final InqEventExporterRegistry registry;
   private final ConcurrentHashMap<Long, InqEventConsumer> consumers = new ConcurrentHashMap<>();
+
+  /**
+   * Per-instance subscription ID generator — no cross-publisher contention.
+   */
+  private final AtomicLong subscriptionCounter = new AtomicLong(0);
 
   DefaultInqEventPublisher(String elementName, InqElementType elementType,
                            InqEventExporterRegistry registry) {
@@ -67,7 +66,7 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
     Objects.requireNonNull(event, "event must not be null");
 
     // Collect the first fatal error — rethrow AFTER all consumers and exporters
-    // have had a chance to see the event (Fix #3)
+    // have had a chance to see the event
     Throwable deferred = null;
 
     // Deliver to local consumers
@@ -104,7 +103,7 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
   @Override
   public InqSubscription onEvent(InqEventConsumer consumer) {
     Objects.requireNonNull(consumer, "consumer must not be null");
-    var subscriptionId = SUBSCRIPTION_COUNTER.incrementAndGet();
+    var subscriptionId = subscriptionCounter.incrementAndGet();
     consumers.put(subscriptionId, consumer);
     return () -> consumers.remove(subscriptionId);
   }
@@ -119,7 +118,7 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
         consumer.accept(eventType.cast(event));
       }
     };
-    var subscriptionId = SUBSCRIPTION_COUNTER.incrementAndGet();
+    var subscriptionId = subscriptionCounter.incrementAndGet();
     consumers.put(subscriptionId, wrapper);
     return () -> consumers.remove(subscriptionId);
   }

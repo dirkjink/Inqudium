@@ -28,8 +28,8 @@ import java.util.concurrent.locks.LockSupport;
  * <p>All state is held in a single {@link AtomicReference AtomicReference&lt;RegistryState&gt;}.
  * The state machine uses a {@code Resolving} intermediate state so that exactly one
  * thread performs ServiceLoader I/O. Waiting threads park with exponential backoff
- * (not busy-spin). If the resolver thread dies, the state falls back to {@code Open}
- * so another thread can retry — no permanent livelock.
+ * up to a bounded total timeout. If the resolver thread dies, the state falls back
+ * to {@code Open} so another thread can retry.
  *
  * @since 0.1.0
  */
@@ -37,18 +37,35 @@ public final class InqEventExporterRegistry {
 
   private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(InqEventExporterRegistry.class);
 
-  private static final long PARK_INITIAL_NANOS = 1_000;       // 1 μs
-  private static final long PARK_MAX_NANOS = 1_000_000;   // 1 ms
+  private static final long PARK_INITIAL_NANOS = 1_000;           // 1 μs
+  private static final long PARK_MAX_NANOS = 1_000_000;       // 1 ms per park
+  private static final long RESOLVE_TIMEOUT_NANOS = 30_000_000_000L; // 30 seconds total
+
+  /**
+   * Max consecutive hasNext() failures before giving up on remaining providers.
+   */
+  private static final int MAX_CONSECUTIVE_HAS_NEXT_FAILURES = 10;
 
   // ── Global default instance ──
 
   private static final AtomicReference<InqEventExporterRegistry> DEFAULT_INSTANCE = new AtomicReference<>();
   private final AtomicReference<RegistryState> state = new AtomicReference<>(new Open());
-
-  public InqEventExporterRegistry() {
-  }
+  private final ClassLoader spiClassLoader;
 
   // ── State machine ──
+
+  /**
+   * Creates a new, empty registry.
+   *
+   * <p>Captures the {@link Thread#getContextClassLoader() Thread Context ClassLoader}
+   * of the creating thread at construction time. This ClassLoader is used later for
+   * ServiceLoader discovery — even if the first event is published by a worker thread
+   * whose TCCL may be restricted.
+   */
+  public InqEventExporterRegistry() {
+    var tccl = Thread.currentThread().getContextClassLoader();
+    this.spiClassLoader = tccl != null ? tccl : InqEventExporter.class.getClassLoader();
+  }
 
   /**
    * Returns the shared global registry instance.
@@ -79,23 +96,32 @@ public final class InqEventExporterRegistry {
   }
 
   @SuppressWarnings("unchecked")
-  private static List<CachedExporter> discoverAndMerge(List<InqEventExporter> programmatic) {
+  private static List<CachedExporter> discoverAndMerge(List<InqEventExporter> programmatic,
+                                                       ClassLoader classLoader) {
     var serviceLoaderExporters = new ArrayList<InqEventExporter>();
 
     try {
-      var loader = ServiceLoader.load(InqEventExporter.class);
+      var loader = ServiceLoader.load(InqEventExporter.class, classLoader);
       Iterator<InqEventExporter> iterator = loader.iterator();
+      int consecutiveHasNextFailures = 0;
       while (true) {
-        // hasNext() and next() separated — a stuck hasNext() breaks
-        // the loop instead of spinning forever
         boolean hasNext;
         try {
           hasNext = iterator.hasNext();
+          consecutiveHasNextFailures = 0; // reset on success
         } catch (Throwable t) {
           rethrowIfFatal(t);
+          consecutiveHasNextFailures++;
           LOGGER.warn("ServiceLoader iterator.hasNext() failed for InqEventExporter " +
-              "— remaining providers skipped.", t);
-          break;
+              "(consecutive failure #{}) — retrying.", consecutiveHasNextFailures, t);
+          if (consecutiveHasNextFailures >= MAX_CONSECUTIVE_HAS_NEXT_FAILURES) {
+            LOGGER.warn("Giving up after {} consecutive hasNext() failures " +
+                "— remaining providers skipped.", MAX_CONSECUTIVE_HAS_NEXT_FAILURES);
+            break;
+          }
+          // Java's ServiceLoader advances its internal cursor past the broken
+          // entry — the next hasNext() call attempts the next provider
+          continue;
         }
         if (!hasNext) {
           break;
@@ -129,7 +155,7 @@ public final class InqEventExporterRegistry {
     all.addAll(nonComparable);
     all.addAll(programmatic);
 
-    // Cache each exporter's subscribed event types at freeze time (Fix #6)
+    // Cache each exporter's subscribed event types at freeze time
     var cached = new ArrayList<CachedExporter>(all.size());
     for (var exporter : all) {
       Class<? extends InqEvent>[] types = null;
@@ -155,8 +181,11 @@ public final class InqEventExporterRegistry {
   /**
    * Registers an exporter programmatically.
    *
+   * <p>Must be called before the first event is exported. Registrations after
+   * discovery has started throw {@link IllegalStateException}.
+   *
    * @param exporter the exporter to register
-   * @throws IllegalStateException if the registry is already frozen or resolving
+   * @throws IllegalStateException if the registry is resolving or already frozen
    */
   public void register(InqEventExporter exporter) {
     Objects.requireNonNull(exporter, "exporter must not be null");
@@ -171,9 +200,15 @@ public final class InqEventExporterRegistry {
         }
         continue;
       }
+      if (current instanceof Resolving) {
+        throw new IllegalStateException(
+            "InqEventExporterRegistry is currently resolving — " +
+                "exporters must be registered before the first event is exported.");
+      }
+      // Frozen
       throw new IllegalStateException(
-          "InqEventExporterRegistry is frozen — exporters must be registered " +
-              "before the first event is exported.");
+          "InqEventExporterRegistry is frozen — " +
+              "exporters must be registered before the first event is exported.");
     }
   }
 
@@ -201,12 +236,13 @@ public final class InqEventExporterRegistry {
    * Returns the resolved exporter list, triggering discovery on first access.
    *
    * <p>Only the thread that CAS-es {@code Open → Resolving} performs I/O.
-   * If that thread fails (fatal error), it resets state to {@code Open} so
-   * another thread can retry — no permanent livelock. Waiting threads park
-   * with exponential backoff — no busy-spin.
+   * Waiting threads park with exponential backoff up to {@code RESOLVE_TIMEOUT_NANOS}.
+   * If the resolver thread dies, state resets to {@code Open}. If the timeout
+   * is exceeded, the waiter forces a reset and retries.
    */
   private List<CachedExporter> getExporters() {
     long parkNanos = PARK_INITIAL_NANOS;
+    long totalParked = 0;
     while (true) {
       var current = state.get();
 
@@ -217,13 +253,12 @@ public final class InqEventExporterRegistry {
       if (current instanceof Open open) {
         var resolving = new Resolving(open.programmatic);
         if (state.compareAndSet(current, resolving)) {
-          // We won the resolver role — perform discovery with livelock protection
           try {
-            var resolved = discoverAndMerge(open.programmatic);
+            var resolved = discoverAndMerge(open.programmatic, spiClassLoader);
             state.set(new Frozen(resolved));
             return resolved;
           } catch (Throwable t) {
-            // Reset to Open so another thread can retry — no permanent livelock
+            // Reset so another thread can retry
             state.set(new Open(List.copyOf(open.programmatic)));
             rethrowIfFatal(t);
             LOGGER.error("ServiceLoader discovery failed — registry reset to Open", t);
@@ -233,8 +268,22 @@ public final class InqEventExporterRegistry {
         continue;
       }
 
-      // Resolving — park with exponential backoff instead of busy-spin
+      // Resolving — park with exponential backoff, bounded by total timeout
+      if (totalParked >= RESOLVE_TIMEOUT_NANOS) {
+        // Resolver thread is presumably stuck — force reset to Open
+        var resolving = (Resolving) current;
+        if (state.compareAndSet(current, new Open(List.copyOf(resolving.programmatic)))) {
+          LOGGER.warn("Resolver thread appears stuck after {}ms — forced reset to Open",
+              totalParked / 1_000_000);
+        }
+        // Re-read state and retry (either we reset, or another thread did)
+        parkNanos = PARK_INITIAL_NANOS;
+        totalParked = 0;
+        continue;
+      }
+
       LockSupport.parkNanos(parkNanos);
+      totalParked += parkNanos;
       parkNanos = Math.min(parkNanos * 2, PARK_MAX_NANOS);
     }
   }
@@ -248,15 +297,9 @@ public final class InqEventExporterRegistry {
     }
   }
 
-  /**
-   * Discovery in progress. Only one thread performs I/O; others park.
-   */
   private record Resolving(List<InqEventExporter> programmatic) implements RegistryState {
   }
 
-  /**
-   * Resolved and frozen. Each exporter is paired with its cached event type filter.
-   */
   private record Frozen(List<CachedExporter> exporters) implements RegistryState {
   }
 

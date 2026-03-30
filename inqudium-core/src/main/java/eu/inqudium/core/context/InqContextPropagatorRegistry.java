@@ -19,8 +19,8 @@ import java.util.concurrent.locks.LockSupport;
  * <h2>Thread safety</h2>
  * <p>All state is held in a single {@link AtomicReference}. The state machine uses
  * a {@code Resolving} intermediate state so that exactly one thread performs
- * ServiceLoader I/O. Waiting threads park with exponential backoff. If the resolver
- * thread dies, the state falls back to {@code Open} — no permanent livelock.
+ * ServiceLoader I/O. Waiting threads park with exponential backoff up to a bounded
+ * total timeout. If the resolver dies, state resets to {@code Open}.
  *
  * @since 0.1.0
  */
@@ -30,16 +30,21 @@ public final class InqContextPropagatorRegistry {
 
   private static final long PARK_INITIAL_NANOS = 1_000;
   private static final long PARK_MAX_NANOS = 1_000_000;
+  private static final long RESOLVE_TIMEOUT_NANOS = 30_000_000_000L;
+  private static final int MAX_CONSECUTIVE_HAS_NEXT_FAILURES = 10;
 
   // ── Global default instance ──
 
   private static final AtomicReference<InqContextPropagatorRegistry> DEFAULT_INSTANCE = new AtomicReference<>();
   private final AtomicReference<RegistryState> state = new AtomicReference<>(new Open());
-
-  public InqContextPropagatorRegistry() {
-  }
+  private final ClassLoader spiClassLoader;
 
   // ── State machine ──
+
+  public InqContextPropagatorRegistry() {
+    var tccl = Thread.currentThread().getContextClassLoader();
+    this.spiClassLoader = tccl != null ? tccl : InqContextPropagator.class.getClassLoader();
+  }
 
   public static InqContextPropagatorRegistry getDefault() {
     var instance = DEFAULT_INSTANCE.get();
@@ -55,21 +60,30 @@ public final class InqContextPropagatorRegistry {
   }
 
   @SuppressWarnings("unchecked")
-  private static List<InqContextPropagator> discoverAndMerge(List<InqContextPropagator> programmatic) {
+  private static List<InqContextPropagator> discoverAndMerge(List<InqContextPropagator> programmatic,
+                                                             ClassLoader classLoader) {
     var serviceLoaderPropagators = new ArrayList<InqContextPropagator>();
 
     try {
-      var loader = ServiceLoader.load(InqContextPropagator.class);
+      var loader = ServiceLoader.load(InqContextPropagator.class, classLoader);
       Iterator<InqContextPropagator> iterator = loader.iterator();
+      int consecutiveHasNextFailures = 0;
       while (true) {
         boolean hasNext;
         try {
           hasNext = iterator.hasNext();
+          consecutiveHasNextFailures = 0;
         } catch (Throwable t) {
           rethrowIfFatal(t);
+          consecutiveHasNextFailures++;
           LOGGER.warn("ServiceLoader iterator.hasNext() failed for InqContextPropagator " +
-              "— remaining providers skipped.", t);
-          break;
+              "(consecutive failure #{}) — retrying.", consecutiveHasNextFailures, t);
+          if (consecutiveHasNextFailures >= MAX_CONSECUTIVE_HAS_NEXT_FAILURES) {
+            LOGGER.warn("Giving up after {} consecutive hasNext() failures " +
+                "— remaining providers skipped.", MAX_CONSECUTIVE_HAS_NEXT_FAILURES);
+            break;
+          }
+          continue;
         }
         if (!hasNext) {
           break;
@@ -109,6 +123,12 @@ public final class InqContextPropagatorRegistry {
     if (t instanceof LinkageError) throw (LinkageError) t;
   }
 
+  /**
+   * Registers a propagator programmatically.
+   *
+   * @param propagator the propagator to register
+   * @throws IllegalStateException if the registry is resolving or already frozen
+   */
   public void register(InqContextPropagator propagator) {
     Objects.requireNonNull(propagator, "propagator must not be null");
     while (true) {
@@ -122,14 +142,28 @@ public final class InqContextPropagatorRegistry {
         }
         continue;
       }
+      if (current instanceof Resolving) {
+        throw new IllegalStateException(
+            "InqContextPropagatorRegistry is currently resolving — " +
+                "propagators must be registered before the first context propagation.");
+      }
       throw new IllegalStateException(
-          "InqContextPropagatorRegistry is frozen — propagators must be registered " +
-              "before the first context propagation.");
+          "InqContextPropagatorRegistry is frozen — " +
+              "propagators must be registered before the first context propagation.");
     }
   }
 
+  /**
+   * Returns the ordered list of all registered propagators.
+   *
+   * <p>On first call, triggers ServiceLoader discovery and freezes the registry.
+   * Waiting threads park with bounded total timeout.
+   *
+   * @return unmodifiable list of propagators
+   */
   public List<InqContextPropagator> getPropagators() {
     long parkNanos = PARK_INITIAL_NANOS;
+    long totalParked = 0;
     while (true) {
       var current = state.get();
 
@@ -141,7 +175,7 @@ public final class InqContextPropagatorRegistry {
         var resolving = new Resolving(open.programmatic);
         if (state.compareAndSet(current, resolving)) {
           try {
-            var resolved = discoverAndMerge(open.programmatic);
+            var resolved = discoverAndMerge(open.programmatic, spiClassLoader);
             state.set(new Frozen(resolved));
             return resolved;
           } catch (Throwable t) {
@@ -154,8 +188,20 @@ public final class InqContextPropagatorRegistry {
         continue;
       }
 
-      // Resolving — park with exponential backoff
+      // Resolving — park with bounded total timeout
+      if (totalParked >= RESOLVE_TIMEOUT_NANOS) {
+        var resolving = (Resolving) current;
+        if (state.compareAndSet(current, new Open(List.copyOf(resolving.programmatic)))) {
+          LOGGER.warn("Resolver thread appears stuck after {}ms — forced reset to Open",
+              totalParked / 1_000_000);
+        }
+        parkNanos = PARK_INITIAL_NANOS;
+        totalParked = 0;
+        continue;
+      }
+
       LockSupport.parkNanos(parkNanos);
+      totalParked += parkNanos;
       parkNanos = Math.min(parkNanos * 2, PARK_MAX_NANOS);
     }
   }
