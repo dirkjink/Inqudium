@@ -1,13 +1,16 @@
 package eu.inqudium.bulkhead.imperative;
 
+import eu.inqudium.core.InqClock;
 import eu.inqudium.core.bulkhead.AbstractBulkheadStateMachine;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
 import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
 import eu.inqudium.core.bulkhead.InqLimitAlgorithm;
+import eu.inqudium.core.bulkhead.event.BulkheadLimitChangedTraceEvent;
 
 import java.time.Duration;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.LongSupplier;
 
 /**
  * An imperative state machine that adjusts its capacity dynamically using a limit algorithm.
@@ -18,11 +21,17 @@ public final class AdaptiveImperativeStateMachine extends AbstractBulkheadStateM
 
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition notFull = lock.newCondition();
+  private final LongSupplier nanoTimeSource;
+  private final InqClock clock;
   private int activeCalls = 0;
+  private volatile int oldLimit = 0;
 
   public AdaptiveImperativeStateMachine(String name, BulkheadConfig config, InqLimitAlgorithm limitAlgorithm) {
     super(name, config);
     this.limitAlgorithm = limitAlgorithm;
+    this.oldLimit = limitAlgorithm.getLimit();
+    this.nanoTimeSource = config.getNanoTimeSource();
+    this.clock = config.getClock();
   }
 
   /**
@@ -53,36 +62,39 @@ public final class AdaptiveImperativeStateMachine extends AbstractBulkheadStateM
    */
   @Override
   public boolean tryAcquireNonBlocking(String callId) {
+    long startWait = nanoTimeSource.getAsLong();
     lock.lock();
     try {
       if (activeCalls < limitAlgorithm.getLimit()) {
         activeCalls++;
-        return handleAcquireSuccess(callId);
+        return handleAcquireSuccess(callId, startWait);
       }
     } finally {
       lock.unlock();
     }
-    handleAcquireFailure(callId);
+    handleAcquireFailure(callId, startWait);
     return false;
   }
 
   @Override
   public boolean tryAcquireBlocking(String callId, Duration timeout) throws InterruptedException {
+    long startWait = nanoTimeSource.getAsLong();
     long nanos = timeout.toNanos();
     lock.lockInterruptibly();
     try {
       while (activeCalls >= limitAlgorithm.getLimit()) {
         if (nanos <= 0L) {
-          handleAcquireFailure(callId);
+          handleAcquireFailure(callId, startWait);
           return false;
         }
         nanos = notFull.awaitNanos(nanos);
       }
       activeCalls++;
-      return handleAcquireSuccess(callId);
+
+      return handleAcquireSuccess(callId, startWait);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      handleAcquireFailure(callId);
+      handleAcquireFailure(callId, startWait);
       throw new InqBulkheadInterruptedException(callId, name, getConcurrentCalls(), limitAlgorithm.getLimit());
     } finally {
       lock.unlock();
@@ -90,9 +102,21 @@ public final class AdaptiveImperativeStateMachine extends AbstractBulkheadStateM
   }
 
   @Override
-  protected void onCallComplete(Duration rtt, Throwable error) {
+  protected void onCallComplete(String callId, Duration rtt, Throwable error) {
     // Feed the outcome back to the adaptive algorithm to adjust limits
     limitAlgorithm.update(rtt, error == null);
+    int newLimit = limitAlgorithm.getLimit();
+    if (oldLimit != newLimit) {
+      eventPublisher.publishTrace(() -> new BulkheadLimitChangedTraceEvent(
+          callId,
+          name,
+          oldLimit,
+          newLimit,
+          rtt.toNanos(),
+          clock.instant()
+      ));
+    }
+    oldLimit = newLimit;
   }
 
   @Override

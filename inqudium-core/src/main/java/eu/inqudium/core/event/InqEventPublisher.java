@@ -138,7 +138,12 @@ public interface InqEventPublisher extends AutoCloseable {
    *
    * @param eventSupplier Supplier for the trace event
    */
-  default void publishTrace(Supplier<? extends InqEvent> eventSupplier) {}
+  default void publishTrace(Supplier<? extends InqEvent> eventSupplier) {
+  }
+
+  default boolean isTraceEnabled() {
+    return false;
+  }
 
   /**
    * Registers a consumer for all events from this publisher.

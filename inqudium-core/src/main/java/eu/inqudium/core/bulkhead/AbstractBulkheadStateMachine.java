@@ -1,15 +1,15 @@
 package eu.inqudium.core.bulkhead;
 
+import eu.inqudium.core.InqClock;
 import eu.inqudium.core.InqElementType;
-import eu.inqudium.core.bulkhead.event.BulkheadOnAcquireEvent;
-import eu.inqudium.core.bulkhead.event.BulkheadOnRejectEvent;
-import eu.inqudium.core.bulkhead.event.BulkheadOnReleaseEvent;
+import eu.inqudium.core.bulkhead.event.*;
 import eu.inqudium.core.event.InqEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.function.LongSupplier;
 
 /**
  * Abstract base state machine handling the paradigm-agnostic telemetry lifecycle.
@@ -28,12 +28,16 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
   protected final BulkheadConfig config;
   protected final InqEventPublisher eventPublisher;
   protected final int maxConcurrentCalls;
+  private final LongSupplier nanoTimeSource;
+  private final InqClock clock;
 
   protected AbstractBulkheadStateMachine(String name, BulkheadConfig config) {
     this.name = name;
     this.config = config;
     this.maxConcurrentCalls = config.getMaxConcurrentCalls();
     this.eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
+    this.nanoTimeSource = config.getNanoTimeSource();
+    this.clock = config.getClock();
   }
 
   // ── Abstract methods forced by BulkheadStateMachine interface ──
@@ -72,7 +76,7 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
   public final void releaseAndReport(String callId, Duration rtt, Throwable error) {
     try {
       // 0. Feed the adaptive telemetry hook (may throw)
-      onCallComplete(rtt, error);
+      onCallComplete(callId, rtt, error);
     } catch (RuntimeException algorithmError) {
       // Log but do NOT propagate — the permit MUST be released below
       LOG.error("Adaptive algorithm hook failed for bulkhead '{}', callId='{}'. "
@@ -98,10 +102,21 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
     }
   }
 
+  protected void publishWaitTrace(String callId, long startWait, boolean acquired) {
+    if (eventPublisher.isTraceEnabled()) {
+      long waitDurationNanos = nanoTimeSource.getAsLong() - startWait;
+      if (waitDurationNanos > 0) {
+        eventPublisher.publishTrace(() -> new BulkheadWaitTraceEvent(
+            callId, name, waitDurationNanos, acquired, clock.instant()
+        ));
+      }
+    }
+  }
+
   /**
    * Hook for adaptive implementations to analyze call latency and success.
    */
-  protected void onCallComplete(Duration rtt, Throwable error) {
+  protected void onCallComplete(String callId, Duration rtt, Throwable error) {
     // No-op by default
   }
 
@@ -113,8 +128,9 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
    * would leave a permit permanently acquired with no corresponding release call,
    * since the caller never receives the decorated callable.
    */
-  protected final boolean handleAcquireSuccess(String callId) {
+  protected final boolean handleAcquireSuccess(String callId, long startWait) {
     try {
+      publishWaitTrace(callId, startWait, true);
       var snap = snapshot();
       eventPublisher.publish(new BulkheadOnAcquireEvent(
           callId, name, snap.concurrentCalls(), snap.timestamp()));
@@ -122,11 +138,18 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
     } catch (RuntimeException e) {
       // CRITICAL: Rollback the permit if event publishing crashes
       rollbackPermit();
+      eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(
+          callId,
+          name,
+          e.getClass().getSimpleName(),
+          config.getClock().instant()
+      ));
       throw e;
     }
   }
 
-  protected final void handleAcquireFailure(String callId) {
+  protected final void handleAcquireFailure(String callId, long startWait) {
+    publishWaitTrace(callId, startWait, false);
     var snap = snapshot();
     eventPublisher.publish(new BulkheadOnRejectEvent(
         callId, name, snap.concurrentCalls(), snap.timestamp()));

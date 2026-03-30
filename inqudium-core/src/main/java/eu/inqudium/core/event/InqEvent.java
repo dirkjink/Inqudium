@@ -38,7 +38,7 @@ public abstract class InqEvent {
    * @throws IllegalArgumentException if callId or elementName is blank
    */
   protected InqEvent(String callId, String elementName, InqElementType elementType, Instant timestamp) {
-    // FIX #7: Validate correlation identifiers are not blank — empty strings
+    // Validate correlation identifiers are not blank — empty strings
     // are silently useless for correlation and hard to debug downstream.
     this.callId = requireNonBlank(callId, "callId");
     this.elementName = requireNonBlank(elementName, "elementName");

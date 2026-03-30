@@ -167,15 +167,15 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
   }
 
   @Override
+  public boolean isTraceEnabled() {
+    return traceEnabled;
+  }
+
+  @Override
   public void publishTrace(Supplier<? extends InqEvent> eventSupplier) {
-    // ZERO OVERHEAD CHECK:
-    // Wenn false, kehrt die Methode sofort zurück.
-    // Der Supplier wird nicht aufgerufen, es entsteht kein Event-Objekt!
     if (!this.traceEnabled) {
       return;
     }
-
-    // Nur wenn aktiviert, Objekt bauen und normal publizieren
     publish(eventSupplier.get());
   }
 

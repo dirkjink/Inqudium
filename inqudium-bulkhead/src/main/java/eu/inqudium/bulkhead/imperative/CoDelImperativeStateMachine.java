@@ -89,23 +89,25 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
 
   @Override
   public boolean tryAcquireNonBlocking(String callId) {
+    long startWait = nanoTimeSource.getAsLong();
     lock.lock();
     try {
       if (activeCalls < maxConcurrentCalls) {
         activeCalls++;
-        return handleAcquireSuccess(callId);
+        return handleAcquireSuccess(callId, startWait);
       }
     } finally {
       lock.unlock();
     }
     // A non-blocking acquire fails instantly if the limit is reached,
     // so it bypasses the CoDel delay evaluation entirely.
-    handleAcquireFailure(callId);
+    handleAcquireFailure(callId, startWait);
     return false;
   }
 
   @Override
   public boolean tryAcquireBlocking(String callId, Duration timeout) throws InterruptedException {
+    long startWait = nanoTimeSource.getAsLong();
     long remainingNanos = timeout.toNanos();
 
     // FIX #5: Use injectable time source for deterministic testing
@@ -116,7 +118,7 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
       // 1. Wait for a permit to become available
       while (activeCalls >= maxConcurrentCalls) {
         if (remainingNanos <= 0L) {
-          handleAcquireFailure(callId);
+          handleAcquireFailure(callId, startWait);
           return false;
         }
         remainingNanos = permitAvailable.awaitNanos(remainingNanos);
@@ -145,7 +147,7 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
           // starving other threads even though a permit slot is available.
           permitAvailable.signal();
 
-          handleAcquireFailure(callId);
+          handleAcquireFailure(callId, startWait);
           return false;
         }
       } else {
@@ -156,13 +158,13 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
 
       // 3. Grant the permit
       activeCalls++;
-      return handleAcquireSuccess(callId);
+      return handleAcquireSuccess(callId, startWait);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       // FIX #3: Also signal on interrupt to prevent lost wakeups
       permitAvailable.signal();
-      handleAcquireFailure(callId);
+      handleAcquireFailure(callId, startWait);
       throw new InqBulkheadInterruptedException(callId, name, getConcurrentCalls(), maxConcurrentCalls);
     } finally {
       lock.unlock();

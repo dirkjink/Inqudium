@@ -36,11 +36,11 @@ class AbstractBulkheadStateMachineTest {
 
     // Expose the protected methods for testing
     public boolean triggerAcquireSuccess(String callId) {
-      return handleAcquireSuccess(callId);
+      return handleAcquireSuccess(callId, 0);
     }
 
     public void triggerAcquireFailure(String callId) {
-      handleAcquireFailure(callId);
+      handleAcquireFailure(callId, 0);
     }
 
     @Override

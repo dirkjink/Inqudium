@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongSupplier;
 
 /**
  * The imperative implementation of the state machine using a thread-blocking Semaphore.
@@ -21,27 +22,31 @@ public final class ImperativeBulkheadStateMachine extends AbstractBulkheadStateM
 
   private final Semaphore semaphore;
   private final AtomicInteger acquiredPermits;
+  private final LongSupplier nanoTimeSource;
 
   public ImperativeBulkheadStateMachine(String name, BulkheadConfig config) {
     super(name, config);
     this.semaphore = new Semaphore(maxConcurrentCalls, true);
     this.acquiredPermits = new AtomicInteger(0);
+    this.nanoTimeSource = config.getNanoTimeSource();
   }
 
   @Override
   public boolean tryAcquireNonBlocking(String callId) {
+    long startWait = nanoTimeSource.getAsLong();
     // Attempt to acquire instantly without blocking the thread
     if (semaphore.tryAcquire()) {
       acquiredPermits.incrementAndGet();
-      return handleAcquireSuccess(callId);
+      return handleAcquireSuccess(callId, startWait);
     } else {
-      handleAcquireFailure(callId);
+      handleAcquireFailure(callId, startWait);
       return false;
     }
   }
 
   @Override
   public boolean tryAcquireBlocking(String callId, Duration timeout) throws InterruptedException {
+    long startWait = nanoTimeSource.getAsLong();
     boolean acquired;
     try {
       acquired = timeout.isZero()
@@ -49,15 +54,15 @@ public final class ImperativeBulkheadStateMachine extends AbstractBulkheadStateM
           : semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      handleAcquireFailure(callId);
+      handleAcquireFailure(callId, startWait);
       throw new InqBulkheadInterruptedException(callId, name, getConcurrentCalls(), maxConcurrentCalls);
     }
 
     if (acquired) {
       acquiredPermits.incrementAndGet();
-      return handleAcquireSuccess(callId);
+      return handleAcquireSuccess(callId, startWait);
     } else {
-      handleAcquireFailure(callId);
+      handleAcquireFailure(callId, startWait);
       return false;
     }
   }
