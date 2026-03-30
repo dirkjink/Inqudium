@@ -65,8 +65,8 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
    * @param minLimit        The absolute minimum allowed concurrency.
    * @param maxLimit        The absolute maximum allowed concurrency.
    * @param smoothingFactor A value between 0.01 and 1.0 determining how heavily new RTT
-   * measurements impact the rolling average. Lower values (e.g., 0.2)
-   * make the algorithm less sensitive to sudden random spikes.
+   *                        measurements impact the rolling average. Lower values (e.g., 0.2)
+   *                        make the algorithm less sensitive to sudden random spikes.
    */
   public VegasLimitAlgorithm(int initialLimit, int minLimit, int maxLimit, double smoothingFactor) {
     this.minLimit = Math.max(1, minLimit);

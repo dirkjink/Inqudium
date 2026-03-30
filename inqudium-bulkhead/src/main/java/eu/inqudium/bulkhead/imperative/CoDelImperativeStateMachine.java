@@ -63,12 +63,10 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
 
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition permitAvailable = lock.newCondition();
-
-  private int activeCalls = 0;
-
   // Tracks the exact timestamp when the system first exceeded the target delay.
   // A value of 0 means the system is currently healthy (below target).
   private final AtomicLong firstAboveTargetNanos = new AtomicLong(0);
+  private int activeCalls = 0;
 
   /**
    * Creates a new CoDel-based state machine.
@@ -77,7 +75,7 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
    * @param config      The core bulkhead configuration.
    * @param targetDelay The ideal maximum time a thread should spend waiting in the queue.
    * @param interval    The sliding window duration. If wait times exceed the target for
-   * this entire duration, the algorithm will start dropping requests.
+   *                    this entire duration, the algorithm will start dropping requests.
    */
   public CoDelImperativeStateMachine(String name, BulkheadConfig config, Duration targetDelay, Duration interval) {
     super(name, config);

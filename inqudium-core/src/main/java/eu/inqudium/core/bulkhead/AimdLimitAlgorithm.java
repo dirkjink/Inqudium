@@ -58,10 +58,10 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    *
    * @param initialLimit The starting concurrency limit before any feedback is received.
    * @param minLimit     The absolute minimum limit (must be >= 1) to ensure the system never
-   * completely locks up and can always send at least some probe requests.
+   *                     completely locks up and can always send at least some probe requests.
    * @param maxLimit     The absolute upper bound to prevent infinite scaling.
    * @param backoffRatio The multiplier used during the decrease phase (e.g., 0.5 for halving,
-   * 0.8 for a milder 20% reduction). Must be strictly between 0.1 and 0.9.
+   *                     0.8 for a milder 20% reduction). Must be strictly between 0.1 and 0.9.
    */
   public AimdLimitAlgorithm(int initialLimit, int minLimit, int maxLimit, double backoffRatio) {
     this.minLimit = Math.max(1, minLimit);

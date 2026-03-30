@@ -47,7 +47,8 @@ class CoDelImperativeStateMachineTest {
         try {
           Thread.sleep(30);
           stateMachine.releaseAndReport("call-1", Duration.ofMillis(30), null);
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+        }
       }).start();
 
       // call-2 waits ~30ms. CoDel detects the delay and STARTS the 50ms interval clock,
@@ -65,7 +66,8 @@ class CoDelImperativeStateMachineTest {
         try {
           Thread.sleep(30);
           stateMachine.releaseAndReport("call-2", Duration.ofMillis(90), null);
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+        }
       }).start();
 
       // 5. call-3 waits ~30ms. Now the wait time is > 10ms AND the 50ms interval
