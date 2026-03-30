@@ -63,6 +63,14 @@ public abstract class AbstractBulkhead implements InqDecorator {
     this.maxConcurrentCalls = config.getMaxConcurrentCalls();
   }
 
+  AbstractBulkhead(String name, BulkheadConfig config, InqEventPublisher eventPublisher) {
+    this.name = name;
+    this.config = config;
+    this.eventPublisher = eventPublisher;
+    this.maxWaitDuration = config.getMaxWaitDuration();
+    this.maxConcurrentCalls = config.getMaxConcurrentCalls();
+  }
+
   // ── InqDecorator / InqElement ──
 
   public int getMaxConcurrentCalls() {

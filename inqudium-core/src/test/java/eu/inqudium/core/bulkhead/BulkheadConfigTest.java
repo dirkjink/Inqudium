@@ -16,6 +16,33 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 class BulkheadConfigTest {
+  @Nested
+  class BuilderNullSafety {
+
+    @Test
+    void passing_null_values_to_the_builder_throws_a_null_pointer_exception() {
+      // Given
+      // A fresh builder instance
+      BulkheadConfig.Builder builder = BulkheadConfig.builder();
+
+      // When / Then
+      // Every method that expects an object must actively reject null values
+      assertThatCode(() -> builder.maxWaitDuration(null))
+          .isInstanceOf(NullPointerException.class);
+
+      assertThatCode(() -> builder.compatibility(null))
+          .isInstanceOf(NullPointerException.class);
+
+      assertThatCode(() -> builder.clock(null))
+          .isInstanceOf(NullPointerException.class);
+
+      assertThatCode(() -> builder.logger(null))
+          .isInstanceOf(NullPointerException.class);
+
+      assertThatCode(() -> builder.callIdGenerator(null))
+          .isInstanceOf(NullPointerException.class);
+    }
+  }
 
   @Nested
   class DefaultValues {
