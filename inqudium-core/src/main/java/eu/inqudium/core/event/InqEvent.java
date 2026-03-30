@@ -35,12 +35,30 @@ public abstract class InqEvent {
    * @param elementName the name of the element instance
    * @param elementType the type of the element
    * @param timestamp   when the event occurred
+   * @throws IllegalArgumentException if callId or elementName is blank
    */
   protected InqEvent(String callId, String elementName, InqElementType elementType, Instant timestamp) {
-    this.callId = Objects.requireNonNull(callId, "callId must not be null");
-    this.elementName = Objects.requireNonNull(elementName, "elementName must not be null");
+    // FIX #7: Validate correlation identifiers are not blank — empty strings
+    // are silently useless for correlation and hard to debug downstream.
+    this.callId = requireNonBlank(callId, "callId");
+    this.elementName = requireNonBlank(elementName, "elementName");
     this.elementType = Objects.requireNonNull(elementType, "elementType must not be null");
     this.timestamp = Objects.requireNonNull(timestamp, "timestamp must not be null");
+  }
+
+  /**
+   * Validates that a string is neither null nor blank.
+   *
+   * @param value the value to validate
+   * @param name  the field name for the error message
+   * @return the validated value
+   */
+  private static String requireNonBlank(String value, String name) {
+    Objects.requireNonNull(value, name + " must not be null");
+    if (value.isBlank()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+    return value;
   }
 
   /**

@@ -3,6 +3,7 @@ package eu.inqudium.core.event;
 import eu.inqudium.core.InqElementType;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Emitted when a ServiceLoader provider fails during construction or execution.
@@ -33,13 +34,14 @@ public final class InqProviderErrorEvent extends InqEvent {
   public InqProviderErrorEvent(String providerClassName, String spiInterfaceName,
                                String phase, String errorMessage, Instant timestamp) {
     super("system", "InqServiceLoader", InqElementType.NO_ELEMENT, timestamp);
+    // FIX #8: Validate all parameters — consistent with codebase-wide null-safety conventions
+    this.providerClassName = Objects.requireNonNull(providerClassName, "providerClassName must not be null");
+    this.spiInterfaceName = Objects.requireNonNull(spiInterfaceName, "spiInterfaceName must not be null");
+    this.phase = Objects.requireNonNull(phase, "phase must not be null");
+    this.errorMessage = Objects.requireNonNull(errorMessage, "errorMessage must not be null");
     this.code = "construction".equals(phase)
         ? InqElementType.NO_ELEMENT.errorCode(1)
         : InqElementType.NO_ELEMENT.errorCode(2);
-    this.providerClassName = providerClassName;
-    this.spiInterfaceName = spiInterfaceName;
-    this.phase = phase;
-    this.errorMessage = errorMessage;
   }
 
   /**

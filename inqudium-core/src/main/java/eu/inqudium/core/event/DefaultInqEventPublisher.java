@@ -17,6 +17,11 @@ import java.util.function.Consumer;
  * wrapped in an {@link AtomicReference}. This guarantees lock-free, zero-allocation
  * publishing with optimal CPU cache locality.
  *
+ * <h2>Double registration</h2>
+ * <p>Registering the same consumer instance multiple times is allowed and results in
+ * the consumer being called once per registration on each event. Each registration
+ * receives an independent {@link InqSubscription} for independent cancellation.
+ *
  * @since 0.1.0
  */
 final class DefaultInqEventPublisher implements InqEventPublisher {
@@ -26,6 +31,9 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
 
   // Pre-allocated empty array to avoid allocations when resetting to empty
   private static final ConsumerEntry[] EMPTY_CONSUMERS = new ConsumerEntry[0];
+
+  // FIX #9: Threshold at which a warning is logged to detect potential subscription leaks
+  private static final int CONSUMER_COUNT_WARNING_THRESHOLD = 256;
 
   private final String elementName;
   private final InqElementType elementType;
@@ -57,13 +65,14 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
     ConsumerEntry[] currentConsumers = consumers.get();
 
     for (int i = 0; i < currentConsumers.length; i++) {
-      InqEventConsumer consumer = currentConsumers[i].consumer();
+      ConsumerEntry entry = currentConsumers[i];
       try {
-        consumer.accept(event);
+        entry.consumer().accept(event);
       } catch (Throwable t) {
         InqException.rethrowIfFatal(t);
-        LOGGER.warn("[{}] Event consumer {} threw on event {}",
-            event.getCallId(), consumer.getClass().getName(),
+        // FIX #5: Use entry's description for meaningful logging instead of lambda class names
+        LOGGER.warn("[{}] Event consumer [{}] threw on event {}",
+            event.getCallId(), entry.description(),
             event.getClass().getSimpleName(), t);
       }
     }
@@ -81,7 +90,9 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
   public InqSubscription onEvent(InqEventConsumer consumer) {
     Objects.requireNonNull(consumer, "consumer must not be null");
     long subscriptionId = subscriptionCounter.incrementAndGet();
-    addConsumer(new ConsumerEntry(subscriptionId, consumer));
+    // FIX #5: Capture the actual consumer class name for meaningful diagnostics
+    String description = consumer.getClass().getName();
+    addConsumer(new ConsumerEntry(subscriptionId, consumer, description));
     return () -> removeConsumer(subscriptionId);
   }
 
@@ -90,13 +101,19 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
     Objects.requireNonNull(eventType, "eventType must not be null");
     Objects.requireNonNull(consumer, "consumer must not be null");
 
+    // FIX #5: Named wrapper with meaningful toString instead of anonymous lambda.
+    // The description captures both the event type filter and the actual consumer class
+    // so log output is useful for debugging (instead of "Lambda$42/0x00000008001a3c40").
+    String description = "TypedConsumer[eventType=" + eventType.getSimpleName()
+        + ", consumer=" + consumer.getClass().getName() + "]";
+
     InqEventConsumer wrapper = event -> {
       if (eventType.isInstance(event)) {
         consumer.accept(eventType.cast(event));
       }
     };
     long subscriptionId = subscriptionCounter.incrementAndGet();
-    addConsumer(new ConsumerEntry(subscriptionId, wrapper));
+    addConsumer(new ConsumerEntry(subscriptionId, wrapper, description));
     return () -> removeConsumer(subscriptionId);
   }
 
@@ -104,6 +121,14 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
     consumers.updateAndGet(arr -> {
       ConsumerEntry[] newArr = Arrays.copyOf(arr, arr.length + 1);
       newArr[arr.length] = entry;
+
+      // FIX #9: Warn when consumer count exceeds threshold — potential subscription leak
+      if (newArr.length == CONSUMER_COUNT_WARNING_THRESHOLD) {
+        LOGGER.warn("Publisher '{}' ({}) has reached {} consumers — possible subscription leak. " +
+                "Ensure InqSubscription.cancel() is called when consumers are no longer needed.",
+            elementName, elementType, CONSUMER_COUNT_WARNING_THRESHOLD);
+      }
+
       return newArr;
     });
   }
@@ -146,8 +171,9 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
   }
 
   /**
-   * Pairs a subscription ID with its consumer so we can identify it for removal.
+   * Pairs a subscription ID with its consumer and a human-readable description
+   * for diagnostic logging.
    */
-  private record ConsumerEntry(long id, InqEventConsumer consumer) {
+  private record ConsumerEntry(long id, InqEventConsumer consumer, String description) {
   }
 }

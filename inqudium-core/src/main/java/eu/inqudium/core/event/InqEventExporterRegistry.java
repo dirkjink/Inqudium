@@ -58,7 +58,10 @@ public final class InqEventExporterRegistry {
 
   private static final AtomicReference<InqEventExporterRegistry> DEFAULT_INSTANCE = new AtomicReference<>();
   private final AtomicReference<RegistryState> state = new AtomicReference<>(new Open());
-  private ClassLoader spiClassLoader;
+
+  // FIX #2: volatile ensures cross-thread visibility when nulled after freeze,
+  // independent of the AtomicReference happens-before on `state`.
+  private volatile ClassLoader spiClassLoader;
 
   // ── State machine ──
 
@@ -80,29 +83,43 @@ public final class InqEventExporterRegistry {
     DEFAULT_INSTANCE.set(registry);
   }
 
+  /**
+   * FIX #3: Recursively checks the entire type hierarchy for Comparable&lt;InqEventExporter&gt;.
+   *
+   * <p>The original implementation only checked directly implemented interfaces,
+   * missing cases where Comparable was declared on a superclass. This version
+   * walks the full class hierarchy including superclasses.
+   */
   private static boolean isCorrectlyComparable(InqEventExporter exporter) {
     if (!(exporter instanceof Comparable)) {
-      return false; // Implementiert Comparable gar nicht
+      return false;
     }
 
-    // Get all directly implemented interfaces of the class
-    Type[] interfaces = exporter.getClass().getGenericInterfaces();
+    // Walk the entire type hierarchy: the class itself, all superclasses,
+    // and all interfaces at each level
+    Class<?> current = exporter.getClass();
+    while (current != null && current != Object.class) {
+      if (checkInterfacesForComparable(current.getGenericInterfaces())) {
+        return true;
+      }
+      current = current.getSuperclass();
+    }
 
+    return false;
+  }
+
+  /**
+   * Checks a set of generic interfaces for Comparable&lt;InqEventExporter&gt;.
+   */
+  private static boolean checkInterfacesForComparable(Type[] interfaces) {
     for (Type type : interfaces) {
-      // Check if the interface has generic parameters (ParameterizedType)
       if (type instanceof ParameterizedType pType) {
-        // Is the raw interface comparable?
         if (pType.getRawType() == Comparable.class) {
           Type[] typeArgs = pType.getActualTypeArguments();
-          // Check if the parameter is exactly InqEventExporter
           return typeArgs.length == 1 && typeArgs[0] == InqEventExporter.class;
         }
       }
     }
-
-    // Fallback: If we get here, it's Comparable, but not with the correct type
-    // (Note: This doesn't apply if Comparable was defined in a superclass,
-    // but for SPI providers, it's best practice to define interfaces directly on the provider class).
     return false;
   }
 
@@ -292,22 +309,47 @@ public final class InqEventExporterRegistry {
       if (current instanceof Open open) {
         var resolving = new Resolving(open.programmatic);
         if (state.compareAndSet(current, resolving)) {
+          // FIX #4: Separate try-blocks so that a replay failure does not
+          // reset the successfully frozen registry back to Open.
+          List<CachedExporter> exporters;
+          List<InqProviderErrorEvent> providerErrors;
           try {
             var result = discoverAndMerge(open.programmatic, spiClassLoader);
-            state.set(new Frozen(result.exporters));
-
-            // Memory Leak Prevention: Release ClassLoader Reference
-            this.spiClassLoader = null;
-
-            // Replay provider errors...
-            replayProviderErrors(result.exporters, result.providerErrors);
-            return result.exporters;
+            exporters = result.exporters;
+            providerErrors = result.providerErrors;
           } catch (Throwable t) {
-            state.set(new Open(List.copyOf(open.programmatic)));
+            // Discovery itself failed — reset to Open so next caller can retry
+            state.compareAndSet(resolving, new Open(List.copyOf(open.programmatic)));
             rethrowIfFatal(t);
             LOGGER.error("ServiceLoader discovery failed — registry reset to Open", t);
             return List.of();
           }
+
+          // FIX #1: Use CAS instead of unconditional set. If another thread
+          // performed a timeout-reset (Resolving→Open) while we were discovering,
+          // our resolving instance is no longer current. In that case, discard our
+          // result and use whatever state the winning thread established.
+          if (!state.compareAndSet(resolving, new Frozen(exporters))) {
+            LOGGER.debug("Resolver CAS failed — another thread reset the state. " +
+                "Discarding discovery result and retrying.");
+            // Loop will re-read state and either find Frozen or Open
+            continue;
+          }
+
+          // FIX #2: Only null the classloader after successful CAS — guaranteed
+          // that we are the thread that actually froze the registry.
+          this.spiClassLoader = null;
+
+          // FIX #4: Replay errors in a separate try-block. A failure here must
+          // not undo the successfully frozen state.
+          try {
+            replayProviderErrors(exporters, providerErrors);
+          } catch (Throwable t) {
+            rethrowIfFatal(t);
+            LOGGER.warn("Provider error replay failed — registry is frozen, replay skipped", t);
+          }
+
+          return exporters;
         }
         continue;
       }
@@ -351,6 +393,23 @@ public final class InqEventExporterRegistry {
         }
       }
     }
+  }
+
+  /**
+   * FIX #10: Resets this registry to its initial open state.
+   *
+   * <p><strong>Testing only.</strong> This method is intended for test isolation —
+   * it allows a frozen registry to be reused across test methods without creating
+   * a new instance. Not safe to call while events are being published concurrently.
+   *
+   * <p>After reset, the registry accepts new {@link #register(InqEventExporter)}
+   * calls and will re-discover ServiceLoader providers on the next
+   * {@link #export(InqEvent)} call.
+   */
+  public void reset() {
+    state.set(new Open());
+    var tccl = Thread.currentThread().getContextClassLoader();
+    this.spiClassLoader = tccl != null ? tccl : InqEventExporter.class.getClassLoader();
   }
 
   private sealed interface RegistryState permits Open, Resolving, Frozen {
