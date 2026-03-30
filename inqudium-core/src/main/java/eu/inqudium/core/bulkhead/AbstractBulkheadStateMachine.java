@@ -43,12 +43,6 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
   // ── Abstract methods forced by BulkheadStateMachine interface ──
 
   @Override
-  public abstract boolean tryAcquireNonBlocking(String callId);
-
-  @Override
-  public abstract boolean tryAcquireBlocking(String callId, Duration timeout) throws InterruptedException;
-
-  @Override
   public abstract int getAvailablePermits();
 
   @Override

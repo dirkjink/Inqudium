@@ -56,23 +56,31 @@ public final class BulkheadLimitChangedTraceEvent extends BulkheadEvent {
     return oldLimit == that.oldLimit &&
         newLimit == that.newLimit &&
         rttNanos == that.rttNanos &&
+        Objects.equals(getCallId(), that.getCallId()) &&
         Objects.equals(getElementName(), that.getElementName()) &&
         Objects.equals(getTimestamp(), that.getTimestamp());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(getElementName(), oldLimit, newLimit, rttNanos, getTimestamp());
+    return Objects.hash(
+        getCallId(),
+        getElementName(),
+        getTimestamp(),
+        oldLimit,
+        newLimit,
+        rttNanos);
   }
 
   @Override
   public String toString() {
     return "BulkheadLimitChangedTraceEvent{" +
-        "elementName='" + getElementName() + '\'' +
+        "callId='" + getCallId() + '\'' +
+        ", elementName='" + getElementName() + '\'' +
+        ", timestamp=" + getTimestamp() +
         ", oldLimit=" + oldLimit +
         ", newLimit=" + newLimit +
         ", rttNanos=" + rttNanos +
-        ", timestamp=" + getTimestamp() +
         '}';
   }
 }

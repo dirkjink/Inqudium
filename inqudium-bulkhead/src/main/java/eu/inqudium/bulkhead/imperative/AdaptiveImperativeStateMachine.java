@@ -1,10 +1,7 @@
 package eu.inqudium.bulkhead.imperative;
 
 import eu.inqudium.core.InqClock;
-import eu.inqudium.core.bulkhead.AbstractBulkheadStateMachine;
-import eu.inqudium.core.bulkhead.BulkheadConfig;
-import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
-import eu.inqudium.core.bulkhead.InqLimitAlgorithm;
+import eu.inqudium.core.bulkhead.*;
 import eu.inqudium.core.bulkhead.event.BulkheadLimitChangedTraceEvent;
 
 import java.time.Duration;
@@ -15,7 +12,8 @@ import java.util.function.LongSupplier;
 /**
  * An imperative state machine that adjusts its capacity dynamically using a limit algorithm.
  */
-public final class AdaptiveImperativeStateMachine extends AbstractBulkheadStateMachine {
+public final class AdaptiveImperativeStateMachine
+    extends AbstractBulkheadStateMachine implements BlockingBulkheadStateMachine {
 
   private final InqLimitAlgorithm limitAlgorithm;
 
@@ -46,38 +44,8 @@ public final class AdaptiveImperativeStateMachine extends AbstractBulkheadStateM
     return limitAlgorithm.getLimit();
   }
 
-  /**
-   * FIX #4: Changed from {@code lock.tryLock()} to {@code lock.lock()} to prevent
-   * false rejection events caused by lock contention.
-   *
-   * <p>The original implementation would treat a failed {@code tryLock()} (another thread
-   * momentarily holding the lock) as a bulkhead-full rejection, publishing a spurious
-   * {@code BulkheadOnRejectEvent} and returning false — even when plenty of permits
-   * were available. This corrupted metrics and caused false monitoring alerts.
-   *
-   * <p>Using {@code lock.lock()} is acceptable for a "non-blocking" acquire because the
-   * lock is only held for the brief duration of the counter check, not for the downstream
-   * call execution. The worst-case wait is microseconds, not the milliseconds/seconds
-   * of a true blocking acquire.
-   */
   @Override
-  public boolean tryAcquireNonBlocking(String callId) {
-    long startWait = nanoTimeSource.getAsLong();
-    lock.lock();
-    try {
-      if (activeCalls < limitAlgorithm.getLimit()) {
-        activeCalls++;
-        return handleAcquireSuccess(callId, startWait);
-      }
-    } finally {
-      lock.unlock();
-    }
-    handleAcquireFailure(callId, startWait);
-    return false;
-  }
-
-  @Override
-  public boolean tryAcquireBlocking(String callId, Duration timeout) throws InterruptedException {
+  public boolean tryAcquire(String callId, Duration timeout) throws InterruptedException {
     long startWait = nanoTimeSource.getAsLong();
     long nanos = timeout.toNanos();
     lock.lockInterruptibly();

@@ -38,13 +38,17 @@ public final class BulkheadRollbackTraceEvent extends BulkheadEvent {
     BulkheadRollbackTraceEvent that = (BulkheadRollbackTraceEvent) o;
     return Objects.equals(getCallId(), that.getCallId()) &&
         Objects.equals(getElementName(), that.getElementName()) &&
-        Objects.equals(errorType, that.errorType) &&
-        Objects.equals(getTimestamp(), that.getTimestamp());
+        Objects.equals(getTimestamp(), that.getTimestamp()) &&
+        Objects.equals(errorType, that.errorType);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(getCallId(), getElementName(), errorType, getTimestamp());
+    return Objects.hash(
+        getCallId(),
+        getElementName(),
+        getTimestamp(),
+        errorType);
   }
 
   @Override
@@ -52,8 +56,8 @@ public final class BulkheadRollbackTraceEvent extends BulkheadEvent {
     return "BulkheadRollbackTraceEvent{" +
         "callId='" + getCallId() + '\'' +
         ", elementName='" + getElementName() + '\'' +
-        ", errorType='" + errorType + '\'' +
         ", timestamp=" + getTimestamp() +
+        ", errorType='" + errorType + '\'' +
         '}';
   }
 }

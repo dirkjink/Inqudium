@@ -1,8 +1,7 @@
 package eu.inqudium.bulkhead.imperative;
 
-import eu.inqudium.core.bulkhead.AbstractBulkheadStateMachine;
-import eu.inqudium.core.bulkhead.BulkheadConfig;
-import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
+import eu.inqudium.core.bulkhead.*;
+import eu.inqudium.core.bulkhead.event.BulkheadCodelRejectedTraceEvent;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
@@ -57,7 +56,8 @@ import java.util.function.LongSupplier;
  *
  * @since 0.2.0
  */
-public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMachine {
+public final class CoDelImperativeStateMachine
+    extends AbstractBulkheadStateMachine implements BlockingBulkheadStateMachine {
 
   private final long targetDelayNanos;
   private final long intervalNanos;
@@ -88,29 +88,10 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
   }
 
   @Override
-  public boolean tryAcquireNonBlocking(String callId) {
-    long startWait = nanoTimeSource.getAsLong();
-    lock.lock();
-    try {
-      if (activeCalls < maxConcurrentCalls) {
-        activeCalls++;
-        return handleAcquireSuccess(callId, startWait);
-      }
-    } finally {
-      lock.unlock();
-    }
-    // A non-blocking acquire fails instantly if the limit is reached,
-    // so it bypasses the CoDel delay evaluation entirely.
-    handleAcquireFailure(callId, startWait);
-    return false;
-  }
-
-  @Override
-  public boolean tryAcquireBlocking(String callId, Duration timeout) throws InterruptedException {
-    long startWait = nanoTimeSource.getAsLong();
+  public boolean tryAcquire(String callId, Duration timeout) throws InterruptedException {
     long remainingNanos = timeout.toNanos();
 
-    // FIX #5: Use injectable time source for deterministic testing
+    // Use injectable time source for deterministic testing
     long waitStartNanos = nanoTimeSource.getAsLong();
 
     lock.lockInterruptibly();
@@ -118,7 +99,7 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
       // 1. Wait for a permit to become available
       while (activeCalls >= maxConcurrentCalls) {
         if (remainingNanos <= 0L) {
-          handleAcquireFailure(callId, startWait);
+          handleAcquireFailure(callId, waitStartNanos);
           return false;
         }
         remainingNanos = permitAvailable.awaitNanos(remainingNanos);
@@ -142,12 +123,21 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
           // The system is suffering from bufferbloat.
           // Enter dropping state: reject this request immediately to shed load and drain the queue.
 
-          // FIX #3: Signal the next waiting thread before rejecting.
+          // Signal the next waiting thread before rejecting.
           // Without this, the wakeup signal consumed by this thread would be lost,
           // starving other threads even though a permit slot is available.
           permitAvailable.signal();
 
-          handleAcquireFailure(callId, startWait);
+          // Publish trace event specifically for CoDel rejections before the standard failure handling
+          eventPublisher.publishTrace(() -> new BulkheadCodelRejectedTraceEvent(
+              callId,
+              name,
+              waitTimeNanos,
+              targetDelayNanos,
+              config.getClock().instant()
+          ));
+
+          handleAcquireFailure(callId, waitStartNanos);
           return false;
         }
       } else {
@@ -158,13 +148,13 @@ public final class CoDelImperativeStateMachine extends AbstractBulkheadStateMach
 
       // 3. Grant the permit
       activeCalls++;
-      return handleAcquireSuccess(callId, startWait);
+      return handleAcquireSuccess(callId, waitStartNanos);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      // FIX #3: Also signal on interrupt to prevent lost wakeups
+      // Also signal on interrupt to prevent lost wakeups
       permitAvailable.signal();
-      handleAcquireFailure(callId, startWait);
+      handleAcquireFailure(callId, waitStartNanos);
       throw new InqBulkheadInterruptedException(callId, name, getConcurrentCalls(), maxConcurrentCalls);
     } finally {
       lock.unlock();

@@ -1,6 +1,7 @@
 package eu.inqudium.bulkhead.imperative;
 
 import eu.inqudium.core.bulkhead.AbstractBulkheadStateMachine;
+import eu.inqudium.core.bulkhead.BlockingBulkheadStateMachine;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
 import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
 
@@ -13,12 +14,13 @@ import java.util.function.LongSupplier;
 /**
  * The imperative implementation of the state machine using a thread-blocking Semaphore.
  *
- * <p>FIX #2: An {@link AtomicInteger} tracks the number of acquired permits to prevent
+ * <p>An {@link AtomicInteger} tracks the number of acquired permits to prevent
  * over-release. Without this guard, double-release bugs would silently increase the
  * semaphore's capacity beyond {@code maxConcurrentCalls}, effectively disabling the
  * bulkhead's protection and causing {@link #getConcurrentCalls()} to return negative values.
  */
-public final class ImperativeBulkheadStateMachine extends AbstractBulkheadStateMachine {
+public final class ImperativeBulkheadStateMachine
+    extends AbstractBulkheadStateMachine implements BlockingBulkheadStateMachine {
 
   private final Semaphore semaphore;
   private final AtomicInteger acquiredPermits;
@@ -32,20 +34,7 @@ public final class ImperativeBulkheadStateMachine extends AbstractBulkheadStateM
   }
 
   @Override
-  public boolean tryAcquireNonBlocking(String callId) {
-    long startWait = nanoTimeSource.getAsLong();
-    // Attempt to acquire instantly without blocking the thread
-    if (semaphore.tryAcquire()) {
-      acquiredPermits.incrementAndGet();
-      return handleAcquireSuccess(callId, startWait);
-    } else {
-      handleAcquireFailure(callId, startWait);
-      return false;
-    }
-  }
-
-  @Override
-  public boolean tryAcquireBlocking(String callId, Duration timeout) throws InterruptedException {
+  public boolean tryAcquire(String callId, Duration timeout) throws InterruptedException {
     long startWait = nanoTimeSource.getAsLong();
     boolean acquired;
     try {
@@ -68,7 +57,7 @@ public final class ImperativeBulkheadStateMachine extends AbstractBulkheadStateM
   }
 
   /**
-   * FIX #2: Guard against over-release by checking if any permits are actually held.
+   * Guard against over-release by checking if any permits are actually held.
    * Only releases the semaphore if the tracked count is positive.
    */
   @Override
@@ -79,7 +68,7 @@ public final class ImperativeBulkheadStateMachine extends AbstractBulkheadStateM
   }
 
   /**
-   * FIX #2: Same guard applies to rollback — prevents semaphore inflation on
+   * Same guard applies to rollback — prevents semaphore inflation on
    * double-rollback or rollback-without-acquire scenarios.
    */
   @Override

@@ -52,11 +52,12 @@ public final class BulkheadWaitTraceEvent extends BulkheadEvent {
 
   @Override
   public int hashCode() {
-    return Objects.hash(getCallId(),
+    return Objects.hash(
+        getCallId(),
         getElementName(),
+        getTimestamp(),
         waitDurationNanos,
-        acquired,
-        getTimestamp());
+        acquired);
   }
 
   @Override
@@ -64,9 +65,9 @@ public final class BulkheadWaitTraceEvent extends BulkheadEvent {
     return "BulkheadWaitTraceEvent{" +
         "callId='" + getCallId() + '\'' +
         ", elementName='" + getElementName() + '\'' +
+        ", timestamp=" + getTimestamp() +
         ", waitDurationNanos=" + waitDurationNanos +
         ", acquired=" + acquired +
-        ", timestamp=" + getTimestamp() +
         '}';
   }
 }
