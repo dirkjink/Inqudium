@@ -88,7 +88,20 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     public Builder maxWaitDuration(Duration duration) {
-      this.maxWaitDuration = Objects.requireNonNull(duration);
+      Objects.requireNonNull(duration);
+      try {
+        // We test if the duration can be safely converted to nanoseconds.
+        // If it throws an ArithmeticException, it exceeds Long.MAX_VALUE nanos.
+        duration.toNanos();
+        this.maxWaitDuration = duration;
+      } catch (ArithmeticException e) {
+        // Cap the duration to the maximum safe value (approx. 292 years)
+        // This ensures the runtime hot-path never encounters an overflow.
+        this.maxWaitDuration = Duration.ofNanos(Long.MAX_VALUE);
+        logger.warn("Bulkhead configuration with extremely large wait duration. " +
+                "Will safely fall back to {} DAYS during permit acquisition to prevent arithmetic overflow.",
+            maxWaitDuration.toDays());
+      }
       return this;
     }
 

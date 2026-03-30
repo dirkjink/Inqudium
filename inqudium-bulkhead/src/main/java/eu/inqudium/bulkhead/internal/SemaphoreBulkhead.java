@@ -3,6 +3,8 @@ package eu.inqudium.bulkhead.internal;
 import eu.inqudium.bulkhead.Bulkhead;
 import eu.inqudium.core.bulkhead.AbstractBulkhead;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
+import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
+import eu.inqudium.core.bulkhead.event.BulkheadOnRejectEvent;
 
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
@@ -26,10 +28,20 @@ public final class SemaphoreBulkhead extends AbstractBulkhead implements Bulkhea
   }
 
   @Override
-  protected boolean tryAcquirePermit(Duration timeout) throws InterruptedException {
-    return timeout.isZero()
-        ? semaphore.tryAcquire()
-        : semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
+  protected boolean tryAcquirePermit(String callId, Duration timeout) {
+    try {
+      // Try precise nanosecond acquisition for standard timeouts
+      return timeout.isZero()
+          ? semaphore.tryAcquire()
+          : semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      var snap = snapshot();
+      eventPublisher.publish(new BulkheadOnRejectEvent(
+          callId, getName(), snap.concurrentCalls(), snap.timestamp()));
+      throw new InqBulkheadInterruptedException(
+          callId, getName(), snap.concurrentCalls(), getMaxConcurrentCalls());
+    }
   }
 
   @Override

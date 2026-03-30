@@ -55,7 +55,7 @@ final class DefaultInqEventPublisher implements InqEventPublisher {
 
     // Deliver to local consumers using a cache-friendly array iteration
     ConsumerEntry[] currentConsumers = consumers.get();
-// In DefaultInqEventPublisher.publish()
+
     for (int i = 0; i < currentConsumers.length; i++) {
       InqEventConsumer consumer = currentConsumers[i].consumer();
       try {

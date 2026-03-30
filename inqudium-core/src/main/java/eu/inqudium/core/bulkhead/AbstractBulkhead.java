@@ -16,7 +16,7 @@ import java.time.Instant;
  *
  * <p>Contains the complete bulkhead logic — decoration, event publishing, exception
  * handling, and state queries. Paradigm modules only implement the permit mechanism:
- * {@link #tryAcquirePermit(Duration)} and {@link #releasePermit()}.
+ * {@link #tryAcquirePermit(String, Duration)} and {@link #releasePermit()}.
  *
  * <p>This separation ensures that event publishing, error codes, and the acquire/release
  * contract are implemented <strong>once</strong> in the core, not duplicated across
@@ -36,7 +36,7 @@ import java.time.Instant;
  *
  * <h2>Subclass contract</h2>
  * <ul>
- *   <li>{@link #tryAcquirePermit(Duration)} — attempt to acquire a permit within the
+ *   <li>{@link #tryAcquirePermit(String, Duration)} — attempt to acquire a permit within the
  *       given timeout. Return {@code true} if acquired, {@code false} if denied.
  *       Throw {@link InterruptedException} if the thread is interrupted during wait.</li>
  *   <li>{@link #releasePermit()} — release a previously acquired permit. Called exactly
@@ -51,15 +51,23 @@ public abstract class AbstractBulkhead implements InqDecorator {
 
   private final String name;
   private final BulkheadConfig config;
-  private final InqEventPublisher eventPublisher;
+  protected final InqEventPublisher eventPublisher;
+  private final Duration maxWaitDuration;
+  private final int maxConcurrentCalls;
 
   protected AbstractBulkhead(String name, BulkheadConfig config) {
     this.name = name;
     this.config = config;
     this.eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
+    this.maxWaitDuration = config.getMaxWaitDuration();
+    this.maxConcurrentCalls = config.getMaxConcurrentCalls();
   }
 
   // ── InqDecorator / InqElement ──
+
+  public int getMaxConcurrentCalls() {
+    return maxConcurrentCalls;
+  }
 
   @Override
   public String getName() {
@@ -120,31 +128,19 @@ public abstract class AbstractBulkhead implements InqDecorator {
    * responsible for entering a try-finally before publishing.
    */
   private void acquire(String callId) {
-    boolean acquired;
-    try {
-      acquired = tryAcquirePermit(config.getMaxWaitDuration());
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      var snap = snapshot();
-      eventPublisher.publish(new BulkheadOnRejectEvent(
-          callId, name, snap.concurrentCalls, snap.timestamp));
-      throw new InqBulkheadInterruptedException(
-          callId, name, snap.concurrentCalls, config.getMaxConcurrentCalls());
-    }
-
-    if (!acquired) {
+    if (!tryAcquirePermit(callId, maxWaitDuration)) {
       var snap = snapshot();
       eventPublisher.publish(new BulkheadOnRejectEvent(
           callId, name, snap.concurrentCalls, snap.timestamp));
       throw new InqBulkheadFullException(
-          callId, name, snap.concurrentCalls, config.getMaxConcurrentCalls());
+          callId, name, snap.concurrentCalls, maxConcurrentCalls);
     }
   }
 
   /**
    * Captures a consistent point-in-time view of concurrent calls and clock.
    */
-  private Snapshot snapshot() {
+  protected Snapshot snapshot() {
     return new Snapshot(getConcurrentCalls(), config.getClock().instant());
   }
 
@@ -157,9 +153,8 @@ public abstract class AbstractBulkhead implements InqDecorator {
    *
    * @param timeout the maximum time to wait ({@link Duration#ZERO} for non-blocking)
    * @return {@code true} if the permit was acquired, {@code false} if denied
-   * @throws InterruptedException if the thread is interrupted while waiting
    */
-  protected abstract boolean tryAcquirePermit(Duration timeout) throws InterruptedException;
+  protected abstract boolean tryAcquirePermit(String callId, Duration timeout);
 
   // ── Abstract — paradigm-specific permit mechanism ──
 
@@ -185,6 +180,6 @@ public abstract class AbstractBulkhead implements InqDecorator {
    */
   public abstract int getAvailablePermits();
 
-  private record Snapshot(int concurrentCalls, Instant timestamp) {
+  protected record Snapshot(int concurrentCalls, Instant timestamp) {
   }
 }
