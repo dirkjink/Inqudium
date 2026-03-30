@@ -26,7 +26,7 @@ public interface InqConfig {
    * @return the system clock
    */
   static InqClock defaultClock() {
-    return new CachedInqClock();
+    return CachedInqClock.getDefault();
   }
 
   /**

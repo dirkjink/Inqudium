@@ -11,33 +11,57 @@ import java.util.concurrent.locks.LockSupport;
  * only perform a volatile variable read, avoiding the high cost of system calls
  * and object allocations.
  *
+ * <h2>Singleton Usage</h2>
+ * <p>For production, always use the globally shared instance via {@link #getDefault()}.
+ * This ensures only a single virtual thread is responsible for updating the time
+ * across the entire application.
+ *
  * <h2>Safety Mechanism</h2>
  * <p>If the background thread stops unexpectedly or the clock is explicitly closed,
- * it safely falls back to calculating the time on the fly using
- * {@link System#currentTimeMillis()}.
+ * it safely falls back to calculating the time on the fly.
  *
  * @since 0.1.0
  */
 public final class CachedInqClock implements InqClock, AutoCloseable {
 
-  private final Thread updaterThread;
   private volatile Instant cachedTime;
   private volatile boolean running;
   private volatile boolean active;
+  private final Thread updaterThread;
+
+  /**
+   * Lazy initialization holder class idiom for thread-safe singleton instantiation.
+   * The background thread is only started when {@link #getDefault()} is called
+   * for the very first time.
+   */
+  private static final class InstanceHolder {
+    static final CachedInqClock INSTANCE = new CachedInqClock(1);
+  }
+
+  /**
+   * Returns the global default singleton instance of the cached clock.
+   *
+   * @return the shared cached clock
+   */
+  public static CachedInqClock getDefault() {
+    return InstanceHolder.INSTANCE;
+  }
 
   /**
    * Creates a new cached clock with a default 1-millisecond update interval.
+   * Visible for testing to avoid cross-test state pollution.
    */
-  public CachedInqClock() {
+  CachedInqClock() {
     this(1);
   }
 
   /**
    * Creates a new cached clock with a custom update interval.
+   * Visible for testing to avoid cross-test state pollution.
    *
    * @param updateIntervalMillis the interval in milliseconds
    */
-  public CachedInqClock(long updateIntervalMillis) {
+  CachedInqClock(long updateIntervalMillis) {
     this.cachedTime = Instant.ofEpochMilli(System.currentTimeMillis());
     this.running = true;
     this.active = true;
@@ -48,14 +72,11 @@ public final class CachedInqClock implements InqClock, AutoCloseable {
         .name("inq-cached-clock-updater")
         .start(() -> {
           try {
-            // Thread.interrupted() clears the interrupt flag and prevents busy-looping
             while (this.running && !Thread.interrupted()) {
               LockSupport.parkNanos(parkNanos);
               this.cachedTime = Instant.ofEpochMilli(System.currentTimeMillis());
             }
           } finally {
-            // Safety fallback: If the thread exits for ANY reason (closed,
-            // unexpected interrupt, or crash), we mark the clock as inactive.
             this.active = false;
           }
         });
@@ -64,10 +85,8 @@ public final class CachedInqClock implements InqClock, AutoCloseable {
   @Override
   public Instant instant() {
     if (this.active) {
-      // Fast path: Zero-allocation volatile read
       return this.cachedTime;
     }
-    // Fallback path: The background thread is dead, calculate time directly
     return Instant.ofEpochMilli(System.currentTimeMillis());
   }
 
@@ -77,4 +96,3 @@ public final class CachedInqClock implements InqClock, AutoCloseable {
     this.updaterThread.interrupt();
   }
 }
-
