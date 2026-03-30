@@ -7,6 +7,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
+import static eu.inqudium.core.exception.InqException.rethrowIfFatal;
+
 /**
  * Registry for {@link InqEventExporter} instances.
  *
@@ -56,7 +58,7 @@ public final class InqEventExporterRegistry {
 
   private static final AtomicReference<InqEventExporterRegistry> DEFAULT_INSTANCE = new AtomicReference<>();
   private final AtomicReference<RegistryState> state = new AtomicReference<>(new Open());
-  private final ClassLoader spiClassLoader;
+  private ClassLoader spiClassLoader;
 
   // ── State machine ──
 
@@ -94,7 +96,7 @@ public final class InqEventExporterRegistry {
           hasNext = iterator.hasNext();
           consecutiveHasNextFailures = 0;
         } catch (Throwable t) {
-          InqException.rethrowIfFatal(t);
+          rethrowIfFatal(t);
           consecutiveHasNextFailures++;
           LOGGER.warn("ServiceLoader iterator.hasNext() failed for InqEventExporter " +
               "(consecutive failure #{}) — retrying.", consecutiveHasNextFailures, t);
@@ -114,7 +116,7 @@ public final class InqEventExporterRegistry {
         try {
           serviceLoaderExporters.add(iterator.next());
         } catch (Throwable t) {
-          InqException.rethrowIfFatal(t);
+          rethrowIfFatal(t);
           LOGGER.warn("Failed to load InqEventExporter provider — provider skipped.", t);
           providerErrors.add(new InqProviderErrorEvent(
               "(unknown)", InqEventExporter.class.getName(),
@@ -122,7 +124,7 @@ public final class InqEventExporterRegistry {
         }
       }
     } catch (Throwable t) {
-      InqException.rethrowIfFatal(t);
+      rethrowIfFatal(t);
       LOGGER.warn("ServiceLoader discovery for InqEventExporter failed.", t);
       providerErrors.add(new InqProviderErrorEvent(
           "(unknown)", InqEventExporter.class.getName(),
@@ -153,10 +155,13 @@ public final class InqEventExporterRegistry {
       try {
         var typeSet = exporter.subscribedEventTypes();
         if (typeSet != null && !typeSet.isEmpty()) {
-          types = Set.copyOf(typeSet);
+          types = typeSet.stream()
+              .filter(Objects::nonNull)
+              .collect(java.util.stream.Collectors.toUnmodifiableSet());
+
         }
       } catch (Throwable t) {
-        InqException.rethrowIfFatal(t);
+        rethrowIfFatal(t);
         LOGGER.warn("InqEventExporter.subscribedEventTypes() threw — exporter will receive all events.", t);
       }
       cached.add(new CachedExporter(exporter, types));
@@ -218,7 +223,7 @@ public final class InqEventExporterRegistry {
           cached.exporter.export(event);
         }
       } catch (Throwable t) {
-        InqException.rethrowIfFatal(t);
+        rethrowIfFatal(t);
         LOGGER.warn("[{}] InqEventExporter {} threw on event {}",
             event.getCallId(), cached.exporter.getClass().getName(),
             event.getClass().getSimpleName(), t);
@@ -248,12 +253,16 @@ public final class InqEventExporterRegistry {
           try {
             var result = discoverAndMerge(open.programmatic, spiClassLoader);
             state.set(new Frozen(result.exporters));
-            // Replay provider errors to the now-frozen exporters
+
+            // Memory Leak Prevention: Release ClassLoader Reference
+            this.spiClassLoader = null;
+
+            // Replay provider errors...
             replayProviderErrors(result.exporters, result.providerErrors);
             return result.exporters;
           } catch (Throwable t) {
             state.set(new Open(List.copyOf(open.programmatic)));
-            InqException.rethrowIfFatal(t);
+            rethrowIfFatal(t);
             LOGGER.error("ServiceLoader discovery failed — registry reset to Open", t);
             return List.of();
           }
@@ -294,7 +303,7 @@ public final class InqEventExporterRegistry {
             cached.exporter.export(error);
           }
         } catch (Throwable t) {
-          InqException.rethrowIfFatal(t);
+          rethrowIfFatal(t);
           LOGGER.debug("Exporter {} failed during provider error replay — skipped",
               cached.exporter.getClass().getName(), t);
         }
