@@ -14,7 +14,7 @@ import eu.inqudium.core.bulkhead.BulkheadStateMachine;
  *   <li><b>Adaptive:</b> If a limit algorithm (AIMD, Vegas) is configured, creates an
  *       {@link AdaptiveImperativeStateMachine} for dynamic concurrency limits.</li>
  *   <li><b>Static:</b> Otherwise, creates a semaphore-based
- *       {@link ImperativeBulkheadStateMachine} with fixed limits.</li>
+ *       {@link SemaphoreImperativeStateMachine} with fixed limits.</li>
  * </ul>
  *
  * <p>FIX #9: The original factory only knew about Static and Adaptive paths.
@@ -48,7 +48,7 @@ public final class ImperativeBulkheadFactory {
       stateMachine = new AdaptiveImperativeStateMachine(name, config, config.getLimitAlgorithm());
     } else {
       // Static: Fixed limits using standard Semaphores
-      stateMachine = new ImperativeBulkheadStateMachine(name, config);
+      stateMachine = new SemaphoreImperativeStateMachine(name, config);
     }
 
     return new ImperativeBulkhead(name, config, stateMachine);

@@ -34,7 +34,7 @@ class ImperativeBulkheadFactoryTest {
       // Then
       // The internal state machine must be the semaphore-based implementation
       Object internalStateMachine = extractStateMachine(bulkhead);
-      assertThat(internalStateMachine).isInstanceOf(ImperativeBulkheadStateMachine.class);
+      assertThat(internalStateMachine).isInstanceOf(SemaphoreImperativeStateMachine.class);
       assertThat(bulkhead.getName()).isEqualTo("static-test");
     }
   }

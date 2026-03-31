@@ -14,10 +14,10 @@ import java.util.concurrent.CompletableFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class ImperativeBulkheadStateMachineTest {
+class SemaphoreImperativeStateMachineTest {
 
   private BulkheadConfig config;
-  private ImperativeBulkheadStateMachine stateMachine;
+  private SemaphoreImperativeStateMachine stateMachine;
 
   @BeforeEach
   void setUp() {
@@ -29,7 +29,7 @@ class ImperativeBulkheadStateMachineTest {
         .clock(new StubClock())
         .build();
 
-    stateMachine = new ImperativeBulkheadStateMachine("test-imperative", config);
+    stateMachine = new SemaphoreImperativeStateMachine("test-imperative", config);
   }
 
   @Nested

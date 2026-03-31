@@ -118,7 +118,7 @@ import java.util.function.LongSupplier;
  * @see AimdLimitAlgorithm
  * @see VegasLimitAlgorithm
  * @see AdaptiveImperativeStateMachine
- * @see ImperativeBulkheadStateMachine
+ * @see SemaphoreImperativeStateMachine
  * @since 0.2.0
  */
 public final class CoDelImperativeStateMachine

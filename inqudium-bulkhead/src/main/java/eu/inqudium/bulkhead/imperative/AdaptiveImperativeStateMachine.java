@@ -19,7 +19,7 @@ import java.util.function.LongSupplier;
  * {@link VegasLimitAlgorithm}) and the <em>mechanical</em> world (permit acquisition, thread
  * parking, signaling). The algorithm decides the optimal limit; this state machine enforces it.
  *
- * <p>In contrast to {@link ImperativeBulkheadStateMachine}, which uses a fixed limit backed by
+ * <p>In contrast to {@link SemaphoreImperativeStateMachine}, which uses a fixed limit backed by
  * a {@link java.util.concurrent.Semaphore}, and {@link CoDelImperativeStateMachine}, which uses
  * a fixed limit with queue-based delay management, this class operates with a limit that can
  * change after every completed call. This creates unique concurrency challenges that the other
@@ -59,7 +59,7 @@ import java.util.function.LongSupplier;
  * <h2>Key Design Decisions</h2>
  *
  * <h3>ReentrantLock Instead of Semaphore</h3>
- * <p>{@link ImperativeBulkheadStateMachine} uses a {@link java.util.concurrent.Semaphore} because
+ * <p>{@link SemaphoreImperativeStateMachine} uses a {@link java.util.concurrent.Semaphore} because
  * its limit is fixed — the semaphore's permit count is set once at construction and never changes.
  * This class cannot use a Semaphore because the limit changes dynamically. A Semaphore's permit
  * count is not directly settable after construction; resizing would require draining and
@@ -96,7 +96,7 @@ import java.util.function.LongSupplier;
  *
  * @see AimdLimitAlgorithm
  * @see VegasLimitAlgorithm
- * @see ImperativeBulkheadStateMachine
+ * @see SemaphoreImperativeStateMachine
  * @see CoDelImperativeStateMachine
  * @see ImperativeBulkheadFactory
  * @since 0.2.0
