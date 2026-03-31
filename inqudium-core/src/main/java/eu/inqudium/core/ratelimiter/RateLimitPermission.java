@@ -15,16 +15,16 @@ import java.time.Duration;
  *                     ({@link Duration#ZERO} when permitted)
  */
 public record RateLimitPermission(
-        RateLimiterSnapshot snapshot,
-        boolean permitted,
-        Duration waitDuration
+    RateLimiterSnapshot snapshot,
+    boolean permitted,
+    Duration waitDuration
 ) {
 
-    public static RateLimitPermission permitted(RateLimiterSnapshot snapshot) {
-        return new RateLimitPermission(snapshot, true, Duration.ZERO);
-    }
+  public static RateLimitPermission permitted(RateLimiterSnapshot snapshot) {
+    return new RateLimitPermission(snapshot, true, Duration.ZERO);
+  }
 
-    public static RateLimitPermission rejected(RateLimiterSnapshot snapshot, Duration waitDuration) {
-        return new RateLimitPermission(snapshot, false, waitDuration);
-    }
+  public static RateLimitPermission rejected(RateLimiterSnapshot snapshot, Duration waitDuration) {
+    return new RateLimitPermission(snapshot, false, waitDuration);
+  }
 }

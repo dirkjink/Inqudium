@@ -16,11 +16,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class CoDelImperativeStateMachineTest {
 
-  private AtomicLong simulatedTimeNanos;
-  private CoDelImperativeStateMachine stateMachine;
-
   private static final Duration TARGET_DELAY = Duration.ofMillis(5);
   private static final Duration INTERVAL = Duration.ofMillis(100);
+  private AtomicLong simulatedTimeNanos;
+  private CoDelImperativeStateMachine stateMachine;
 
   @BeforeEach
   void setUp() {
@@ -35,6 +34,13 @@ class CoDelImperativeStateMachineTest {
         .build();
 
     stateMachine = new CoDelImperativeStateMachine("test-codel", config, TARGET_DELAY, INTERVAL);
+  }
+
+  private static class StubClock implements InqClock {
+    @Override
+    public Instant instant() {
+      return Instant.now();
+    }
   }
 
   @Nested
@@ -99,8 +105,11 @@ class CoDelImperativeStateMachineTest {
 
       // 1. Establish dropping state (first slow call triggers interval)
       CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("slow-call-1", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("slow-call-1", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
       Thread.sleep(50);
       simulatedTimeNanos.addAndGet(TARGET_DELAY.toNanos() + 1);
@@ -108,12 +117,18 @@ class CoDelImperativeStateMachineTest {
 
       // 2. Queue up MULTIPLE threads waiting for permits
       CompletableFuture<Boolean> rejected1 = CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("rejected-1", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("rejected-1", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
       CompletableFuture<Boolean> rejected2 = CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("rejected-2", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("rejected-2", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
       Thread.sleep(50);
 
@@ -135,6 +150,8 @@ class CoDelImperativeStateMachineTest {
       assertThat(stateMachine.getConcurrentCalls()).isEqualTo(0);
     }
   }
+
+  // --- Manual Test Doubles (Fakes & Stubs) ---
 
   @Nested
   class BufferbloatProtection {
@@ -177,8 +194,11 @@ class CoDelImperativeStateMachineTest {
 
       // 1. Trigger the interval stopwatch with a first slow request
       CompletableFuture<Boolean> slowCall1 = CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("slow-call-1", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("slow-call-1", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
       Thread.sleep(50);
       simulatedTimeNanos.addAndGet(TARGET_DELAY.toNanos() + Duration.ofMillis(1).toNanos());
@@ -187,8 +207,11 @@ class CoDelImperativeStateMachineTest {
 
       // 2. Enqueue the NEXT request. This one will wait while the interval expires.
       CompletableFuture<Boolean> rejectedCall = CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("rejected-call", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("rejected-call", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
       Thread.sleep(50);
 
@@ -213,8 +236,11 @@ class CoDelImperativeStateMachineTest {
 
       // Start stopwatch with a slow request
       CompletableFuture<Boolean> slowCall = CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("slow-call", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("slow-call", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
       Thread.sleep(50);
       simulatedTimeNanos.addAndGet(TARGET_DELAY.toNanos() + Duration.ofMillis(1).toNanos());
@@ -236,15 +262,6 @@ class CoDelImperativeStateMachineTest {
       // The stopwatch must reset because the wait time (0) was below the target delay
       assertThat(acquired).isTrue();
       assertThat(stateMachine.getConcurrentCalls()).isEqualTo(1);
-    }
-  }
-
-  // --- Manual Test Doubles (Fakes & Stubs) ---
-
-  private static class StubClock implements InqClock {
-    @Override
-    public Instant instant() {
-      return Instant.now();
     }
   }
 }

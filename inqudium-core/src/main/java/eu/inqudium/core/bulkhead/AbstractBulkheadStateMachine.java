@@ -164,7 +164,7 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
           callId, name, snap.concurrentCalls(), snap.timestamp()));
     } catch (RuntimeException publisherError) {
       LOG.error("Failed to publish release event for bulkhead '{}', callId='{}'. "
-          + "The permit has been released; this is a telemetry-only failure.",
+              + "The permit has been released; this is a telemetry-only failure.",
           name, callId, publisherError);
     }
 
@@ -244,7 +244,7 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
         ));
       } catch (RuntimeException traceError) {
         LOG.error("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
-            + "The permit has been rolled back; this is a telemetry-only failure.",
+                + "The permit has been rolled back; this is a telemetry-only failure.",
             name, callId, traceError);
       }
 

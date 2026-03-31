@@ -16,42 +16,11 @@ import java.util.Objects;
  */
 public final class InqProviderErrorEvent extends InqEvent {
 
-  /**
-   * The phase in which a provider failure occurred.
-   *
-   * <p>Each phase maps to a unique error code suffix via {@link #errorIndex()},
-   * ensuring structured, machine-readable error codes (ADR-021).
-   *
-   * @since 0.2.0
-   */
-  public enum ProviderPhase {
-
-    /** Failure during provider instantiation (ServiceLoader construction). */
-    CONSTRUCTION(1),
-
-    /** Failure during provider execution (e.g. exporter.export()). */
-    EXECUTION(2);
-
-    private final int errorIndex;
-
-    ProviderPhase(int errorIndex) {
-      this.errorIndex = errorIndex;
-    }
-
-    /**
-     * Returns the error code index used with {@link InqElementType#errorCode(int)}.
-     */
-    public int errorIndex() {
-      return errorIndex;
-    }
-  }
-
   private final String code;
   private final String providerClassName;
   private final String spiInterfaceName;
   private final ProviderPhase phase;
   private final String errorMessage;
-
   /**
    * Creates a new provider error event.
    *
@@ -104,5 +73,39 @@ public final class InqProviderErrorEvent extends InqEvent {
    */
   public String getErrorMessage() {
     return errorMessage;
+  }
+
+  /**
+   * The phase in which a provider failure occurred.
+   *
+   * <p>Each phase maps to a unique error code suffix via {@link #errorIndex()},
+   * ensuring structured, machine-readable error codes (ADR-021).
+   *
+   * @since 0.2.0
+   */
+  public enum ProviderPhase {
+
+    /**
+     * Failure during provider instantiation (ServiceLoader construction).
+     */
+    CONSTRUCTION(1),
+
+    /**
+     * Failure during provider execution (e.g. exporter.export()).
+     */
+    EXECUTION(2);
+
+    private final int errorIndex;
+
+    ProviderPhase(int errorIndex) {
+      this.errorIndex = errorIndex;
+    }
+
+    /**
+     * Returns the error code index used with {@link InqElementType#errorCode(int)}.
+     */
+    public int errorIndex() {
+      return errorIndex;
+    }
   }
 }

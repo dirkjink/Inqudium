@@ -1,16 +1,21 @@
 package eu.inqudium.core.event;
 
 import eu.inqudium.core.InqElementType;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -29,12 +34,36 @@ class InqEventSystemTest {
 
   private InqEventExporterRegistry registry;
 
+  /**
+   * Creates a minimal concrete event for testing.
+   */
+  private static InqEvent testEvent() {
+    return testEvent("call-1");
+  }
+
+  // ── Test helpers ──────────────────────────────────────────────────────────
+
+  private static InqEvent testEvent(String callId) {
+    return new TestEvent(callId, "test-element", InqElementType.CIRCUIT_BREAKER, Instant.now());
+  }
+
+  /**
+   * Sleeps for the given duration, wrapping InterruptedException.
+   * Used only in tests that need to wait for TTL expiry.
+   */
+  private static void sleep(long millis) {
+    try {
+      Thread.sleep(millis);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("Test interrupted", e);
+    }
+  }
+
   @BeforeEach
   void setUp() {
     registry = new InqEventExporterRegistry();
   }
-
-  // ── Test helpers ──────────────────────────────────────────────────────────
 
   /**
    * Creates a publisher with isolated registry and default config.
@@ -50,17 +79,6 @@ class InqEventSystemTest {
   private InqEventPublisher createPublisher(InqPublisherConfig config) {
     return InqEventPublisher.create("test-element", InqElementType.CIRCUIT_BREAKER,
         registry, config);
-  }
-
-  /**
-   * Creates a minimal concrete event for testing.
-   */
-  private static InqEvent testEvent() {
-    return testEvent("call-1");
-  }
-
-  private static InqEvent testEvent(String callId) {
-    return new TestEvent(callId, "test-element", InqElementType.CIRCUIT_BREAKER, Instant.now());
   }
 
   /**
@@ -101,6 +119,10 @@ class InqEventSystemTest {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Publishing
+  // ═══════════════════════════════════════════════════════════════════════════
+
   /**
    * Simple recording exporter that captures all exported events.
    */
@@ -136,7 +158,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Publishing
+  // Typed consumers
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -209,7 +231,9 @@ class InqEventSystemTest {
       var publisher = createPublisher();
       var consumerAfterFailure = new RecordingConsumer();
 
-      publisher.onEvent(e -> { throw new RuntimeException("boom"); });
+      publisher.onEvent(e -> {
+        throw new RuntimeException("boom");
+      });
       publisher.onEvent(consumerAfterFailure);
 
       // When
@@ -241,7 +265,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Typed consumers
+  // Subscriptions
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -311,13 +335,14 @@ class InqEventSystemTest {
 
       // When / Then
       assertThatNullPointerException()
-          .isThrownBy(() -> publisher.onEvent(null, e -> {}))
+          .isThrownBy(() -> publisher.onEvent(null, e -> {
+          }))
           .withMessageContaining("eventType");
     }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Subscriptions
+  // TTL subscriptions
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -392,7 +417,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TTL subscriptions
+  // Consumer limits
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -467,7 +492,8 @@ class InqEventSystemTest {
 
       // When / Then
       assertThatIllegalArgumentException()
-          .isThrownBy(() -> publisher.onEvent(e -> {}, Duration.ZERO))
+          .isThrownBy(() -> publisher.onEvent(e -> {
+          }, Duration.ZERO))
           .withMessageContaining("positive");
     }
 
@@ -479,7 +505,8 @@ class InqEventSystemTest {
 
       // When / Then
       assertThatIllegalArgumentException()
-          .isThrownBy(() -> publisher.onEvent(e -> {}, Duration.ofSeconds(-1)))
+          .isThrownBy(() -> publisher.onEvent(e -> {
+          }, Duration.ofSeconds(-1)))
           .withMessageContaining("positive");
     }
 
@@ -505,7 +532,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Consumer limits
+  // Trace publishing
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -519,13 +546,17 @@ class InqEventSystemTest {
       var config = InqPublisherConfig.of(2, 3, Duration.ofSeconds(60));
       var publisher = createPublisher(config);
 
-      publisher.onEvent(e -> {});
-      publisher.onEvent(e -> {});
-      publisher.onEvent(e -> {});
+      publisher.onEvent(e -> {
+      });
+      publisher.onEvent(e -> {
+      });
+      publisher.onEvent(e -> {
+      });
 
       // When / Then — 4th registration exceeds hard limit of 3
       assertThatIllegalStateException()
-          .isThrownBy(() -> publisher.onEvent(e -> {}))
+          .isThrownBy(() -> publisher.onEvent(e -> {
+          }))
           .withMessageContaining("hard consumer limit");
     }
 
@@ -538,9 +569,12 @@ class InqEventSystemTest {
 
       // When / Then — registering exactly 3 must succeed
       assertThatCode(() -> {
-        publisher.onEvent(e -> {});
-        publisher.onEvent(e -> {});
-        publisher.onEvent(e -> {});
+        publisher.onEvent(e -> {
+        });
+        publisher.onEvent(e -> {
+        });
+        publisher.onEvent(e -> {
+        });
       }).doesNotThrowAnyException();
     }
 
@@ -553,16 +587,20 @@ class InqEventSystemTest {
           "test-element", InqElementType.CIRCUIT_BREAKER, registry, config);
 
       // Register 2 TTL consumers that will expire
-      publisher.onEvent(e -> {}, Duration.ofMillis(1));
-      publisher.onEvent(e -> {}, Duration.ofMillis(1));
+      publisher.onEvent(e -> {
+      }, Duration.ofMillis(1));
+      publisher.onEvent(e -> {
+      }, Duration.ofMillis(1));
 
       // When — wait for TTL to expire
       sleep(50);
 
       // Then — new registrations succeed because expired ones are swept during add
       assertThatCode(() -> {
-        publisher.onEvent(e -> {});
-        publisher.onEvent(e -> {});
+        publisher.onEvent(e -> {
+        });
+        publisher.onEvent(e -> {
+        });
       }).doesNotThrowAnyException();
 
       // Cleanup
@@ -576,20 +614,23 @@ class InqEventSystemTest {
       var config = InqPublisherConfig.of(1, 2, Duration.ofSeconds(60));
       var publisher = createPublisher(config);
 
-      var sub1 = publisher.onEvent(e -> {});
-      publisher.onEvent(e -> {});
+      var sub1 = publisher.onEvent(e -> {
+      });
+      publisher.onEvent(e -> {
+      });
 
       // When — cancel one, then register a new one
       sub1.cancel();
 
       // Then
-      assertThatCode(() -> publisher.onEvent(e -> {}))
+      assertThatCode(() -> publisher.onEvent(e -> {
+      }))
           .doesNotThrowAnyException();
     }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Trace publishing
+  // Publisher lifecycle
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -652,7 +693,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Publisher lifecycle
+  // Expiry sweep
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -664,7 +705,8 @@ class InqEventSystemTest {
     void should_close_without_error_when_no_ttl_subscriptions_were_registered() {
       // Given
       var publisher = createPublisher();
-      publisher.onEvent(e -> {});
+      publisher.onEvent(e -> {
+      });
 
       // When / Then
       assertThatCode(publisher::close).doesNotThrowAnyException();
@@ -675,7 +717,8 @@ class InqEventSystemTest {
     void should_allow_idempotent_close() {
       // Given
       var publisher = createPublisher();
-      publisher.onEvent(e -> {}, Duration.ofMinutes(1));
+      publisher.onEvent(e -> {
+      }, Duration.ofMinutes(1));
 
       // When / Then
       publisher.close();
@@ -687,7 +730,8 @@ class InqEventSystemTest {
     void should_produce_meaningful_to_string_output() {
       // Given
       var publisher = createPublisher();
-      publisher.onEvent(e -> {});
+      publisher.onEvent(e -> {
+      });
 
       // When
       String result = publisher.toString();
@@ -701,7 +745,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Expiry sweep
+  // Exporter registry
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -761,8 +805,10 @@ class InqEventSystemTest {
       var now = Instant.now();
       var pastExpiry = now.minusSeconds(10);
       var entries = new DefaultInqEventPublisher.ConsumerEntry[]{
-          new DefaultInqEventPublisher.ConsumerEntry(1, e -> {}, "a", pastExpiry),
-          new DefaultInqEventPublisher.ConsumerEntry(2, e -> {}, "b", pastExpiry),
+          new DefaultInqEventPublisher.ConsumerEntry(1, e -> {
+          }, "a", pastExpiry),
+          new DefaultInqEventPublisher.ConsumerEntry(2, e -> {
+          }, "b", pastExpiry),
       };
 
       // When
@@ -781,8 +827,10 @@ class InqEventSystemTest {
       var now = Instant.now();
       var futureExpiry = now.plusSeconds(3600);
       var entries = new DefaultInqEventPublisher.ConsumerEntry[]{
-          new DefaultInqEventPublisher.ConsumerEntry(1, e -> {}, "a", futureExpiry),
-          new DefaultInqEventPublisher.ConsumerEntry(2, e -> {}, "b", null), // permanent
+          new DefaultInqEventPublisher.ConsumerEntry(1, e -> {
+          }, "a", futureExpiry),
+          new DefaultInqEventPublisher.ConsumerEntry(2, e -> {
+          }, "b", null), // permanent
       };
 
       // When
@@ -794,7 +842,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Exporter registry
+  // Publisher config
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -942,7 +990,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Publisher config
+  // Provider error event
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -1045,7 +1093,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Provider error event
+  // InqEvent base class
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -1143,7 +1191,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // InqEvent base class
+  // Concurrency
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -1238,7 +1286,7 @@ class InqEventSystemTest {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Concurrency
+  // ConsumerEntry record
   // ═══════════════════════════════════════════════════════════════════════════
 
   @Nested
@@ -1323,9 +1371,7 @@ class InqEventSystemTest {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ConsumerEntry record
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Utility ───────────────────────────────────────────────────────────────
 
   @Nested
   @DisplayName("ConsumerEntry expiry semantics")
@@ -1335,7 +1381,8 @@ class InqEventSystemTest {
     @DisplayName("should report permanent entry as never expired")
     void should_report_permanent_entry_as_never_expired() {
       // Given — null expiresAt means permanent
-      var entry = new DefaultInqEventPublisher.ConsumerEntry(1, e -> {}, "perm", null);
+      var entry = new DefaultInqEventPublisher.ConsumerEntry(1, e -> {
+      }, "perm", null);
 
       // When / Then
       assertThat(entry.isExpired(Instant.now())).isFalse();
@@ -1347,7 +1394,8 @@ class InqEventSystemTest {
     void should_report_ttl_entry_as_expired_when_now_is_after_expires_at() {
       // Given
       var expiresAt = Instant.now().minusSeconds(1);
-      var entry = new DefaultInqEventPublisher.ConsumerEntry(1, e -> {}, "ttl", expiresAt);
+      var entry = new DefaultInqEventPublisher.ConsumerEntry(1, e -> {
+      }, "ttl", expiresAt);
 
       // When / Then
       assertThat(entry.isExpired(Instant.now())).isTrue();
@@ -1358,25 +1406,11 @@ class InqEventSystemTest {
     void should_report_ttl_entry_as_not_expired_when_now_is_before_expires_at() {
       // Given
       var expiresAt = Instant.now().plusSeconds(3600);
-      var entry = new DefaultInqEventPublisher.ConsumerEntry(1, e -> {}, "ttl", expiresAt);
+      var entry = new DefaultInqEventPublisher.ConsumerEntry(1, e -> {
+      }, "ttl", expiresAt);
 
       // When / Then
       assertThat(entry.isExpired(Instant.now())).isFalse();
-    }
-  }
-
-  // ── Utility ───────────────────────────────────────────────────────────────
-
-  /**
-   * Sleeps for the given duration, wrapping InterruptedException.
-   * Used only in tests that need to wait for TTL expiry.
-   */
-  private static void sleep(long millis) {
-    try {
-      Thread.sleep(millis);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new AssertionError("Test interrupted", e);
     }
   }
 }

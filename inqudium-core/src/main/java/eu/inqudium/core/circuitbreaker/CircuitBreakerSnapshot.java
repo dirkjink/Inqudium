@@ -15,39 +15,39 @@ import java.time.Instant;
  * @param stateChangedAt   timestamp of the last state transition
  */
 public record CircuitBreakerSnapshot(
-        CircuitState state,
-        int failureCount,
-        int successCount,
-        int halfOpenAttempts,
-        Instant stateChangedAt
+    CircuitState state,
+    int failureCount,
+    int successCount,
+    int halfOpenAttempts,
+    Instant stateChangedAt
 ) {
 
-    /**
-     * Creates the initial snapshot in CLOSED state with all counters at zero.
-     */
-    public static CircuitBreakerSnapshot initial(Instant now) {
-        return new CircuitBreakerSnapshot(CircuitState.CLOSED, 0, 0, 0, now);
-    }
+  /**
+   * Creates the initial snapshot in CLOSED state with all counters at zero.
+   */
+  public static CircuitBreakerSnapshot initial(Instant now) {
+    return new CircuitBreakerSnapshot(CircuitState.CLOSED, 0, 0, 0, now);
+  }
 
-    // --- Wither methods for immutable updates ---
+  // --- Wither methods for immutable updates ---
 
-    public CircuitBreakerSnapshot withState(CircuitState newState, Instant now) {
-        return new CircuitBreakerSnapshot(newState, 0, 0, 0, now);
-    }
+  public CircuitBreakerSnapshot withState(CircuitState newState, Instant now) {
+    return new CircuitBreakerSnapshot(newState, 0, 0, 0, now);
+  }
 
-    public CircuitBreakerSnapshot withIncrementedFailureCount() {
-        return new CircuitBreakerSnapshot(state, failureCount + 1, successCount, halfOpenAttempts, stateChangedAt);
-    }
+  public CircuitBreakerSnapshot withIncrementedFailureCount() {
+    return new CircuitBreakerSnapshot(state, failureCount + 1, successCount, halfOpenAttempts, stateChangedAt);
+  }
 
-    public CircuitBreakerSnapshot withIncrementedSuccessCount() {
-        return new CircuitBreakerSnapshot(state, failureCount, successCount + 1, halfOpenAttempts, stateChangedAt);
-    }
+  public CircuitBreakerSnapshot withIncrementedSuccessCount() {
+    return new CircuitBreakerSnapshot(state, failureCount, successCount + 1, halfOpenAttempts, stateChangedAt);
+  }
 
-    public CircuitBreakerSnapshot withIncrementedHalfOpenAttempts() {
-        return new CircuitBreakerSnapshot(state, failureCount, successCount, halfOpenAttempts + 1, stateChangedAt);
-    }
+  public CircuitBreakerSnapshot withIncrementedHalfOpenAttempts() {
+    return new CircuitBreakerSnapshot(state, failureCount, successCount, halfOpenAttempts + 1, stateChangedAt);
+  }
 
-    public CircuitBreakerSnapshot withResetFailureCount() {
-        return new CircuitBreakerSnapshot(state, 0, successCount, halfOpenAttempts, stateChangedAt);
-    }
+  public CircuitBreakerSnapshot withResetFailureCount() {
+    return new CircuitBreakerSnapshot(state, 0, successCount, halfOpenAttempts, stateChangedAt);
+  }
 }

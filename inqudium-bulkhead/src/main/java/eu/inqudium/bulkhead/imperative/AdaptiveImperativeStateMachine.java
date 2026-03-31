@@ -370,9 +370,9 @@ public final class AdaptiveImperativeStateMachine
    *                the thread will not park: if no capacity is available on the first check,
    *                it returns {@code false} immediately.
    * @return {@code true} if the permit was acquired, {@code false} if the timeout expired
-   *         while the bulkhead was at or over capacity
+   * while the bulkhead was at or over capacity
    * @throws InterruptedException if the thread is interrupted while waiting, wrapped in
-   *         {@link InqBulkheadInterruptedException} with the thread's interrupt flag restored
+   *                              {@link InqBulkheadInterruptedException} with the thread's interrupt flag restored
    */
   @Override
   public boolean tryAcquire(String callId, Duration timeout) throws InterruptedException {

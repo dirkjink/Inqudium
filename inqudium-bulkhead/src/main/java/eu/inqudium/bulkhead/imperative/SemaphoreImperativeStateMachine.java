@@ -265,7 +265,7 @@ public final class SemaphoreImperativeStateMachine
    *                a non-blocking attempt (see above).
    * @return {@code true} if the permit was acquired, {@code false} if the bulkhead is full
    * @throws InterruptedException if the thread is interrupted while waiting, wrapped in
-   *         {@link InqBulkheadInterruptedException} with the thread's interrupt flag restored
+   *                              {@link InqBulkheadInterruptedException} with the thread's interrupt flag restored
    */
   @Override
   public boolean tryAcquire(String callId, Duration timeout) throws InterruptedException {
@@ -446,8 +446,8 @@ public final class SemaphoreImperativeStateMachine
    * the read very cheap (a single volatile read).
    *
    * @return the number of immediately available permits, always >= 0 (unless the semaphore
-   *         has been inflated by an external {@code release()} call, which the over-release
-   *         guard prevents in normal operation)
+   * has been inflated by an external {@code release()} call, which the over-release
+   * guard prevents in normal operation)
    */
   @Override
   public int getAvailablePermits() {

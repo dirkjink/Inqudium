@@ -439,9 +439,9 @@ public final class CoDelImperativeStateMachine
    *                non-blocking: if no permit is immediately available, the method returns
    *                {@code false} without parking the thread.
    * @return {@code true} if the permit was acquired, {@code false} if the bulkhead is full
-   *         (timeout expired) or the request was CoDel-rejected (sustained congestion)
+   * (timeout expired) or the request was CoDel-rejected (sustained congestion)
    * @throws InterruptedException if the thread is interrupted while waiting, wrapped in
-   *         {@link InqBulkheadInterruptedException} with the thread's interrupt flag restored
+   *                              {@link InqBulkheadInterruptedException} with the thread's interrupt flag restored
    */
   @Override
   public boolean tryAcquire(String callId, Duration timeout) throws InterruptedException {

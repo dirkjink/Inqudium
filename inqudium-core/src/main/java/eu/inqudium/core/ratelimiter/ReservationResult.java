@@ -20,29 +20,29 @@ import java.time.Duration;
  * @param timedOut     whether the wait would exceed the configured timeout
  */
 public record ReservationResult(
-        RateLimiterSnapshot snapshot,
-        Duration waitDuration,
-        boolean timedOut
+    RateLimiterSnapshot snapshot,
+    Duration waitDuration,
+    boolean timedOut
 ) {
 
-    /**
-     * Creates a successful reservation with no wait required.
-     */
-    public static ReservationResult immediate(RateLimiterSnapshot snapshot) {
-        return new ReservationResult(snapshot, Duration.ZERO, false);
-    }
+  /**
+   * Creates a successful reservation with no wait required.
+   */
+  public static ReservationResult immediate(RateLimiterSnapshot snapshot) {
+    return new ReservationResult(snapshot, Duration.ZERO, false);
+  }
 
-    /**
-     * Creates a reservation that requires the caller to wait.
-     */
-    public static ReservationResult delayed(RateLimiterSnapshot snapshot, Duration waitDuration) {
-        return new ReservationResult(snapshot, waitDuration, false);
-    }
+  /**
+   * Creates a reservation that requires the caller to wait.
+   */
+  public static ReservationResult delayed(RateLimiterSnapshot snapshot, Duration waitDuration) {
+    return new ReservationResult(snapshot, waitDuration, false);
+  }
 
-    /**
-     * Creates a timed-out reservation — the permit was NOT consumed.
-     */
-    public static ReservationResult timedOut(RateLimiterSnapshot snapshot, Duration wouldHaveWaited) {
-        return new ReservationResult(snapshot, wouldHaveWaited, true);
-    }
+  /**
+   * Creates a timed-out reservation — the permit was NOT consumed.
+   */
+  public static ReservationResult timedOut(RateLimiterSnapshot snapshot, Duration wouldHaveWaited) {
+    return new ReservationResult(snapshot, wouldHaveWaited, true);
+  }
 }

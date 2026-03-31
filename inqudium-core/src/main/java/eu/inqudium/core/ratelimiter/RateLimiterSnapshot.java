@@ -17,32 +17,32 @@ import java.time.Instant;
  * @param lastRefillTime   timestamp of the last (possibly virtual) refill
  */
 public record RateLimiterSnapshot(
-        int availablePermits,
-        Instant lastRefillTime
+    int availablePermits,
+    Instant lastRefillTime
 ) {
 
-    /**
-     * Creates the initial snapshot with a full bucket.
-     */
-    public static RateLimiterSnapshot initial(RateLimiterConfig config, Instant now) {
-        return new RateLimiterSnapshot(config.capacity(), now);
-    }
+  /**
+   * Creates the initial snapshot with a full bucket.
+   */
+  public static RateLimiterSnapshot initial(RateLimiterConfig config, Instant now) {
+    return new RateLimiterSnapshot(config.capacity(), now);
+  }
 
-    // --- Wither methods for immutable updates ---
+  // --- Wither methods for immutable updates ---
 
-    public RateLimiterSnapshot withAvailablePermits(int permits) {
-        return new RateLimiterSnapshot(permits, lastRefillTime);
-    }
+  public RateLimiterSnapshot withAvailablePermits(int permits) {
+    return new RateLimiterSnapshot(permits, lastRefillTime);
+  }
 
-    public RateLimiterSnapshot withLastRefillTime(Instant time) {
-        return new RateLimiterSnapshot(availablePermits, time);
-    }
+  public RateLimiterSnapshot withLastRefillTime(Instant time) {
+    return new RateLimiterSnapshot(availablePermits, time);
+  }
 
-    public RateLimiterSnapshot withPermitConsumed() {
-        return new RateLimiterSnapshot(availablePermits - 1, lastRefillTime);
-    }
+  public RateLimiterSnapshot withPermitConsumed() {
+    return new RateLimiterSnapshot(availablePermits - 1, lastRefillTime);
+  }
 
-    public RateLimiterSnapshot withRefill(int newPermits, Instant newRefillTime) {
-        return new RateLimiterSnapshot(newPermits, newRefillTime);
-    }
+  public RateLimiterSnapshot withRefill(int newPermits, Instant newRefillTime) {
+    return new RateLimiterSnapshot(newPermits, newRefillTime);
+  }
 }

@@ -2,7 +2,6 @@ package eu.inqudium.bulkhead.imperative;
 
 import eu.inqudium.core.bulkhead.BlockingBulkheadStateMachine;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
-import eu.inqudium.core.bulkhead.BulkheadStateMachine;
 
 /**
  * Factory for creating configured instances of imperative bulkheads.

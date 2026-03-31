@@ -142,10 +142,10 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
   /**
    * Creates a new AIMD algorithm in <b>classic mode</b> (backward-compatible).
    *
-   * @param initialLimit   The starting concurrency limit before any feedback is received.
-   * @param minLimit       The absolute minimum limit.
-   * @param maxLimit       The absolute upper bound to prevent infinite scaling.
-   * @param backoffRatio   The multiplier for the decrease phase (e.g., 0.5 for halving).
+   * @param initialLimit The starting concurrency limit before any feedback is received.
+   * @param minLimit     The absolute minimum limit.
+   * @param maxLimit     The absolute upper bound to prevent infinite scaling.
+   * @param backoffRatio The multiplier for the decrease phase (e.g., 0.5 for halving).
    */
   public AimdLimitAlgorithm(int initialLimit,
                             int minLimit,
@@ -166,16 +166,16 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    * behavioral parameters.
    *
    * @param initialLimit          The starting concurrency limit. Clamped to
-   * [{@code minLimit}, {@code maxLimit}].
+   *                              [{@code minLimit}, {@code maxLimit}].
    * @param minLimit              The absolute minimum limit. Clamped to at least 1.
    * @param maxLimit              The absolute upper bound. Clamped to at least {@code minLimit}.
    * @param backoffRatio          The decrease multiplier. Clamped to [0.1, 0.9].
    * @param smoothingTimeConstant Time constant (Tau) for the continuous-time EWMA.
-   * A larger duration = smoother (more resistant to transient spikes).
+   *                              A larger duration = smoother (more resistant to transient spikes).
    * @param errorRateThreshold    The smoothed error rate must strictly exceed this value to
-   * trigger a multiplicative decrease. Clamped to [0.0, 1.0].
+   *                              trigger a multiplicative decrease. Clamped to [0.0, 1.0].
    * @param windowedIncrease      {@code true} for TCP-style {@code +1/currentLimit} increase,
-   * {@code false} for classic {@code +1} increase.
+   *                              {@code false} for classic {@code +1} increase.
    * @param nanoTimeSource        The time source used for calculating elapsed time.
    */
   public AimdLimitAlgorithm(int initialLimit, int minLimit, int maxLimit,
@@ -272,11 +272,11 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    * Immutable snapshot of the algorithm's mutable state.
    *
    * @param currentLimit      The current concurrency limit as a double to support fractional
-   * windowed increments. Always in [{@code minLimit}, {@code maxLimit}].
+   *                          windowed increments. Always in [{@code minLimit}, {@code maxLimit}].
    * @param smoothedErrorRate The time-smoothed error rate, ranging from 0.0 (all recent calls
-   * succeeded) to 1.0 (all recent calls failed).
+   *                          succeeded) to 1.0 (all recent calls failed).
    * @param lastUpdateNanos   The timestamp of the last state update, used by the
-   * {@link ContinuousTimeEwma} calculator.
+   *                          {@link ContinuousTimeEwma} calculator.
    */
   private record AimdState(double currentLimit, double smoothedErrorRate, long lastUpdateNanos) {
   }

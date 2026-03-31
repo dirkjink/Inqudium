@@ -35,6 +35,42 @@ class AdaptiveImperativeStateMachineTest {
     stateMachine = new AdaptiveImperativeStateMachine("test-adaptive", config, limitAlgorithm);
   }
 
+  private static class FakeLimitAlgorithm implements InqLimitAlgorithm {
+    private volatile int limit;
+    private volatile boolean throwOnUpdate = false;
+
+    FakeLimitAlgorithm(int limit) {
+      this.limit = limit;
+    }
+
+    public void setThrowOnUpdate(boolean throwOnUpdate) {
+      this.throwOnUpdate = throwOnUpdate;
+    }
+
+    @Override
+    public int getLimit() {
+      return limit;
+    }
+
+    public void setLimit(int limit) {
+      this.limit = limit;
+    }
+
+    @Override
+    public void update(Duration rtt, boolean success) {
+      if (throwOnUpdate) {
+        throw new RuntimeException("Simulated algorithm crash");
+      }
+    }
+  }
+
+  private static class StubClock implements InqClock {
+    @Override
+    public Instant instant() {
+      return Instant.now();
+    }
+  }
+
   @Nested
   class PermitAcquisition {
 
@@ -67,6 +103,7 @@ class AdaptiveImperativeStateMachineTest {
       assertThat(stateMachine.getConcurrentCalls()).isEqualTo(2);
     }
   }
+
   @Nested
   class EdgeCases {
 
@@ -126,6 +163,8 @@ class AdaptiveImperativeStateMachineTest {
     }
   }
 
+  // --- Manual Test Doubles (Fakes & Stubs) ---
+
   @Nested
   class DynamicLimitAdjustment {
 
@@ -140,13 +179,19 @@ class AdaptiveImperativeStateMachineTest {
 
       // Two threads want a permit. They will both block because the limit is 1.
       CompletableFuture<Boolean> waitingThread1 = CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("call-2", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("call-2", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
 
       CompletableFuture<Boolean> waitingThread2 = CompletableFuture.supplyAsync(() -> {
-        try { return stateMachine.tryAcquire("call-3", Duration.ofSeconds(5)); }
-        catch (InterruptedException e) { return false; }
+        try {
+          return stateMachine.tryAcquire("call-3", Duration.ofSeconds(5));
+        } catch (InterruptedException e) {
+          return false;
+        }
       });
 
       // Ensure the async threads are actually in the waiting state
@@ -187,7 +232,8 @@ class AdaptiveImperativeStateMachineTest {
         try {
           Thread.sleep(50);
           currentThread.interrupt();
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+        }
       });
 
       // When & Then
@@ -196,44 +242,6 @@ class AdaptiveImperativeStateMachineTest {
 
       // Clear interrupt status to not affect subsequent tests
       Thread.interrupted();
-    }
-  }
-
-  // --- Manual Test Doubles (Fakes & Stubs) ---
-
-  private static class FakeLimitAlgorithm implements InqLimitAlgorithm {
-    private volatile int limit;
-    private volatile boolean throwOnUpdate = false;
-
-    FakeLimitAlgorithm(int limit) {
-      this.limit = limit;
-    }
-
-    public void setLimit(int limit) {
-      this.limit = limit;
-    }
-
-    public void setThrowOnUpdate(boolean throwOnUpdate) {
-      this.throwOnUpdate = throwOnUpdate;
-    }
-
-    @Override
-    public int getLimit() {
-      return limit;
-    }
-
-    @Override
-    public void update(Duration rtt, boolean success) {
-      if (throwOnUpdate) {
-        throw new RuntimeException("Simulated algorithm crash");
-      }
-    }
-  }
-
-  private static class StubClock implements InqClock {
-    @Override
-    public Instant instant() {
-      return Instant.now();
     }
   }
 }

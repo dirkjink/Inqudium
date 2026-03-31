@@ -32,6 +32,13 @@ class SemaphoreImperativeStateMachineTest {
     stateMachine = new SemaphoreImperativeStateMachine("test-imperative", config);
   }
 
+  private static class StubClock implements InqClock {
+    @Override
+    public Instant instant() {
+      return Instant.now();
+    }
+  }
+
   @Nested
   class PermitAcquisition {
 
@@ -162,6 +169,8 @@ class SemaphoreImperativeStateMachineTest {
     }
   }
 
+  // --- Manual Test Doubles (Stubs) ---
+
   @Nested
   class InterruptionHandling {
 
@@ -179,7 +188,8 @@ class SemaphoreImperativeStateMachineTest {
         try {
           Thread.sleep(50);
           currentThread.interrupt();
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+        }
       });
 
       // When & Then
@@ -192,15 +202,6 @@ class SemaphoreImperativeStateMachineTest {
 
       // Ensure state is unchanged
       assertThat(stateMachine.getConcurrentCalls()).isEqualTo(2);
-    }
-  }
-
-  // --- Manual Test Doubles (Stubs) ---
-
-  private static class StubClock implements InqClock {
-    @Override
-    public Instant instant() {
-      return Instant.now();
     }
   }
 }

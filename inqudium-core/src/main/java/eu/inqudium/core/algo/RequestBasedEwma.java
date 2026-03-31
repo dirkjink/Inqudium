@@ -28,9 +28,9 @@ public final class RequestBasedEwma {
    * Creates a new Request-Based EWMA calculator.
    *
    * @param smoothingFactor The EWMA alpha factor. Clamped to [0.01, 1.0].
-   * Lower values mean the average reacts more slowly to new samples.
-   * A value of 1.0 disables smoothing entirely (each sample fully
-   * overwrites the previous rate).
+   *                        Lower values mean the average reacts more slowly to new samples.
+   *                        A value of 1.0 disables smoothing entirely (each sample fully
+   *                        overwrites the previous rate).
    */
   public RequestBasedEwma(double smoothingFactor) {
     // Clamping to [0.01, 1.0] to prevent degenerate states like 0.0 (permanently frozen)
@@ -46,7 +46,7 @@ public final class RequestBasedEwma {
    *
    * @param currentValue The current smoothed value before this update.
    * @param sample       The new sample value to blend into the average
-   * (e.g., 0.0 for success, 1.0 for failure).
+   *                     (e.g., 0.0 for success, 1.0 for failure).
    * @return The newly calculated smoothed value.
    */
   public double calculate(double currentValue, double sample) {

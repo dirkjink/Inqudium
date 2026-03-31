@@ -29,157 +29,157 @@ import java.time.Instant;
  */
 public final class CircuitBreakerCore {
 
-    private CircuitBreakerCore() {
-        // Utility class — not instantiable
-    }
+  private CircuitBreakerCore() {
+    // Utility class — not instantiable
+  }
 
-    // ======================== Permission ========================
+  // ======================== Permission ========================
 
-    /**
-     * Evaluates whether a call is permitted given the current state.
-     *
-     * <p>May trigger a state transition from OPEN → HALF_OPEN when the
-     * wait duration has expired. The returned {@link PermissionResult}
-     * contains the (possibly updated) snapshot.
-     *
-     * @param snapshot the current state snapshot
-     * @param config   the circuit breaker configuration
-     * @param now      the current timestamp
-     * @return a {@link PermissionResult} indicating whether the call is permitted
-     */
-    public static PermissionResult tryAcquirePermission(
-            CircuitBreakerSnapshot snapshot,
-            CircuitBreakerConfig config,
-            Instant now) {
+  /**
+   * Evaluates whether a call is permitted given the current state.
+   *
+   * <p>May trigger a state transition from OPEN → HALF_OPEN when the
+   * wait duration has expired. The returned {@link PermissionResult}
+   * contains the (possibly updated) snapshot.
+   *
+   * @param snapshot the current state snapshot
+   * @param config   the circuit breaker configuration
+   * @param now      the current timestamp
+   * @return a {@link PermissionResult} indicating whether the call is permitted
+   */
+  public static PermissionResult tryAcquirePermission(
+      CircuitBreakerSnapshot snapshot,
+      CircuitBreakerConfig config,
+      Instant now) {
 
-        return switch (snapshot.state()) {
-            case CLOSED -> PermissionResult.permitted(snapshot);
+    return switch (snapshot.state()) {
+      case CLOSED -> PermissionResult.permitted(snapshot);
 
-            case OPEN -> {
-                if (isWaitDurationExpired(snapshot, config, now)) {
-                    // Transition OPEN → HALF_OPEN and permit the first probe call
-                    CircuitBreakerSnapshot halfOpen = snapshot
-                            .withState(CircuitState.HALF_OPEN, now)
-                            .withIncrementedHalfOpenAttempts();
-                    yield PermissionResult.permitted(halfOpen);
-                }
-                yield PermissionResult.rejected(snapshot);
-            }
-
-            case HALF_OPEN -> {
-                if (snapshot.halfOpenAttempts() < config.permittedCallsInHalfOpen()) {
-                    yield PermissionResult.permitted(snapshot.withIncrementedHalfOpenAttempts());
-                }
-                yield PermissionResult.rejected(snapshot);
-            }
-        };
-    }
-
-    // ======================== Recording outcomes ========================
-
-    /**
-     * Records a successful call and returns the updated snapshot.
-     *
-     * <p>In CLOSED state the failure counter is reset.
-     * In HALF_OPEN state the success counter is incremented; if it reaches the
-     * configured threshold the circuit transitions back to CLOSED.
-     *
-     * @param snapshot the current state snapshot
-     * @param config   the circuit breaker configuration
-     * @param now      the current timestamp
-     * @return the updated snapshot
-     */
-    public static CircuitBreakerSnapshot recordSuccess(
-            CircuitBreakerSnapshot snapshot,
-            CircuitBreakerConfig config,
-            Instant now) {
-
-        return switch (snapshot.state()) {
-            case CLOSED -> snapshot.withResetFailureCount();
-
-            case HALF_OPEN -> {
-                int newSuccessCount = snapshot.successCount() + 1;
-                if (newSuccessCount >= config.successThresholdInHalfOpen()) {
-                    // Transition HALF_OPEN → CLOSED
-                    yield snapshot.withState(CircuitState.CLOSED, now);
-                }
-                yield snapshot.withIncrementedSuccessCount();
-            }
-
-            // Should not happen — calls are rejected in OPEN state
-            case OPEN -> snapshot;
-        };
-    }
-
-    /**
-     * Records a failed call and returns the updated snapshot.
-     *
-     * <p>In CLOSED state the failure counter is incremented; if it reaches the
-     * configured threshold the circuit transitions to OPEN.
-     * In HALF_OPEN state any failure immediately transitions back to OPEN.
-     *
-     * @param snapshot the current state snapshot
-     * @param config   the circuit breaker configuration
-     * @param now      the current timestamp
-     * @return the updated snapshot
-     */
-    public static CircuitBreakerSnapshot recordFailure(
-            CircuitBreakerSnapshot snapshot,
-            CircuitBreakerConfig config,
-            Instant now) {
-
-        return switch (snapshot.state()) {
-            case CLOSED -> {
-                int newFailureCount = snapshot.failureCount() + 1;
-                if (newFailureCount >= config.failureThreshold()) {
-                    // Transition CLOSED → OPEN
-                    yield snapshot.withState(CircuitState.OPEN, now);
-                }
-                yield snapshot.withIncrementedFailureCount();
-            }
-
-            // Any failure in HALF_OPEN immediately reopens the circuit
-            case HALF_OPEN -> snapshot.withState(CircuitState.OPEN, now);
-
-            // Should not happen — calls are rejected in OPEN state
-            case OPEN -> snapshot;
-        };
-    }
-
-    // ======================== Query helpers ========================
-
-    /**
-     * Returns the current {@link CircuitState} of the snapshot.
-     */
-    public static CircuitState currentState(CircuitBreakerSnapshot snapshot) {
-        return snapshot.state();
-    }
-
-    /**
-     * Checks whether the wait duration in OPEN state has expired.
-     */
-    public static boolean isWaitDurationExpired(
-            CircuitBreakerSnapshot snapshot,
-            CircuitBreakerConfig config,
-            Instant now) {
-
-        Duration elapsed = Duration.between(snapshot.stateChangedAt(), now);
-        return elapsed.compareTo(config.waitDurationInOpenState()) >= 0;
-    }
-
-    /**
-     * Detects whether a state transition occurred between two snapshots.
-     * Returns {@code null} if no transition happened.
-     */
-    public static StateTransition detectTransition(
-            String name,
-            CircuitBreakerSnapshot before,
-            CircuitBreakerSnapshot after,
-            Instant now) {
-
-        if (before.state() != after.state()) {
-            return new StateTransition(name, before.state(), after.state(), now);
+      case OPEN -> {
+        if (isWaitDurationExpired(snapshot, config, now)) {
+          // Transition OPEN → HALF_OPEN and permit the first probe call
+          CircuitBreakerSnapshot halfOpen = snapshot
+              .withState(CircuitState.HALF_OPEN, now)
+              .withIncrementedHalfOpenAttempts();
+          yield PermissionResult.permitted(halfOpen);
         }
-        return null;
+        yield PermissionResult.rejected(snapshot);
+      }
+
+      case HALF_OPEN -> {
+        if (snapshot.halfOpenAttempts() < config.permittedCallsInHalfOpen()) {
+          yield PermissionResult.permitted(snapshot.withIncrementedHalfOpenAttempts());
+        }
+        yield PermissionResult.rejected(snapshot);
+      }
+    };
+  }
+
+  // ======================== Recording outcomes ========================
+
+  /**
+   * Records a successful call and returns the updated snapshot.
+   *
+   * <p>In CLOSED state the failure counter is reset.
+   * In HALF_OPEN state the success counter is incremented; if it reaches the
+   * configured threshold the circuit transitions back to CLOSED.
+   *
+   * @param snapshot the current state snapshot
+   * @param config   the circuit breaker configuration
+   * @param now      the current timestamp
+   * @return the updated snapshot
+   */
+  public static CircuitBreakerSnapshot recordSuccess(
+      CircuitBreakerSnapshot snapshot,
+      CircuitBreakerConfig config,
+      Instant now) {
+
+    return switch (snapshot.state()) {
+      case CLOSED -> snapshot.withResetFailureCount();
+
+      case HALF_OPEN -> {
+        int newSuccessCount = snapshot.successCount() + 1;
+        if (newSuccessCount >= config.successThresholdInHalfOpen()) {
+          // Transition HALF_OPEN → CLOSED
+          yield snapshot.withState(CircuitState.CLOSED, now);
+        }
+        yield snapshot.withIncrementedSuccessCount();
+      }
+
+      // Should not happen — calls are rejected in OPEN state
+      case OPEN -> snapshot;
+    };
+  }
+
+  /**
+   * Records a failed call and returns the updated snapshot.
+   *
+   * <p>In CLOSED state the failure counter is incremented; if it reaches the
+   * configured threshold the circuit transitions to OPEN.
+   * In HALF_OPEN state any failure immediately transitions back to OPEN.
+   *
+   * @param snapshot the current state snapshot
+   * @param config   the circuit breaker configuration
+   * @param now      the current timestamp
+   * @return the updated snapshot
+   */
+  public static CircuitBreakerSnapshot recordFailure(
+      CircuitBreakerSnapshot snapshot,
+      CircuitBreakerConfig config,
+      Instant now) {
+
+    return switch (snapshot.state()) {
+      case CLOSED -> {
+        int newFailureCount = snapshot.failureCount() + 1;
+        if (newFailureCount >= config.failureThreshold()) {
+          // Transition CLOSED → OPEN
+          yield snapshot.withState(CircuitState.OPEN, now);
+        }
+        yield snapshot.withIncrementedFailureCount();
+      }
+
+      // Any failure in HALF_OPEN immediately reopens the circuit
+      case HALF_OPEN -> snapshot.withState(CircuitState.OPEN, now);
+
+      // Should not happen — calls are rejected in OPEN state
+      case OPEN -> snapshot;
+    };
+  }
+
+  // ======================== Query helpers ========================
+
+  /**
+   * Returns the current {@link CircuitState} of the snapshot.
+   */
+  public static CircuitState currentState(CircuitBreakerSnapshot snapshot) {
+    return snapshot.state();
+  }
+
+  /**
+   * Checks whether the wait duration in OPEN state has expired.
+   */
+  public static boolean isWaitDurationExpired(
+      CircuitBreakerSnapshot snapshot,
+      CircuitBreakerConfig config,
+      Instant now) {
+
+    Duration elapsed = Duration.between(snapshot.stateChangedAt(), now);
+    return elapsed.compareTo(config.waitDurationInOpenState()) >= 0;
+  }
+
+  /**
+   * Detects whether a state transition occurred between two snapshots.
+   * Returns {@code null} if no transition happened.
+   */
+  public static StateTransition detectTransition(
+      String name,
+      CircuitBreakerSnapshot before,
+      CircuitBreakerSnapshot after,
+      Instant now) {
+
+    if (before.state() != after.state()) {
+      return new StateTransition(name, before.state(), after.state(), now);
     }
+    return null;
+  }
 }

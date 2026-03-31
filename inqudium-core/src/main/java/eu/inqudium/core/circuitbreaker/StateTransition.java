@@ -12,14 +12,14 @@ import java.time.Instant;
  * @param timestamp when the transition occurred
  */
 public record StateTransition(
-        String name,
-        CircuitState fromState,
-        CircuitState toState,
-        Instant timestamp
+    String name,
+    CircuitState fromState,
+    CircuitState toState,
+    Instant timestamp
 ) {
 
-    @Override
-    public String toString() {
-        return "CircuitBreaker '%s': %s -> %s at %s".formatted(name, fromState, toState, timestamp);
-    }
+  @Override
+  public String toString() {
+    return "CircuitBreaker '%s': %s -> %s at %s".formatted(name, fromState, toState, timestamp);
+  }
 }

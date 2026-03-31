@@ -26,8 +26,8 @@ public final class ContinuousTimeEwma {
    * Creates a new Continuous-Time EWMA calculator.
    *
    * @param timeConstant The time constant (Tau). A larger duration means the average
-   * reacts more slowly and ignores short spikes. Must be at least
-   * 1 nanosecond to prevent division by zero.
+   *                     reacts more slowly and ignores short spikes. Must be at least
+   *                     1 nanosecond to prevent division by zero.
    */
   public ContinuousTimeEwma(Duration timeConstant) {
     this.tauNanos = Math.max(1L, timeConstant.toNanos());
@@ -44,7 +44,7 @@ public final class ContinuousTimeEwma {
    * @param lastUpdateNanos The timestamp (in nanoseconds) of the last state update.
    * @param nowNanos        The current timestamp (in nanoseconds).
    * @param sample          The new sample value (e.g., 0.0 for success, 1.0 for failure)
-   * to blend into the average.
+   *                        to blend into the average.
    * @return The newly calculated, time-decayed smoothed value.
    */
   public double calculate(double currentValue, long lastUpdateNanos, long nowNanos, double sample) {

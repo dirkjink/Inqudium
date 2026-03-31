@@ -4,7 +4,6 @@ import eu.inqudium.bulkhead.Bulkhead;
 import eu.inqudium.core.InqCall;
 import eu.inqudium.core.bulkhead.BlockingBulkheadStateMachine;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
-import eu.inqudium.core.bulkhead.BulkheadStateMachine;
 import eu.inqudium.core.event.InqEventPublisher;
 
 import java.time.Duration;
