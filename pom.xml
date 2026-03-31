@@ -35,11 +35,6 @@
         <module>inqudium-bom</module>
         <module>inqudium-core</module>
         <module>inqudium-context-slf4j</module>
-        <module>inqudium-circuitbreaker</module>
-        <module>inqudium-retry</module>
-        <module>inqudium-ratelimiter</module>
-        <module>inqudium-bulkhead</module>
-        <module>inqudium-timelimiter</module>
         <module>inqudium-kotlin</module>
         <module>inqudium-reactor</module>
         <module>inqudium-rxjava3</module>
