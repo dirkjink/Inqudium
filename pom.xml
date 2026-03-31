@@ -44,6 +44,7 @@
         <module>inqudium-reactor</module>
         <module>inqudium-rxjava3</module>
         <module>inqudium-spring-boot3</module>
+        <module>inqudium-imperative</module>
     </modules>
 
     <!-- ═══════════════════════════════════════════════════════ -->
