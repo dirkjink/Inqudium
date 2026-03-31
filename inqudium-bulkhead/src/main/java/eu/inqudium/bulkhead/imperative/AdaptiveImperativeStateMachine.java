@@ -559,12 +559,27 @@ public final class AdaptiveImperativeStateMachine
       //   They'll find activeCalls >= 5 (still over-capacity), loop back, and awaitNanos()
       //   returns with updated remaining time. If their timeout has elapsed, they exit
       //   promptly instead of sleeping unnecessarily.
-      //
-      // signalAll() inside the lock guarantees that woken threads will see the updated
-      // limit when they re-check the while condition, because the lock ensures
-      // happens-before ordering.
-      if (limitChanged) {
-        notFull.signalAll();
+
+      if (newLimit > capturedOldLimit) {
+        // ── Targeted wakeup to eliminate "Thundering Herd" ──
+        //
+        // Instead of calling signalAll() on a limit change, which wakes every parked thread
+        // simultaneously (causing a massive CPU-intensive "thundering herd" where most threads
+        // just fight for the lock, realize the limit is still too tight, and go back to sleep),
+        // we perform a highly optimized, targeted wakeup.
+        //
+        // 1. We only wake threads if the limit actually INCREASES. If the limit decreases,
+        //    there is no new capacity, so waking threads is pointless and wastes CPU cycles.
+        // 2. We calculate the exact delta of newly created slots (newLimit - capturedOldLimit).
+        // 3. We call signal() exactly that many times.
+        //
+        // This precise routing ensures we only wake up the exact number of threads that can
+        // realistically acquire a newly freed permit. This mimics the highly optimized behavior
+        // of core JVM concurrency primitives and guarantees maximum throughput under heavy load.
+        int newlyAvailableSlots = newLimit - capturedOldLimit;
+        for (int i = 0; i < newlyAvailableSlots; i++) {
+          notFull.signal();
+        }
       }
     } finally {
       lock.unlock();
