@@ -23,10 +23,17 @@ import java.util.function.LongSupplier;
  * <p>This class distinguishes between <b>infrastructure errors</b> (permit release, adaptive
  * algorithm) and <b>telemetry errors</b> (event publishing). The contract is:
  * <ul>
- *   <li><b>Telemetry errors are never propagated.</b> A crashing event publisher must never
- *       disrupt the business call flow. All telemetry exceptions are logged at ERROR level
- *       and swallowed. This makes the behavior predictable: callers never see telemetry
- *       exceptions regardless of whether the business call succeeded or failed.</li>
+ *   <li><b>Post-acquire telemetry errors are never propagated.</b> Once a permit has been
+ *       irrevocably granted (acquire event published) or a rejection has been decided, a
+ *       crashing event publisher must never disrupt the business call flow. All such
+ *       telemetry exceptions — wait traces on both success and failure paths, reject events,
+ *       and release events — are logged at ERROR level and swallowed.</li>
+ *   <li><b>Acquire event failures trigger a rollback.</b> The acquire event is the sole
+ *       exception to the suppression rule. If the primary acquire event cannot be published,
+ *       the permit is rolled back and the exception is propagated. This is safe because the
+ *       business call has not started yet — a clean abort is possible and preferable to an
+ *       orphaned release event with no matching acquire. See
+ *       {@link #handleAcquireSuccess} for the full two-tier rationale.</li>
  *   <li><b>Infrastructure errors are always propagated.</b> A failing {@code releasePermitInternal()}
  *       indicates a state machine defect that must surface. If a business error already exists,
  *       the infrastructure error is attached as suppressed; otherwise it is thrown directly.</li>
@@ -191,37 +198,107 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
   }
 
   /**
-   * Restructured to avoid contradictory telemetry. The wait trace is now
-   * published AFTER the acquire event succeeds (not before). On rollback, we no
-   * longer have a "wait acquired=true" trace followed by a "rollback" trace —
-   * instead, only the rollback trace is emitted, which is consistent.
+   * Publishes telemetry for a successful permit acquisition.
+   *
+   * <h3>Two-Tier Error Handling</h3>
+   * <p>This method distinguishes between two categories of telemetry:
+   * <ul>
+   *   <li><b>Acquire event (critical):</b> If the primary acquire event cannot be published,
+   *       the permit is rolled back and the exception is propagated. The rationale is that
+   *       the acquire path is the only point where we can still abort cleanly — the business
+   *       call has not started yet. Allowing a call to proceed without any acquire telemetry
+   *       would create an orphaned release event with no matching acquire, which is worse for
+   *       observability than a clean rollback.</li>
+   *   <li><b>Wait trace (best-effort):</b> If the wait trace fails after the acquire event
+   *       has already been published, the error is logged and swallowed. Rolling back the
+   *       permit at this point would be incorrect: the acquire event is already in the stream,
+   *       and a rollback would produce contradictory telemetry (acquire → rollback, but no
+   *       release). The permit must remain granted so the business call proceeds normally and
+   *       eventually produces a matching release event.</li>
+   * </ul>
+   *
+   * <p>This two-tier approach aligns with the contract established in
+   * {@link #releaseAndReport}: telemetry failures must not disrupt the business call flow
+   * once the permit is irrevocably granted.
    */
   protected final boolean handleAcquireSuccess(String callId, long startWait) {
+    // ── Tier 1: Acquire event — critical, rollback on failure ──
     try {
       var snap = snapshot();
       eventPublisher.publish(new BulkheadOnAcquireEvent(
           callId, name, snap.concurrentCalls(), snap.timestamp()));
-      // Publish wait trace only AFTER the acquire event succeeded
-      publishWaitTrace(callId, startWait, true);
-      return true;
     } catch (RuntimeException e) {
-      // CRITICAL: Rollback the permit if event publishing crashes
+      // The acquire event failed. No telemetry has been emitted for this call yet,
+      // so rolling back the permit produces a clean state: no acquire, no release,
+      // just a rollback trace for diagnostics.
       rollbackPermit();
-      eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(
-          callId,
-          name,
-          e.getClass().getSimpleName(),
-          config.getClock().instant()
-      ));
+
+      // The rollback trace itself is best-effort — if it also fails, we must not
+      // mask the original exception or leave the caller without any signal.
+      try {
+        eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(
+            callId,
+            name,
+            e.getClass().getSimpleName(),
+            config.getClock().instant()
+        ));
+      } catch (RuntimeException traceError) {
+        LOG.error("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
+            + "The permit has been rolled back; this is a telemetry-only failure.",
+            name, callId, traceError);
+      }
+
       throw e;
     }
+
+    // ── Tier 2: Wait trace — best-effort, swallow on failure ──
+    //
+    // At this point the acquire event has been published successfully. The permit
+    // is irrevocably granted. A wait trace failure must NOT roll back the permit,
+    // because that would leave a published acquire event without a matching release.
+    try {
+      publishWaitTrace(callId, startWait, true);
+    } catch (RuntimeException e) {
+      LOG.error("Failed to publish wait trace for acquired call on bulkhead '{}', "
+          + "callId='{}'. The permit has been acquired; this is a telemetry-only "
+          + "failure.", name, callId, e);
+    }
+
+    return true;
   }
 
+  /**
+   * Publishes telemetry for a failed permit acquisition (timeout, CoDel rejection,
+   * or interruption).
+   *
+   * <h3>Exception Suppression Contract</h3>
+   * <p>This method follows the same telemetry-safety contract as
+   * {@link #releaseAndReport}: publisher errors are <b>always logged and never
+   * propagated</b>. The callers of this method (timeout, CoDel drop, and interruption
+   * paths in the state machines) must be able to return {@code false} or throw their
+   * domain exception ({@link eu.inqudium.core.bulkhead.InqBulkheadFullException},
+   * {@link eu.inqudium.core.bulkhead.InqBulkheadInterruptedException}) without risk
+   * of a telemetry crash masking the intended outcome.
+   *
+   * <p>Each telemetry operation is independently guarded so that a failure in the
+   * wait trace does not prevent the reject event from being published, and vice versa.
+   */
   protected final void handleAcquireFailure(String callId, long startWait) {
-    publishWaitTrace(callId, startWait, false);
-    var snap = snapshot();
-    eventPublisher.publish(new BulkheadOnRejectEvent(
-        callId, name, snap.concurrentCalls(), snap.timestamp()));
+    try {
+      publishWaitTrace(callId, startWait, false);
+    } catch (RuntimeException e) {
+      LOG.error("Failed to publish wait trace for rejected call on bulkhead '{}', "
+          + "callId='{}'. This is a telemetry-only failure.", name, callId, e);
+    }
+
+    try {
+      var snap = snapshot();
+      eventPublisher.publish(new BulkheadOnRejectEvent(
+          callId, name, snap.concurrentCalls(), snap.timestamp()));
+    } catch (RuntimeException e) {
+      LOG.error("Failed to publish reject event for bulkhead '{}', callId='{}'. "
+          + "This is a telemetry-only failure.", name, callId, e);
+    }
   }
 
   // ── Paradigm-specific internal hooks ──

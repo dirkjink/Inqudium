@@ -283,23 +283,22 @@ public final class SemaphoreImperativeStateMachine
       //
       // The Semaphore handles all blocking, timeout, and fairness logic internally.
       // The method returns true if a permit was acquired, false if the timeout expired.
-      acquired = timeout.isZero()
-          // CRITICAL WARNING regarding Duration.ZERO semantics:
-          // We MUST use `semaphore.tryAcquire(0, TimeUnit.NANOSECONDS)` rather than the
-          // parameterless `semaphore.tryAcquire()`.
-          //
-          // According to the Java API documentation, the parameterless tryAcquire() method
-          // is inherently UNFAIR. It will barge in and steal a permit if one happens to be
-          // available, completely bypassing the Semaphore's fairness setting (fair = true)
-          // and ignoring any threads that are already waiting in the AQS queue.
-          //
-          // If a system processes a high volume of non-blocking requests (timeout = ZERO),
-          // using the parameterless method would cause severe starvation for threads that
-          // are patiently waiting with an actual timeout in the fair queue. Using
-          // tryAcquire(0, NANOSECONDS) guarantees that even immediate, non-blocking
-          // attempts respect the strict FIFO ordering of the fair semaphore.
-          ? semaphore.tryAcquire(0, TimeUnit.NANOSECONDS)
-          : semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
+      //
+      // CRITICAL WARNING regarding Duration.ZERO semantics:
+      // We MUST use `semaphore.tryAcquire(0, TimeUnit.NANOSECONDS)` rather than the
+      // parameterless `semaphore.tryAcquire()`.
+      //
+      // According to the Java API documentation, the parameterless tryAcquire() method
+      // is inherently UNFAIR. It will barge in and steal a permit if one happens to be
+      // available, completely bypassing the Semaphore's fairness setting (fair = true)
+      // and ignoring any threads that are already waiting in the AQS queue.
+      //
+      // If a system processes a high volume of non-blocking requests (timeout = ZERO),
+      // using the parameterless method would cause severe starvation for threads that
+      // are patiently waiting with an actual timeout in the fair queue. Using
+      // tryAcquire(0, NANOSECONDS) guarantees that even immediate, non-blocking
+      // attempts respect the strict FIFO ordering of the fair semaphore.
+      acquired = semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
     } catch (InterruptedException e) {
       // The thread was interrupted while waiting in the Semaphore's AQS queue.
       //
