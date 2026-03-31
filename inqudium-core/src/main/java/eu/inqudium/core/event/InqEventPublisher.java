@@ -3,6 +3,7 @@ package eu.inqudium.core.event;
 import eu.inqudium.core.InqElementType;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -130,6 +131,7 @@ public interface InqEventPublisher extends AutoCloseable {
    * @throws IllegalStateException if the hard consumer limit is reached
    */
   default InqSubscription onEvent(InqEventConsumer consumer) {
+    Objects.requireNonNull(consumer, "consumer must not be null");
     return onEvent(InqEvent.class, consumer::accept);
   }
 
