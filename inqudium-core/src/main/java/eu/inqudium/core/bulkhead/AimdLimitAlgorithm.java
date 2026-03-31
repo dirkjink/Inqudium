@@ -2,6 +2,7 @@ package eu.inqudium.core.bulkhead;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.LongSupplier;
 
 /**
  * Thread-safe implementation of the Additive Increase, Multiplicative Decrease (AIMD) algorithm.
@@ -12,34 +13,35 @@ import java.util.concurrent.atomic.AtomicReference;
  * calls allowed through a bulkhead by observing the outcomes of completed requests:
  *
  * <ul>
- *   <li><b>Additive Increase (Probing Phase):</b> After each successful call, the concurrency
- *       limit is gently increased. This allows the system to probe for available downstream
- *       capacity without risking sudden overload. The increase strategy is configurable:
- *       <ul>
- *         <li><b>Fixed ({@code +1}, default):</b> Each success adds exactly 1 to the limit.
- *             Simple and predictable, but the growth rate is proportional to transaction
- *             volume. A system processing 1000 RPS would increase the limit by 1000/sec,
- *             hitting maxLimit almost instantly.</li>
- *         <li><b>Windowed ({@code +1/currentLimit}, opt-in):</b> Each success adds a fraction
- *             inversely proportional to the current limit. Over one full "congestion window"
- *             of {@code currentLimit} consecutive successes, the net increase is exactly +1.
- *             This matches classic TCP behavior and makes the growth rate independent of
- *             transaction throughput.</li>
- *       </ul>
- *   </li>
- *   <li><b>Multiplicative Decrease (Protection Phase):</b> When the system detects sustained
- *       failures indicating downstream congestion, the limit is multiplied by a fractional
- *       backoff ratio (e.g., 0.5 to halve it). This aggressively sheds load to give the
- *       downstream service breathing room. The failure detection is configurable:
- *       <ul>
- *         <li><b>Immediate (default):</b> Every individual failure triggers a decrease.
- *             Simple but prone to overreaction on transient network hiccups.</li>
- *         <li><b>EWMA-smoothed (opt-in):</b> An Exponentially Weighted Moving Average tracks
- *             the error rate. Only when this smoothed rate exceeds a configurable threshold
- *             (e.g., 10%) is the decrease triggered. Isolated failures are absorbed without
- *             capacity loss.</li>
- *       </ul>
- *   </li>
+ * <li><b>Additive Increase (Probing Phase):</b> After each successful call, the concurrency
+ * limit is gently increased. This allows the system to probe for available downstream
+ * capacity without risking sudden overload. The increase strategy is configurable:
+ * <ul>
+ * <li><b>Fixed ({@code +1}, default):</b> Each success adds exactly 1 to the limit.
+ * Simple and predictable, but the growth rate is proportional to transaction
+ * volume. A system processing 1000 RPS would increase the limit by 1000/sec,
+ * hitting maxLimit almost instantly.</li>
+ * <li><b>Windowed ({@code +1/currentLimit}, opt-in):</b> Each success adds a fraction
+ * inversely proportional to the current limit. Over one full "congestion window"
+ * of {@code currentLimit} consecutive successes, the net increase is exactly +1.
+ * This matches classic TCP behavior and makes the growth rate independent of
+ * transaction throughput.</li>
+ * </ul>
+ * </li>
+ * <li><b>Multiplicative Decrease (Protection Phase):</b> When the system detects sustained
+ * failures indicating downstream congestion, the limit is multiplied by a fractional
+ * backoff ratio (e.g., 0.5 to halve it). This aggressively sheds load to give the
+ * downstream service breathing room. The failure detection is configurable:
+ * <ul>
+ * <li><b>Immediate (default):</b> Every individual failure triggers a decrease.
+ * Simple but prone to overreaction on transient network hiccups.</li>
+ * <li><b>Continuous-Time EWMA-smoothed (opt-in):</b> A time-based Exponentially
+ * Weighted Moving Average tracks the error rate. This ensures the decay is
+ * independent of the request rate (RPS). Only when this smoothed rate exceeds a
+ * configurable threshold (e.g., 10%) is the decrease triggered. Isolated failures
+ * are absorbed without capacity loss.</li>
+ * </ul>
+ * </li>
  * </ul>
  *
  * <p>Together, the additive increase and multiplicative decrease produce the characteristic
@@ -49,27 +51,28 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <h2>Configuration Modes</h2>
  *
- * <h3>Classic Mode (4-parameter constructor)</h3>
+ * <h3>Classic Mode (5-parameter constructor)</h3>
  * <p>Preserves the exact behavior of the original AIMD implementation for full backward
  * compatibility. Uses fixed {@code +1} increase and immediate per-failure decrease.
  * Suitable for low-to-moderate throughput systems or when simplicity is preferred over
  * stability.
  *
- * <h3>Stabilized Mode (7-parameter constructor)</h3>
+ * <h3>Stabilized Mode (8-parameter constructor)</h3>
  * <p>Enables windowed additive increase and EWMA error rate smoothing for production use
  * in high-throughput environments. Key benefits:
  * <ul>
- *   <li>Growth rate is independent of RPS (no runaway limit inflation)</li>
- *   <li>Transient single failures do not cause capacity drops</li>
- *   <li>Sawtooth amplitude is smaller and more predictable</li>
+ * <li>Growth rate is independent of RPS (no runaway limit inflation)</li>
+ * <li>Transient single failures do not cause capacity drops</li>
+ * <li>Sawtooth amplitude is smaller and more predictable</li>
  * </ul>
  *
  * <h2>Thread Safety</h2>
- * <p>All mutable algorithm state ({@code currentLimit} and {@code smoothedErrorRate}) is
- * bundled into a single immutable {@link AimdState} record and managed via
- * {@link AtomicReference#compareAndSet(Object, Object)}. This is the same pattern used by
- * {@link VegasLimitAlgorithm} and guarantees that every {@link #update(Duration, boolean)}
- * call reads and writes a consistent snapshot without any locking or blocking.
+ * <p>All mutable algorithm state ({@code currentLimit}, {@code smoothedErrorRate}, and
+ * {@code lastUpdateNanos}) is bundled into a single immutable {@link AimdState} record
+ * and managed via {@link AtomicReference#compareAndSet(Object, Object)}. This is the same
+ * pattern used by {@link VegasLimitAlgorithm} and guarantees that every
+ * {@link #update(Duration, boolean)} call reads and writes a consistent snapshot without
+ * any locking or blocking.
  *
  * <p>The CAS retry loop is wait-free in practice: the compute step is pure arithmetic
  * with no I/O, and contention is bounded by the number of threads concurrently completing
@@ -77,11 +80,11 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <h2>Comparison with {@link VegasLimitAlgorithm}</h2>
  * <table>
- *   <tr><th>Aspect</th><th>AIMD</th><th>Vegas</th></tr>
- *   <tr><td>Trigger</td><td>Error-driven (reacts to failures)</td><td>Latency-driven (reacts to queue buildup)</td></tr>
- *   <tr><td>Detection</td><td>Reactive — waits for errors to occur</td><td>Proactive — detects congestion before errors</td></tr>
- *   <tr><td>Stability</td><td>Sawtooth with sharp drops</td><td>Smooth, gradient-based adjustments</td></tr>
- *   <tr><td>Best for</td><td>Systems where errors are a reliable congestion signal</td><td>Systems where latency is a reliable congestion signal</td></tr>
+ * <tr><th>Aspect</th><th>AIMD</th><th>Vegas</th></tr>
+ * <tr><td>Trigger</td><td>Error-driven (reacts to failures)</td><td>Latency-driven (reacts to queue buildup)</td></tr>
+ * <tr><td>Detection</td><td>Reactive — waits for errors to occur</td><td>Proactive — detects congestion before errors</td></tr>
+ * <tr><td>Stability</td><td>Sawtooth with sharp drops</td><td>Smooth, gradient-based adjustments</td></tr>
+ * <tr><td>Best for</td><td>Systems where errors are a reliable congestion signal</td><td>Systems where latency is a reliable congestion signal</td></tr>
  * </table>
  *
  * @see VegasLimitAlgorithm
@@ -121,9 +124,9 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    *
    * <p>Common values and their effects:
    * <ul>
-   *   <li>{@code 0.5}: Halves the limit — aggressive, fast relief, classic TCP default</li>
-   *   <li>{@code 0.75}: 25% reduction — moderate, good for services with bursty traffic</li>
-   *   <li>{@code 0.9}: 10% reduction — gentle, suitable when errors are noisy</li>
+   * <li>{@code 0.5}: Halves the limit — aggressive, fast relief, classic TCP default</li>
+   * <li>{@code 0.75}: 25% reduction — moderate, good for services with bursty traffic</li>
+   * <li>{@code 0.9}: 10% reduction — gentle, suitable when errors are noisy</li>
    * </ul>
    *
    * <p>Lower values provide faster relief to a struggling downstream service but require
@@ -132,30 +135,27 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
   private final double backoffRatio;
 
   /**
-   * The EWMA (Exponentially Weighted Moving Average) smoothing factor for the error rate.
-   * Controls how much weight each new sample (success=0.0, failure=1.0) carries in the
-   * running average.
+   * The time constant (Tau) for the continuous-time EWMA of the error rate in nanoseconds.
+   * Controls how quickly the error rate decays over time, independent of the request rate (RPS).
    *
-   * <p>The EWMA formula is: {@code newRate = oldRate * (1 - alpha) + sample * alpha}
+   * <p>The time-based EWMA formula ensures that the weight of a past sample decays
+   * exponentially based on the elapsed time, rather than the number of intervening requests.
    *
    * <p>Effect of different values:
    * <ul>
-   *   <li>{@code 0.01}: Very smooth — a single failure barely moves the rate. Requires many
-   *       consecutive failures before the threshold is breached. Best for high-throughput
-   *       systems where transient errors are common and harmless.</li>
-   *   <li>{@code 0.1}: Moderate smoothing (recommended for production). A single failure
-   *       shifts the rate by 10%. ~7 consecutive failures push the rate above 0.5.</li>
-   *   <li>{@code 0.5}: Responsive — the rate reacts quickly to bursts. Useful when fast
-   *       reaction to sudden degradation is more important than smoothness.</li>
-   *   <li>{@code 1.0}: No smoothing at all — each sample fully overwrites the previous
-   *       rate. After a success, errorRate=0.0; after a failure, errorRate=1.0. This
-   *       reproduces the original per-call decrease behavior and is used by the
-   *       backward-compatible 4-parameter constructor.</li>
+   * <li><b>Short Duration (e.g., 10ms):</b> Very responsive — the rate reacts quickly to
+   * bursts but forgets them rapidly. Useful when fast reaction is more important than
+   * smoothness.</li>
+   * <li><b>Moderate Duration (e.g., 1s):</b> Recommended for production. Absorbs transient
+   * errors over a reasonable time window without overreacting to single failures.</li>
+   * <li><b>1 nanosecond:</b> No smoothing at all — each sample fully overwrites the previous
+   * rate instantly. This reproduces the original per-call decrease behavior and is used
+   * by the backward-compatible 5-parameter constructor.</li>
    * </ul>
    *
-   * <p>Clamped to [0.01, 1.0] during construction.
+   * <p>Clamped to at least 1 nanosecond during construction.
    */
-  private final double smoothingFactor;
+  private final long smoothingTauNanos;
 
   /**
    * The EWMA-smoothed error rate must strictly exceed this threshold before the
@@ -168,13 +168,13 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    *
    * <p>Effect of different values:
    * <ul>
-   *   <li>{@code 0.0}: Any failure with a non-zero error rate triggers decrease. Combined
-   *       with {@code smoothingFactor=1.0}, this reproduces the original behavior where
-   *       every individual failure immediately triggers a decrease.</li>
-   *   <li>{@code 0.1}: A sustained 10% error rate is required before backing off.
-   *       Absorbs sporadic timeouts in noisy network environments.</li>
-   *   <li>{@code 0.3}: Tolerates up to 30% errors before reacting — very conservative,
-   *       only suitable when failures are expected to be frequent and benign.</li>
+   * <li>{@code 0.0}: Any failure with a non-zero error rate triggers decrease. Combined
+   * with a minimal {@code smoothingTauNanos}, this reproduces the original behavior where
+   * every individual failure immediately triggers a decrease.</li>
+   * <li>{@code 0.1}: A sustained 10% error rate is required before backing off.
+   * Absorbs sporadic timeouts in noisy network environments.</li>
+   * <li>{@code 0.3}: Tolerates up to 30% errors before reacting — very conservative,
+   * only suitable when failures are expected to be frequent and benign.</li>
    * </ul>
    *
    * <p>Clamped to [0.0, 1.0] during construction.
@@ -185,13 +185,13 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    * Controls the additive increase strategy.
    *
    * <ul>
-   *   <li>{@code false} (default): Fixed increase of {@code +1} per successful call.
-   *       The limit growth rate is directly proportional to transaction throughput:
-   *       at 1000 RPS, the limit increases by ~1000/sec. Simple but unstable at high load.</li>
-   *   <li>{@code true}: Windowed increase of {@code +1/currentLimit} per successful call.
-   *       Over exactly one "congestion window" of {@code currentLimit} consecutive successes,
-   *       the net increase is +1. At limit=100, each success adds 0.01 — the growth rate
-   *       is independent of RPS. This matches TCP congestion avoidance (RFC 5681 §3.1).</li>
+   * <li>{@code false} (default): Fixed increase of {@code +1} per successful call.
+   * The limit growth rate is directly proportional to transaction throughput:
+   * at 1000 RPS, the limit increases by ~1000/sec. Simple but unstable at high load.</li>
+   * <li>{@code true}: Windowed increase of {@code +1/currentLimit} per successful call.
+   * Over exactly one "congestion window" of {@code currentLimit} consecutive successes,
+   * the net increase is +1. At limit=100, each success adds 0.01 — the growth rate
+   * is independent of RPS. This matches TCP congestion avoidance (RFC 5681 §3.1).</li>
    * </ul>
    *
    * <p><b>Why windowed increase matters:</b> Consider a system at limit=50 processing
@@ -203,19 +203,23 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    */
   private final boolean windowedIncrease;
 
+  /**
+   * The injectable nano-time source for all timing measurements related to the EWMA decay.
+   */
+  private final LongSupplier nanoTimeSource;
+
   // ──────────────────────────────────────────────────────────────────────────
   // Mutable State (managed via CAS on an immutable snapshot)
   // ──────────────────────────────────────────────────────────────────────────
 
   /**
    * The atomic reference holding the current algorithm state. All reads and writes go
-   * through this single reference using compare-and-set, ensuring that the limit and
-   * error rate are always read and written as a consistent pair.
+   * through this single reference using compare-and-set, ensuring that the limit, error
+   * rate, and timestamp are always read and written as a consistent snapshot.
    *
-   * <p>The alternative — two separate {@code AtomicInteger}/{@code AtomicLong} fields — would
-   * allow interleaved reads where one thread sees the limit from state A and the error rate
-   * from state B, potentially producing erratic adjustments. The single-reference CAS pattern
-   * eliminates this class of bugs entirely.
+   * <p>The CAS retry loop is wait-free in practice: the compute step is pure arithmetic
+   * with no I/O, and contention is bounded by the number of threads concurrently completing
+   * calls through this bulkhead.
    *
    * @see AimdState
    */
@@ -231,21 +235,20 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    * <p>This constructor preserves the exact behavior of the original, pre-refactor
    * implementation:
    * <ul>
-   *   <li>Each successful call increases the limit by exactly {@code +1}.</li>
-   *   <li>Each failed call immediately triggers a multiplicative decrease by
-   *       {@code backoffRatio}, with no smoothing or threshold filtering.</li>
+   * <li>Each successful call increases the limit by exactly {@code +1}.</li>
+   * <li>Each failed call immediately triggers a multiplicative decrease by
+   * {@code backoffRatio}, with no smoothing or threshold filtering.</li>
    * </ul>
    *
    * <p>Internally, this delegates to the full constructor with parameters chosen to
    * reproduce the classic semantics:
    * <ul>
-   *   <li>{@code smoothingFactor=1.0}: Each EWMA sample fully overwrites the error rate.
-   *       After a success the rate is 0.0, after a failure it is 1.0 — no memory of
-   *       previous samples, no smoothing effect.</li>
-   *   <li>{@code errorRateThreshold=0.0}: The decrease triggers whenever the error rate is
-   *       strictly above 0.0. Since a single failure sets the rate to 1.0 (due to
-   *       smoothingFactor=1.0), every failure immediately triggers the decrease.</li>
-   *   <li>{@code windowedIncrease=false}: Fixed +1 per success, not TCP-style windowed.</li>
+   * <li>{@code smoothingTimeConstant = 1ns}: Almost instantaneous decay. After a success
+   * the rate is 0.0, after a failure it is 1.0 — no memory of previous samples.</li>
+   * <li>{@code errorRateThreshold=0.0}: The decrease triggers whenever the error rate is
+   * strictly above 0.0. Since a single failure sets the rate to 1.0, every failure
+   * immediately triggers the decrease.</li>
+   * <li>{@code windowedIncrease=false}: Fixed +1 per success, not TCP-style windowed.</li>
    * </ul>
    *
    * @param initialLimit The starting concurrency limit before any feedback is received.
@@ -255,11 +258,20 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    * @param maxLimit     The absolute upper bound to prevent infinite scaling. Clamped to
    *                     at least {@code minLimit} to ensure a valid range.
    * @param backoffRatio The multiplier for the decrease phase (e.g., 0.5 for halving).
-   *                     Clamped to [0.1, 0.9] to prevent degenerate configurations
-   *                     (0.0 would collapse to minLimit, 1.0 would disable decrease).
+   *                     Clamped to [0.1, 0.9] to prevent degenerate configurations.
    */
-  public AimdLimitAlgorithm(int initialLimit, int minLimit, int maxLimit, double backoffRatio) {
-    this(initialLimit, minLimit, maxLimit, backoffRatio, 1.0, 0.0, false);
+  public AimdLimitAlgorithm(int initialLimit,
+                            int minLimit,
+                            int maxLimit,
+                            double backoffRatio) {
+    this(initialLimit,
+        minLimit,
+        maxLimit,
+        backoffRatio,
+        Duration.ofNanos(1),
+        0.0,
+        false,
+        System::nanoTime);
   }
 
   /**
@@ -269,60 +281,55 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    * <p><b>Recommended production configuration:</b>
    * <pre>{@code
    * new AimdLimitAlgorithm(
-   *     50,     // initialLimit: start with 50 concurrent calls
-   *     5,      // minLimit: always allow at least 5 probe requests
-   *     200,    // maxLimit: never exceed 200 concurrent calls
-   *     0.5,    // backoffRatio: halve the limit on sustained congestion
-   *     0.1,    // smoothingFactor: slow EWMA, absorbs transient spikes
-   *     0.1,    // errorRateThreshold: 10% sustained error rate triggers decrease
-   *     true    // windowedIncrease: TCP-style +1/cwnd, RPS-independent growth
+   *    50,     // initialLimit: start with 50 concurrent calls
+   *    5,      // minLimit: always allow at least 5 probe requests
+   *    200,    // maxLimit: never exceed 200 concurrent calls
+   *    0.5,    // backoffRatio: halve the limit on sustained congestion
+   *    Duration.ofSeconds(1), // smoothingTimeConstant: absorbs transient spikes
+   *    0.1,    // errorRateThreshold: 10% sustained error rate triggers decrease
+   *    true,   // windowedIncrease: TCP-style +1/cwnd, RPS-independent growth
+   *    System::nanoTime // nanoTimeSource
    * );
    * }</pre>
    *
-   * <p><b>Parameter interaction guide:</b>
-   * <ul>
-   *   <li>To reproduce classic behavior exactly: {@code smoothingFactor=1.0},
-   *       {@code errorRateThreshold=0.0}, {@code windowedIncrease=false}.</li>
-   *   <li>For maximum stability: low {@code smoothingFactor} (0.05), moderate
-   *       {@code errorRateThreshold} (0.15), {@code windowedIncrease=true}.</li>
-   *   <li>For fast reaction to real outages: higher {@code smoothingFactor} (0.3),
-   *       low {@code errorRateThreshold} (0.05), {@code windowedIncrease=true}.</li>
-   * </ul>
-   *
-   * @param initialLimit       The starting concurrency limit. Clamped to
-   *                           [{@code minLimit}, {@code maxLimit}].
-   * @param minLimit           The absolute minimum limit. Clamped to at least 1.
-   * @param maxLimit           The absolute upper bound. Clamped to at least {@code minLimit}.
-   * @param backoffRatio       The decrease multiplier. Clamped to [0.1, 0.9].
-   * @param smoothingFactor    EWMA alpha for the error rate. Clamped to [0.01, 1.0].
-   *                           Lower values = smoother (more resistant to transient spikes).
-   *                           A value of 1.0 disables smoothing entirely.
-   * @param errorRateThreshold The smoothed error rate must strictly exceed this value to
-   *                           trigger a multiplicative decrease. Clamped to [0.0, 1.0].
-   *                           A value of 0.0 triggers on any failure (with non-zero rate).
-   * @param windowedIncrease   {@code true} for TCP-style {@code +1/currentLimit} increase,
-   *                           {@code false} for classic {@code +1} increase.
+   * @param initialLimit          The starting concurrency limit. Clamped to
+   *                              [{@code minLimit}, {@code maxLimit}].
+   * @param minLimit              The absolute minimum limit. Clamped to at least 1.
+   * @param maxLimit              The absolute upper bound. Clamped to at least {@code minLimit}.
+   * @param backoffRatio          The decrease multiplier. Clamped to [0.1, 0.9].
+   * @param smoothingTimeConstant Time constant (Tau) for the continuous-time EWMA.
+   *                              A larger duration = smoother (more resistant to transient spikes).
+   * @param errorRateThreshold    The smoothed error rate must strictly exceed this value to
+   *                              trigger a multiplicative decrease. Clamped to [0.0, 1.0].
+   * @param windowedIncrease      {@code true} for TCP-style {@code +1/currentLimit} increase,
+   *                              {@code false} for classic {@code +1} increase.
+   * @param nanoTimeSource        The time source used for calculating elapsed time.
    */
-  public AimdLimitAlgorithm(int initialLimit, int minLimit, int maxLimit,
-                            double backoffRatio, double smoothingFactor,
-                            double errorRateThreshold, boolean windowedIncrease) {
+  public AimdLimitAlgorithm(int initialLimit,
+                            int minLimit,
+                            int maxLimit,
+                            double backoffRatio,
+                            Duration smoothingTimeConstant,
+                            double errorRateThreshold,
+                            boolean windowedIncrease,
+                            LongSupplier nanoTimeSource) {
 
     // Clamp all parameters to their valid ranges to prevent degenerate configurations.
-    // This is a deliberate design choice: rather than throwing on invalid input, we
-    // silently clamp to the nearest valid value. The rationale is that bulkhead
-    // configuration often comes from external config files, and a slightly out-of-range
-    // value should not crash the application at startup.
     this.minLimit = Math.max(1, minLimit);
     this.maxLimit = Math.max(this.minLimit, maxLimit);
     this.backoffRatio = Math.max(0.1, Math.min(0.9, backoffRatio));
-    this.smoothingFactor = Math.max(0.01, Math.min(1.0, smoothingFactor));
+    this.smoothingTauNanos = Math.max(1L, smoothingTimeConstant.toNanos());
     this.errorRateThreshold = Math.max(0.0, Math.min(1.0, errorRateThreshold));
     this.windowedIncrease = windowedIncrease;
+    this.nanoTimeSource = nanoTimeSource != null ? nanoTimeSource : System::nanoTime;
 
     // Clamp the initial limit to the valid [minLimit, maxLimit] range and initialize
-    // the algorithm state with a zero error rate (optimistic start — no failures seen).
+    // the algorithm state with a zero error rate (optimistic start) and current timestamp.
     double bounded = Math.max(this.minLimit, Math.min(initialLimit, this.maxLimit));
-    this.state = new AtomicReference<>(new AimdState(bounded, 0.0));
+    this.state = new AtomicReference<>(
+        new AimdState(bounded,
+            0.0,
+            this.nanoTimeSource.getAsLong()));
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -359,10 +366,10 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    * It uses a lock-free CAS retry loop (identical to {@link VegasLimitAlgorithm#update})
    * to guarantee thread safety without blocking:
    * <ol>
-   *   <li>Read the current immutable state snapshot.</li>
-   *   <li>Compute the next state from it (pure arithmetic, no side effects).</li>
-   *   <li>Attempt an atomic compare-and-set. If another thread modified the state between
-   *       steps 1 and 3, the CAS fails and the loop retries with the latest state.</li>
+   * <li>Read the current immutable state snapshot.</li>
+   * <li>Compute the next state from it (pure arithmetic, no side effects).</li>
+   * <li>Attempt an atomic compare-and-set. If another thread modified the state between
+   * steps 1 and 3, the CAS fails and the loop retries with the latest state.</li>
    * </ol>
    *
    * <p>The retry loop is wait-free in practice: the compute step involves only a few
@@ -391,6 +398,8 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
       return;
     }
 
+    long now = nanoTimeSource.getAsLong();
+
     // Lock-free CAS retry loop. Each iteration:
     // 1. Reads the current immutable state snapshot
     // 2. Computes the next state (pure function of current state + input)
@@ -400,27 +409,26 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
     do {
       current = state.get();
 
-      // ── Step 1: Update the EWMA-smoothed error rate ──
+      // ── Step 1: Update the Continuous-Time EWMA-smoothed error rate ──
       //
       // The error rate is a sliding average that tracks the recent proportion of
       // failures. Each call contributes a binary sample:
       //   - Success → 0.0 (pulls the rate down toward "all healthy")
       //   - Failure → 1.0 (pulls the rate up toward "all failing")
       //
-      // The EWMA formula:
-      //   newRate = oldRate × (1 - α) + sample × α
+      // The continuous-time EWMA formula applies an exponential decay based on the
+      // exact time elapsed since the last update, making it completely independent
+      // of the request rate (RPS):
+      //   decay = e^(-deltaTime / timeConstant)
+      //   newRate = oldRate × decay + sample × (1 - decay)
       //
-      // where α is the smoothingFactor. The effective "memory" of the EWMA is
-      // approximately 1/α samples. At α=0.1, the last ~10 samples dominate.
-      //
-      // Special case: when smoothingFactor=1.0 (classic mode), the formula reduces to:
-      //   newRate = 0.0 × 0.0 + sample × 1.0 = sample
-      // This means every sample fully overwrites the rate — no memory, no smoothing.
-      // After a success, errorRate=0.0; after a failure, errorRate=1.0. Combined with
-      // errorRateThreshold=0.0, this reproduces the original per-call decrease behavior.
+      // Math.max protects against clock skew or backward nanoTime anomalies.
+      long deltaNanos = Math.max(0, now - current.lastUpdateNanos());
+      double decay = Math.exp(-deltaNanos / (double) smoothingTauNanos);
+      double alpha = 1.0 - decay;
+
       double sample = isSuccess ? 0.0 : 1.0;
-      double newErrorRate = current.smoothedErrorRate() * (1.0 - smoothingFactor)
-          + sample * smoothingFactor;
+      double newErrorRate = current.smoothedErrorRate() * decay + sample * alpha;
 
       // ── Step 2: Calculate the new concurrency limit ──
       double newLimit;
@@ -469,11 +477,6 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
         // limit: at limit=100 with backoffRatio=0.5, we drop to 50. At limit=10,
         // we drop to 5. This proportional behavior means the recovery time
         // (climbing back via additive increase) is also proportional.
-        //
-        // Classic mode note: with errorRateThreshold=0.0 and smoothingFactor=1.0,
-        // a single failure sets errorRate=1.0, which is > 0.0 — so every failure
-        // immediately triggers this branch. This exactly matches the original
-        // pre-refactor behavior.
         newLimit = current.currentLimit() * backoffRatio;
 
       } else {
@@ -489,9 +492,6 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
         // absorbed without any limit change. The limit holds steady while the
         // EWMA accumulates evidence. If failures continue, the rate will
         // eventually cross the threshold and trigger the decrease above.
-        //
-        // This branch is never reached in classic mode (errorRateThreshold=0.0)
-        // because any non-zero error rate after a failure is > 0.0.
         newLimit = current.currentLimit();
       }
 
@@ -503,9 +503,9 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
       // calculation logic clean and the boundary enforcement in one place.
       newLimit = Math.max(minLimit, Math.min(maxLimit, newLimit));
 
-      // Bundle the new limit and error rate into an immutable snapshot for the
-      // atomic CAS swap.
-      next = new AimdState(newLimit, newErrorRate);
+      // Bundle the new limit, error rate, and 'now' timestamp into an immutable
+      // snapshot for the atomic CAS swap.
+      next = new AimdState(newLimit, newErrorRate, now);
 
       // Attempt the atomic swap. If another thread updated the state between our
       // read (line: current = state.get()) and this CAS, the swap fails and we
@@ -522,13 +522,10 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
   /**
    * Immutable snapshot of the algorithm's mutable state.
    *
-   * <p>Bundling both fields into a single record is the key to thread safety in this
+   * <p>Bundling these fields into a single record is the key to thread safety in this
    * implementation. The {@link AtomicReference} holding this record allows exactly one
    * atomic operation — {@code compareAndSet} — to read and replace the entire state.
-   * This prevents the "torn read" problem that would occur with two separate atomic
-   * variables: thread A reads {@code currentLimit} from state X, then thread B updates
-   * both fields to state Y, then thread A reads {@code smoothedErrorRate} from state Y —
-   * mixing old limit with new error rate and producing an inconsistent computation.
+   * This prevents the "torn read" problem that would occur with separate atomic variables.
    *
    * <p>The {@code currentLimit} is stored as {@code double} rather than {@code int} to
    * support the fractional increments produced by windowed increase ({@code +1/currentLimit}).
@@ -539,10 +536,12 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    *
    * @param currentLimit      The current concurrency limit as a double to support fractional
    *                          windowed increments. Always in [{@code minLimit}, {@code maxLimit}].
-   * @param smoothedErrorRate The EWMA-smoothed error rate, ranging from 0.0 (all recent calls
+   * @param smoothedErrorRate The time-smoothed error rate, ranging from 0.0 (all recent calls
    *                          succeeded) to 1.0 (all recent calls failed). Used to determine
    *                          whether the multiplicative decrease should be triggered.
+   * @param lastUpdateNanos   The timestamp of the last state update, used to calculate the
+   *                          continuous-time elapsed decay independent of request rate.
    */
-  private record AimdState(double currentLimit, double smoothedErrorRate) {
+  private record AimdState(double currentLimit, double smoothedErrorRate, long lastUpdateNanos) {
   }
 }
