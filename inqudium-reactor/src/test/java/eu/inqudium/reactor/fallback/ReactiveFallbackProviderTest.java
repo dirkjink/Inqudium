@@ -1,6 +1,8 @@
-package fallback.reactive;
+package eu.inqudium.reactor.fallback;
 
-import fallback.core.*;
+import eu.inqudium.core.fallback.FallbackConfig;
+import eu.inqudium.core.fallback.FallbackEvent;
+import eu.inqudium.core.fallback.FallbackException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -73,8 +75,8 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("router")
-              .onException(IOException.class, _ -> "io-fallback")
-              .onException(TimeoutException.class, _ -> "timeout-fallback")
+              .onException(IOException.class, e -> "io-fallback")
+              .onException(TimeoutException.class, e -> "timeout-fallback")
               .build());
 
       // When
@@ -92,8 +94,8 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("router")
-              .onException(IOException.class, _ -> "io-fallback")
-              .onException(TimeoutException.class, _ -> "timeout-fallback")
+              .onException(IOException.class, e -> "io-fallback")
+              .onException(TimeoutException.class, e -> "timeout-fallback")
               .build());
 
       // When
@@ -111,8 +113,8 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("router")
-              .onException(IOException.class, _ -> "io-fallback")
-              .onAnyException(_ -> "catch-all")
+              .onException(IOException.class, e -> "io-fallback")
+              .onAnyException(e -> "catch-all")
               .build());
 
       // When
@@ -131,7 +133,7 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("unhandled")
-              .onException(IOException.class, _ -> "io-fallback")
+              .onException(IOException.class, e -> "io-fallback")
               .build());
 
       // When
@@ -205,7 +207,7 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("failing-handler")
-              .onAnyException(_ -> {
+              .onAnyException(e -> {
                 throw new RuntimeException("handler crash");
               })
               .build());
@@ -239,11 +241,12 @@ class ReactiveFallbackProviderTest {
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("null-check")
               .onResult(result -> result == null, () -> "default-value")
-              .onAnyException(_ -> "error-fallback")
+              .onAnyException(e -> "error-fallback")
               .build());
 
-      // When — Mono.justOrEmpty(null) emits empty, but we use Mono.just with a trick
-      // Actually, we need the Mono to emit a null-like value. Use flatMap.
+      // When — Reactor converts a null supplier return to Mono.empty();
+      // the FallbackProvider treats empty completion as a "null result"
+      // and routes it through the result-handler chain via switchIfEmpty
       Mono<String> result = provider.execute(Mono.fromSupplier(() -> (String) null));
 
       // Then
@@ -259,7 +262,7 @@ class ReactiveFallbackProviderTest {
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("acceptable")
               .onResult(result -> result == null, () -> "default")
-              .onAnyException(_ -> "error")
+              .onAnyException(e -> "error")
               .build());
 
       // When
@@ -302,7 +305,7 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("flux-error")
-              .onAnyException(_ -> "recovered")
+              .onAnyException(e -> "recovered")
               .build());
 
       // When
@@ -321,7 +324,7 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("mid-stream")
-              .onAnyException(_ -> "recovered")
+              .onAnyException(e -> "recovered")
               .build());
 
       // When
@@ -343,7 +346,7 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("flux-unhandled")
-              .onException(IOException.class, _ -> "io-fallback")
+              .onException(IOException.class, e -> "io-fallback")
               .build());
 
       // When
@@ -371,7 +374,7 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("operator")
-              .onAnyException(_ -> "recovered")
+              .onAnyException(e -> "recovered")
               .build());
 
       // When — error mono through the operator
@@ -435,7 +438,7 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("events")
-              .onAnyException("my-handler", _ -> "recovered")
+              .onAnyException("my-handler", e -> "recovered")
               .build());
       List<FallbackEvent> events = new ArrayList<>();
       provider.events().subscribe(events::add);
@@ -459,14 +462,14 @@ class ReactiveFallbackProviderTest {
       // Given
       var provider = new ReactiveFallbackProvider<>(
           FallbackConfig.<String>builder("events")
-              .onException(IOException.class, _ -> "io")
+              .onException(IOException.class, e -> "io")
               .build());
       List<FallbackEvent> events = new ArrayList<>();
       provider.events().subscribe(events::add);
 
       // When
       provider.execute(Mono.error(new IllegalStateException("no match")))
-          .onErrorResume(_ -> Mono.empty())
+          .onErrorResume(e -> Mono.empty())
           .block();
 
       // Then

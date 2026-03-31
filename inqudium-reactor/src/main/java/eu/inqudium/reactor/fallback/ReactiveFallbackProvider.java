@@ -1,6 +1,6 @@
-package fallback.reactive;
+package eu.inqudium.reactor.fallback;
 
-import fallback.core.*;
+import eu.inqudium.core.fallback.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -79,6 +79,7 @@ public class ReactiveFallbackProvider<T> {
 
       return mono
           .flatMap(result -> handleResult(snapshot, result))
+          .switchIfEmpty(Mono.defer(() -> handleEmptyResult(snapshot)))
           .onErrorResume(error -> handleError(snapshot, error));
     });
   }
@@ -208,18 +209,52 @@ public class ReactiveFallbackProvider<T> {
       return Mono.justOrEmpty(result);
     }
 
-    // Result-based fallback
-    FallbackSnapshot fallingBack = resultResolution.snapshot();
+    return invokeResultFallback(snapshot, resultResolution, result, resultTime);
+  }
+
+  /**
+   * Handles the case where the upstream Mono completed empty.
+   *
+   * <p>In Reactor, a supplier returning {@code null} produces an empty Mono
+   * rather than emitting a {@code null} value (Reactive Streams forbids null
+   * signals). This method treats empty completion as a "null result" and
+   * routes it through the result-handler chain. If no result handler matches,
+   * the Mono stays empty and primary success is recorded.
+   */
+  private Mono<T> handleEmptyResult(FallbackSnapshot snapshot) {
+    Instant resultTime = clock.instant();
+
+    FallbackCore.HandlerResolution<T> resultResolution =
+        FallbackCore.resolveResultHandler(snapshot, config, null, resultTime);
+
+    if (resultResolution == null) {
+      // No result handler for null — treat as normal empty completion
+      FallbackCore.recordPrimarySuccess(snapshot, resultTime);
+      emitEvent(FallbackEvent.primarySucceeded(
+          config.name(), snapshot.elapsed(resultTime), resultTime));
+      return Mono.empty();
+    }
+
+    return invokeResultFallback(snapshot, resultResolution, null, resultTime);
+  }
+
+  private Mono<T> invokeResultFallback(
+      FallbackSnapshot snapshot,
+      FallbackCore.HandlerResolution<T> resolution,
+      T originalResult,
+      Instant resultTime) {
+
+    FallbackSnapshot fallingBack = resolution.snapshot();
     emitEvent(FallbackEvent.resultFallbackInvoked(
-        config.name(), resultResolution.handler().name(),
+        config.name(), resolution.handler().name(),
         fallingBack.elapsed(resultTime), resultTime));
 
     try {
-      T fallbackValue = FallbackCore.invokeResultHandler(resultResolution.handler());
+      T fallbackValue = FallbackCore.invokeResultHandler(resolution.handler());
       Instant recoveredTime = clock.instant();
       FallbackCore.recordFallbackSuccess(fallingBack, recoveredTime);
       emitEvent(FallbackEvent.resultFallbackRecovered(
-          config.name(), resultResolution.handler().name(),
+          config.name(), resolution.handler().name(),
           fallingBack.elapsed(recoveredTime), recoveredTime));
       return Mono.justOrEmpty(fallbackValue);
 
@@ -227,11 +262,11 @@ public class ReactiveFallbackProvider<T> {
       Instant fbFailedTime = clock.instant();
       FallbackCore.recordFallbackFailure(fallingBack, fallbackEx, fbFailedTime);
       emitEvent(FallbackEvent.fallbackFailed(
-          config.name(), resultResolution.handler().name(),
+          config.name(), resolution.handler().name(),
           fallingBack.elapsed(fbFailedTime), fallbackEx, fbFailedTime));
       return Mono.error(new FallbackException(
           config.name(), FallbackException.Reason.FALLBACK_FAILED,
-          new RuntimeException("Unacceptable result: " + result), fallbackEx));
+          new RuntimeException("Unacceptable result: " + originalResult), fallbackEx));
     }
   }
 
