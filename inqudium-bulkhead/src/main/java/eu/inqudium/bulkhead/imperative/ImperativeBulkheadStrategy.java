@@ -25,10 +25,8 @@ public class ImperativeBulkheadStrategy<T> implements BulkheadParadigmStrategy<I
   }
 
   /**
-   * FIX #4: Instead of silently returning the undecorated call when the state machine is
-   * not a BlockingBulkheadStateMachine, we now throw an IllegalArgumentException. The
-   * original else-branch returned the call without any bulkhead protection, meaning a
-   * misconfigured factory would silently disable all resilience — a dangerous silent failure.
+   * Instead of silently returning the undecorated call when the state machine is
+   * not a BlockingBulkheadStateMachine, we throw an IllegalArgumentException.
    */
   @Override
   public InqCall<T> decorate(InqCall<T> call, BulkheadStateMachine stateMachine) {

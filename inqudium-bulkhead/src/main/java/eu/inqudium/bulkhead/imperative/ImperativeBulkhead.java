@@ -2,6 +2,7 @@ package eu.inqudium.bulkhead.imperative;
 
 import eu.inqudium.bulkhead.Bulkhead;
 import eu.inqudium.core.InqCall;
+import eu.inqudium.core.bulkhead.BlockingBulkheadStateMachine;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
 import eu.inqudium.core.bulkhead.BulkheadStateMachine;
 import eu.inqudium.core.event.InqEventPublisher;
@@ -18,17 +19,17 @@ public final class ImperativeBulkhead implements Bulkhead {
 
   private final String name;
   private final Duration maxWaitDuration;
-  private final BulkheadStateMachine stateMachine;
+  private final BlockingBulkheadStateMachine stateMachine;
   private final BulkheadConfig config;
   private final LongSupplier nanoTimeSource;
 
   // Package-private constructor forces the use of the Factory
-  ImperativeBulkhead(String name, BulkheadConfig config, BulkheadStateMachine stateMachine) {
+  ImperativeBulkhead(String name, BulkheadConfig config, BlockingBulkheadStateMachine stateMachine) {
     this.name = name;
     this.maxWaitDuration = config.getMaxWaitDuration();
     this.config = config;
     this.stateMachine = stateMachine;
-    // FIX #5: Store the nano-time source for passing to the strategy
+    // Store the nano-time source for passing to the strategy
     this.nanoTimeSource = config.getNanoTimeSource();
   }
 
@@ -49,7 +50,7 @@ public final class ImperativeBulkhead implements Bulkhead {
 
   @Override
   public <T> InqCall<T> decorate(InqCall<T> call) {
-    // FIX #5: Pass nanoTimeSource to strategy for testable RTT measurement
+    // Pass nanoTimeSource to strategy for testable RTT measurement
     ImperativeBulkheadStrategy<T> strategy = new ImperativeBulkheadStrategy<>(
         name, maxWaitDuration, nanoTimeSource);
     return strategy.decorate(call, stateMachine);

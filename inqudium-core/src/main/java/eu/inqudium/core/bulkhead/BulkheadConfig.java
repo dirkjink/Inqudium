@@ -29,10 +29,10 @@ public final class BulkheadConfig implements InqConfig {
   // Adaptive concurrency limits
   private final InqLimitAlgorithm limitAlgorithm;
 
-  // FIX #5: Injectable nano-time source for deterministic testing
+  // Injectable nano-time source for deterministic testing
   private final LongSupplier nanoTimeSource;
 
-  // FIX #9: CoDel-specific configuration fields
+  // CoDel-specific configuration fields
   private final Duration codelTargetDelay;
   private final Duration codelInterval;
 
@@ -96,7 +96,7 @@ public final class BulkheadConfig implements InqConfig {
   }
 
   /**
-   * FIX #5: Returns the nano-time source used for RTT measurement and CoDel timing.
+   * Returns the nano-time source used for RTT measurement and CoDel timing.
    * Defaults to {@code System::nanoTime} but can be replaced for deterministic testing.
    *
    * @return the nano-time supplier
@@ -106,7 +106,7 @@ public final class BulkheadConfig implements InqConfig {
   }
 
   /**
-   * FIX #9: Returns the CoDel target delay, or null if CoDel is not configured.
+   * Returns the CoDel target delay, or null if CoDel is not configured.
    *
    * @return the target delay or null
    */
@@ -115,7 +115,7 @@ public final class BulkheadConfig implements InqConfig {
   }
 
   /**
-   * FIX #9: Returns the CoDel interval window, or null if CoDel is not configured.
+   * Returns the CoDel interval window, or null if CoDel is not configured.
    *
    * @return the interval or null
    */
@@ -126,7 +126,7 @@ public final class BulkheadConfig implements InqConfig {
   /**
    * Returns true if CoDel queue management is configured.
    */
-  public boolean isCodelEnabled() {
+  public boolean isCoDelEnabled() {
     return codelTargetDelay != null && codelInterval != null;
   }
 
@@ -164,7 +164,7 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     /**
-     * FIX #6: Added validation — maxConcurrentCalls must be >= 0.
+     * Added validation — maxConcurrentCalls must be >= 0.
      * A value of 0 creates a bulkhead that rejects every request immediately,
      * which is a legitimate state (e.g., a "closed" bulkhead or for testing).
      * Negative values cause undefined behavior in Semaphore and are rejected.
@@ -183,7 +183,7 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     /**
-     * FIX #6: Added validation — maxWaitDuration must not be negative.
+     * Added validation — maxWaitDuration must not be negative.
      * Negative durations would cause immediate timeout failures with misleading behavior.
      *
      * @param duration the maximum wait duration, must be >= 0
@@ -233,7 +233,7 @@ public final class BulkheadConfig implements InqConfig {
      * Sets the adaptive limit algorithm (e.g., AIMD or Vegas).
      * If set, the bulkhead will dynamically adjust its concurrency limits.
      *
-     * <p>FIX #9: Cannot be combined with CoDel configuration. If both are set,
+     * <p>Cannot be combined with CoDel configuration. If both are set,
      * {@link #build()} will throw an exception.
      *
      * @param limitAlgorithm the algorithm to use, or null for static limits
@@ -245,7 +245,7 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     /**
-     * FIX #5: Sets a custom nano-time source.
+     * Sets a custom nano-time source.
      * Useful for deterministic testing of CoDel and RTT measurement.
      *
      * @param nanoTimeSource the nano-time supplier
@@ -257,7 +257,7 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     /**
-     * FIX #9: Configures CoDel (Controlled Delay) queue management.
+     * Configures CoDel (Controlled Delay) queue management.
      * Both parameters must be set together to enable CoDel.
      *
      * <p>Cannot be combined with a {@link #limitAlgorithm}. If both are set,
@@ -283,13 +283,13 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     /**
-     * FIX #6 + #9: Added cross-field validation during build.
+     * Added cross-field validation during build.
      *
      * @return the immutable configuration
      * @throws IllegalStateException if incompatible options are combined
      */
     public BulkheadConfig build() {
-      // FIX #9: Validate mutual exclusivity of adaptive algorithm and CoDel
+      // Validate mutual exclusivity of adaptive algorithm and CoDel
       if (limitAlgorithm != null && codelTargetDelay != null) {
         throw new IllegalStateException(
             "Cannot combine a limitAlgorithm with CoDel configuration. "

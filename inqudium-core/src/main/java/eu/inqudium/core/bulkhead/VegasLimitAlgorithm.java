@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>The baseline is initialized to {@link Long#MAX_VALUE} (unknown) and converges toward
  * reality as samples arrive. It tracks the minimum observed RTT, but with a configurable
- * <b>decay factor</b> (FIX #2) that slowly drifts it upward toward the smoothed RTT.
+ * <b>decay factor</b> that slowly drifts it upward toward the smoothed RTT.
  * Without decay, a single artificially low measurement (e.g., a cached response, a GC
  * pause that delayed the timestamp before the call but not after) would permanently poison
  * the baseline, causing the gradient to chronically overestimate congestion.
@@ -67,7 +67,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li><b>The latecomer problem:</b> If the algorithm starts while the downstream system
  *       is already under heavy load, the initial "no-load" baseline will be too high.
  *       The gradient will appear close to 1.0 even under congestion, and the algorithm
- *       will fail to throttle. The baseline decay (FIX #2) mitigates but does not fully
+ *       will fail to throttle. The baseline decay mitigates but does not fully
  *       solve this — it takes time for the baseline to converge downward.</li>
  *   <li><b>Jitter sensitivity:</b> Workloads with naturally high latency variance (e.g.,
  *       a mix of simple SELECTs at 2ms and complex JOINs at 200ms) confuse the gradient.
@@ -166,7 +166,7 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
    * The rate at which the no-load baseline slowly drifts toward the smoothed RTT
    * (range: 0.0–0.1).
    *
-   * <h3>FIX #2: Baseline Decay — Why This Exists</h3>
+   * <h3>Baseline Decay — Why This Exists</h3>
    * <p>Without decay, the no-load baseline ({@code noLoadRttNanos}) is <b>monotonically
    * decreasing</b> — it only ever moves downward via {@code Math.min(current, newSample)}.
    * This creates a critical vulnerability: if a single outlier arrives with an artificially
@@ -395,7 +395,7 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
       // This allows the baseline to converge downward toward the true minimum.
       long candidateNoLoad = Math.min(current.noLoadRttNanos(), rttNanos);
 
-      // FIX #2: Apply decay — slowly drift the baseline toward the smoothed RTT.
+      // Apply decay — slowly drift the baseline toward the smoothed RTT.
       //
       // The decay counteracts the monotonic downward pull of Math.min. Without it:
       //   1. An outlier arrives with rtt=500ns (e.g., cached response)

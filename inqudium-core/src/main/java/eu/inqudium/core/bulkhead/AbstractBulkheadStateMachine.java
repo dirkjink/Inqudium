@@ -48,7 +48,7 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
   /**
    * Creates a new state machine instance.
    *
-   * <p>FIX: Added defensive validation for constructor parameters. While
+   * <p>Added defensive validation for constructor parameters. While
    * {@link BulkheadConfig.Builder} validates {@code maxConcurrentCalls >= 0},
    * this class cannot assume it is always constructed from a validated config.
    * Subclasses or test code could pass arbitrary config instances. The validation
@@ -105,7 +105,7 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
   /**
    * Releases a previously acquired permit and reports the execution metrics.
    *
-   * <h3>Exception Propagation (FIX)</h3>
+   * <h3>Exception Propagation</h3>
    * <p>The original implementation had inconsistent exception handling: a telemetry
    * (event publisher) error was thrown to the caller if — and only if — no business
    * error and no release error existed. This meant monitoring code that caught
@@ -147,7 +147,7 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
     }
 
     // 2. Telemetry — runs even if releasePermitInternal() failed.
-    // FIX: Publisher errors are ALWAYS logged and NEVER propagated, regardless
+    // Publisher errors are ALWAYS logged and NEVER propagated, regardless
     // of whether a business error or release error exists. This eliminates the
     // inconsistency where a publisher crash only surfaced to callers when no
     // other error was present.
@@ -191,7 +191,7 @@ public abstract class AbstractBulkheadStateMachine implements BulkheadStateMachi
   }
 
   /**
-   * FIX #6: Restructured to avoid contradictory telemetry. The wait trace is now
+   * Restructured to avoid contradictory telemetry. The wait trace is now
    * published AFTER the acquire event succeeds (not before). On rollback, we no
    * longer have a "wait acquired=true" trace followed by a "rollback" trace —
    * instead, only the rollback trace is emitted, which is consistent.

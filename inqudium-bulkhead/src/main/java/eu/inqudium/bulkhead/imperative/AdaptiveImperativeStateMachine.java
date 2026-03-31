@@ -199,7 +199,7 @@ public final class AdaptiveImperativeStateMachine
    * The injectable clock for event timestamps.
    *
    * <p>Used in {@link #onCallComplete} to capture the timestamp of limit-change trace events
-   * while the lock is held (FIX #1b). This ensures timestamps form a total order matching the
+   * while the lock is held. This ensures timestamps form a total order matching the
    * lock-acquisition sequence, even when events are published outside the lock.
    *
    * <p>Defaults to {@link java.time.Clock#systemUTC()} in production. Replaced with a
@@ -246,7 +246,7 @@ public final class AdaptiveImperativeStateMachine
    *   <li>Publish a {@link BulkheadLimitChangedTraceEvent} for observability.</li>
    * </ol>
    *
-   * <h3>FIX #1: Why This Field Is Under the Lock</h3>
+   * <h3>Why This Field Is Under the Lock</h3>
    * <p>In the original implementation, this field was {@code volatile} and accessed outside
    * the lock. This created a race condition in {@link #onCallComplete}:
    * <ol>
@@ -466,7 +466,7 @@ public final class AdaptiveImperativeStateMachine
    *       event. This is outside the lock to avoid blocking permit acquisition during I/O.</li>
    * </ol>
    *
-   * <h3>FIX #1: Race Condition on oldLimit</h3>
+   * <h3>Race Condition on oldLimit</h3>
    * <p>The original implementation had {@code oldLimit} as {@code volatile} and performed the
    * read-compare-write sequence outside the lock. Two concurrent threads could both read the
    * same {@code oldLimit}, compute different new limits, and overwrite each other's updates —
@@ -475,7 +475,7 @@ public final class AdaptiveImperativeStateMachine
    * <p>The fix moves the entire read-compare-write-signal sequence under the lock. Only one
    * thread at a time can observe and update {@code oldLimit}, eliminating the lost-update race.
    *
-   * <h3>FIX #1a: Liveness on Limit Decrease</h3>
+   * <h3>Liveness on Limit Decrease</h3>
    * <p>The original implementation only called {@code signalAll()} when the limit increased.
    * When the limit decreased, waiting threads would continue sleeping for their full remaining
    * timeout, even though the capacity situation had worsened and they should re-evaluate sooner.
@@ -486,7 +486,7 @@ public final class AdaptiveImperativeStateMachine
    * their timeout has elapsed, they exit promptly via the {@code nanos <= 0L} branch instead
    * of sleeping unnecessarily for seconds.
    *
-   * <h3>FIX #1b: Event Ordering via Lock-Captured Timestamps</h3>
+   * <h3>Event Ordering via Lock-Captured Timestamps</h3>
    * <p>The trace event's timestamp is captured inside the lock (via {@code clock.instant()})
    * rather than lazily in the event's lambda. Since only one thread holds the lock at a time,
    * the captured timestamps form a total order matching the lock-acquisition sequence. Even
@@ -519,7 +519,7 @@ public final class AdaptiveImperativeStateMachine
     int newLimit;
     boolean limitChanged;
 
-    // FIX #1b: The event timestamp is captured under the lock to guarantee a total order
+    // The event timestamp is captured under the lock to guarantee a total order
     // matching the lock-acquisition sequence. Without this, two threads releasing the lock
     // in rapid succession could capture timestamps in reverse order during concurrent
     // clock.instant() calls outside the lock.
@@ -541,13 +541,13 @@ public final class AdaptiveImperativeStateMachine
         // or duplicated.
         oldLimit = newLimit;
 
-        // Capture the timestamp under the lock for consistent event ordering (FIX #1b).
+        // Capture the timestamp under the lock for consistent event ordering.
         eventTimestamp = clock.instant();
       } else {
         eventTimestamp = null;
       }
 
-      // ── FIX #1a: Signal waiting threads on ANY limit change ──
+      // ── Signal waiting threads on ANY limit change ──
       //
       // signalAll() is used (not signal()) because a limit change can affect multiple
       // waiting threads simultaneously:

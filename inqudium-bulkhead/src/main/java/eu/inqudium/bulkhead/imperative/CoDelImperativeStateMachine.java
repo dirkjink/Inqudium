@@ -76,7 +76,7 @@ import java.util.function.LongSupplier;
  * desired behavior: under sustained congestion, the queue should be cleared quickly rather
  * than dripping out one rejected request at a time.
  *
- * <h3>Idle Recovery (FIX #3)</h3>
+ * <h3>Idle Recovery</h3>
  * <p>After a congestion episode ends and all threads have drained, the CoDel state
  * ({@code firstAboveTargetNanos}) must be reset. Without this, a stale timestamp from a
  * previous congestion episode would persist through an idle period. When new traffic
@@ -89,7 +89,7 @@ import java.util.function.LongSupplier;
  * lock acquisition and the first {@code await()}, or between waking from {@code await()}
  * and returning from {@code tryAcquire()}. See the field documentation for details.
  *
- * <h3>Sojourn Time Precision (FIX #3a)</h3>
+ * <h3>Sojourn Time Precision</h3>
  * <p>CoDel's correctness depends on accurately measuring <em>queue wait time</em>, not
  * total wait time. This implementation uses two separate timestamps to distinguish them:
  * <ul>
@@ -273,7 +273,7 @@ public final class CoDelImperativeStateMachine
    *       stopwatch returns to 0 — the congestion has cleared.</li>
    *   <li><b>Reset (idle):</b> The system becomes truly idle ({@code activeCalls == 0}
    *       AND {@code acquireThreads == 0}). Stale timestamps from a concluded congestion
-   *       episode are cleared. (FIX #3)</li>
+   *       episode are cleared.</li>
    * </ol>
    *
    * <p>Protected by {@link #lock}. An {@code AtomicLong} is unnecessary because all reads
@@ -300,8 +300,8 @@ public final class CoDelImperativeStateMachine
   /**
    * The number of threads currently inside the {@link #tryAcquire} critical section.
    *
-   * <p>This counter exists solely to support accurate idle detection for CoDel state reset
-   * (FIX #3). It tracks every thread that has acquired the lock and entered the tryAcquire
+   * <p>This counter exists solely to support accurate idle detection for CoDel state reset.
+   * It tracks every thread that has acquired the lock and entered the tryAcquire
    * flow, regardless of where that thread is within the flow:
    * <ul>
    *   <li>Waiting on {@code permitAvailable.awaitNanos()}</li>
@@ -312,7 +312,7 @@ public final class CoDelImperativeStateMachine
    * </ul>
    *
    * <h3>Why not use {@code lock.hasWaiters(permitAvailable)}?</h3>
-   * <p>The initial FIX #3 implementation used {@code hasWaiters}, but this was unreliable.
+   * <p>The initial implementation used {@code hasWaiters}, but this was unreliable.
    * {@code hasWaiters} only counts threads that are <em>currently blocked</em> inside
    * {@code Condition.await()}. It misses threads in three critical windows:
    * <ol>
@@ -356,7 +356,7 @@ public final class CoDelImperativeStateMachine
    *
    * <p>This constructor is package-private and called exclusively by
    * {@link ImperativeBulkheadFactory#create(String, BulkheadConfig)} when the config has
-   * CoDel enabled ({@link BulkheadConfig#isCodelEnabled()} returns {@code true}).
+   * CoDel enabled ({@link BulkheadConfig#isCoDelEnabled()} returns {@code true}).
    *
    * <p>The factory guarantees mutual exclusivity between CoDel and adaptive limit algorithms
    * — this is enforced at the config level by {@link BulkheadConfig.Builder#build()}.
@@ -441,7 +441,7 @@ public final class CoDelImperativeStateMachine
       acquireThreads++;
 
       // ── Timestamp 2: CoDel enqueue time (post-lock) ──
-      // FIX #3a: Captured AFTER lock acquisition. This timestamp excludes lock
+      // Captured AFTER lock acquisition. This timestamp excludes lock
       // contention time and measures only the pure queue sojourn time — the duration
       // the thread spends waiting on the permitAvailable condition. This is the
       // correct input for the CoDel algorithm: CoDel should evaluate queue congestion,
@@ -490,7 +490,7 @@ public final class CoDelImperativeStateMachine
         // CoDel additionally evaluates whether the wait was acceptable.
         long now = nanoTimeSource.getAsLong();
 
-        // FIX #3a: Sojourn time is calculated from the post-lock timestamp, measuring
+        // Sojourn time is calculated from the post-lock timestamp, measuring
         // only the pure condition-wait duration. The pre-lock timestamp (waitStartNanos)
         // is reserved for telemetry.
         long sojournNanos = now - codelEnqueueNanos;
@@ -592,7 +592,7 @@ public final class CoDelImperativeStateMachine
         // the top of the outer try block.
         acquireThreads--;
 
-        // ── FIX #3: Idle detection and CoDel state reset ──
+        // ── Idle detection and CoDel state reset ──
         //
         // Check if the system is truly idle: no permits are held AND no threads are
         // anywhere inside the tryAcquire flow. When both conditions are met, the
@@ -639,7 +639,7 @@ public final class CoDelImperativeStateMachine
    * complete regardless of the thread's interrupt status. Failing to release a permit
    * would permanently reduce the bulkhead's capacity.
    *
-   * <h3>Idle Detection (FIX #3)</h3>
+   * <h3>Idle Detection</h3>
    * <p>After decrementing {@code activeCalls}, this method also checks for the idle
    * condition ({@code activeCalls == 0 && acquireThreads == 0}). This handles the
    * natural drain scenario where the last in-flight call completes and no threads are
@@ -660,7 +660,7 @@ public final class CoDelImperativeStateMachine
       if (activeCalls > 0) {
         activeCalls--;
 
-        // FIX #3: Check for idle state on permit release.
+        // Check for idle state on permit release.
         //
         // This catches the scenario where the system drains naturally (without a
         // CoDel chain-drain): the last active call completes, no threads are waiting,

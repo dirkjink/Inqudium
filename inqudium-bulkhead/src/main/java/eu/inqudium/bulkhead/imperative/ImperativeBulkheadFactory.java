@@ -1,5 +1,6 @@
 package eu.inqudium.bulkhead.imperative;
 
+import eu.inqudium.core.bulkhead.BlockingBulkheadStateMachine;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
 import eu.inqudium.core.bulkhead.BulkheadStateMachine;
 
@@ -17,7 +18,7 @@ import eu.inqudium.core.bulkhead.BulkheadStateMachine;
  *       {@link SemaphoreImperativeStateMachine} with fixed limits.</li>
  * </ul>
  *
- * <p>FIX #9: The original factory only knew about Static and Adaptive paths.
+ * <p>The original factory only knew about Static and Adaptive paths.
  * {@code CoDelImperativeStateMachine} was unreachable through the standard creation flow.
  *
  * @since 0.2.0
@@ -36,10 +37,10 @@ public final class ImperativeBulkheadFactory {
    * @return a fully wired imperative bulkhead ready for decoration
    */
   public static ImperativeBulkhead create(String name, BulkheadConfig config) {
-    BulkheadStateMachine stateMachine;
+    final BlockingBulkheadStateMachine stateMachine;
 
-    if (config.isCodelEnabled()) {
-      // FIX #9: CoDel — Queue-based delay management
+    if (config.isCoDelEnabled()) {
+      // CoDel — Queue-based delay management
       // BulkheadConfig.build() already validates that CoDel and limitAlgorithm are mutually exclusive
       stateMachine = new CoDelImperativeStateMachine(
           name, config, config.getCodelTargetDelay(), config.getCodelInterval());
