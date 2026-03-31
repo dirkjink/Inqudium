@@ -335,7 +335,11 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
    */
   @Override
   public int getLimit() {
-    return (int) state.get().currentLimit();
+    // Add a tiny epsilon (1e-9) to counteract IEEE 754 floating-point precision loss.
+    // E.g., adding 0.1 ten times to 10.0 results in 10.999999999999998.
+    // The explicit cast to (int) truncates decimals, which would incorrectly return 10.
+    // The epsilon ensures mathematically complete windows cross the integer boundary safely.
+    return (int) (state.get().currentLimit() + 1e-9);
   }
 
   /**
@@ -506,12 +510,16 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
         //   - gradient=0.5 (severe congestion): newLimit ≈ currentLimit × 0.5 + 0.5
         //     → Aggressive reduction, comparable to AIMD's multiplicative decrease.
         //
-        // The probing factor (+0.5) ensures the limit always has a slight upward bias
-        // when the gradient is near 1.0. Without it, a gradient of exactly 1.0 would
-        // produce newLimit = currentLimit (no probing), and the algorithm would never
-        // discover additional capacity. The value 0.5 is conservative — it takes two
-        // consecutive no-congestion updates to increase the visible limit by 1.
-        newLimit = current.currentLimit() * gradient + 0.5;
+        // Windowed Probing Accumulation
+        // Calculate the probing factor based on the integer portion of the limit (visibleLimit).
+        // If we use the raw double (current.currentLimit()), the denominator grows with
+        // each fractional increment (e.g., 10.0 -> 10.1 -> 10.2). This makes the fractions
+        // progressively smaller, and the sum over a full window will mathematically fall
+        // short of 1.0 (e.g., ~0.95). By fixing the denominator to the integer boundary,
+        // we guarantee that a full window of requests sums up to exactly 1.0.
+        int visibleLimit = (int) current.currentLimit();
+        double probingFactor = 1.0 / visibleLimit;
+        newLimit = current.currentLimit() * gradient + probingFactor;
       } else {
         // ── Reactive Failure Fallback ──
         //

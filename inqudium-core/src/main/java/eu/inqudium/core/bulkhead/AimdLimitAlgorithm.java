@@ -343,7 +343,11 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
    */
   @Override
   public int getLimit() {
-    return (int) state.get().currentLimit();
+    // Add a tiny epsilon (1e-9) to counteract IEEE 754 floating-point precision loss.
+    // E.g., adding 0.1 ten times to 10.0 results in 10.999999999999998.
+    // The explicit cast to (int) truncates decimals, which would incorrectly return 10.
+    // The epsilon ensures mathematically complete windows cross the integer boundary safely.
+    return (int) (state.get().currentLimit() + 1e-9);
   }
 
   /**
