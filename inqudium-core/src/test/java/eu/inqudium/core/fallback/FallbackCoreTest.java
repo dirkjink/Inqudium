@@ -248,8 +248,8 @@ class FallbackCoreTest {
   class ResultHandlerResolution {
 
     @Test
-    @DisplayName("should return null when the result is acceptable")
-    void should_return_null_when_the_result_is_acceptable() {
+    @DisplayName("should return unmatched resolution when the result is acceptable")
+    void should_return_unmatched_resolution_when_the_result_is_acceptable() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
           .onResult(result -> result == null, () -> "default")
@@ -262,7 +262,10 @@ class FallbackCoreTest {
           FallbackCore.resolveResultHandler(executing, config, "valid", NOW);
 
       // Then
-      assertThat(resolution).isNull();
+      assertThat(resolution).isNotNull();
+      assertThat(resolution.matched()).isFalse();
+      assertThat(resolution.handler()).isNull();
+      assertThat(resolution.snapshot().state()).isEqualTo(FallbackState.SUCCEEDED);
     }
 
     @Test
@@ -286,8 +289,8 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should return null when no result handler is registered")
-    void should_return_null_when_no_result_handler_is_registered() {
+    @DisplayName("should return unmatched resolution when no result handler is registered")
+    void should_return_unmatched_resolution_when_no_result_handler_is_registered() {
       // Given — only exception handlers
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
           .onAnyException(e -> "error-fallback")
@@ -299,7 +302,10 @@ class FallbackCoreTest {
           FallbackCore.resolveResultHandler(executing, config, null, NOW);
 
       // Then
-      assertThat(resolution).isNull();
+      assertThat(resolution).isNotNull();
+      assertThat(resolution.matched()).isFalse();
+      assertThat(resolution.handler()).isNull();
+      assertThat(resolution.snapshot().state()).isEqualTo(FallbackState.SUCCEEDED);
     }
   }
 

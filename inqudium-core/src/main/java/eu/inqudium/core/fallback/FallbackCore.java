@@ -59,6 +59,15 @@ public final class FallbackCore {
     return new ExceptionResolution<>(handler, fallingBack, true);
   }
 
+  /**
+   * Resolves a result handler for the given primary result.
+   *
+   * <p>Fix 4: Always returns a non-null {@link ResultResolution} for API consistency
+   * with {@link #resolveExceptionHandler}. When no handler matches, the resolution
+   * contains {@code matched=false} and the snapshot transitions to SUCCEEDED.
+   *
+   * @return a resolution indicating whether a result handler matched
+   */
   public static <T> ResultResolution<T> resolveResultHandler(
       FallbackSnapshot snapshot,
       FallbackConfig<T> config,
@@ -69,7 +78,10 @@ public final class FallbackCore {
 
     FallbackResultHandler<T> handler = config.findHandlerForResult(result);
     if (handler == null) {
-      return null; // Result is acceptable
+      // Fix 4: Return a non-null resolution with matched=false instead of null.
+      // Snapshot transitions to SUCCEEDED since the result is acceptable.
+      FallbackSnapshot succeeded = snapshot.withSucceeded(now);
+      return new ResultResolution<>(null, succeeded, false);
     }
 
     FallbackSnapshot fallingBack = snapshot.withFallingBack(null, handler.name(), now);

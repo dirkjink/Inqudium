@@ -26,6 +26,19 @@ public record FallbackConfig<T>(
     if (exceptionHandlers.isEmpty() && resultHandlers.isEmpty()) {
       throw new IllegalArgumentException("At least one fallback handler must be registered");
     }
+
+    // Fix 6: Validate that catch-all / default handlers do not shadow subsequent handlers.
+    // Only the LAST exception handler is allowed to be a catch-all or constant value.
+    for (int i = 0; i < exceptionHandlers.size() - 1; i++) {
+      FallbackExceptionHandler<T> handler = exceptionHandlers.get(i);
+      if (handler instanceof FallbackExceptionHandler.CatchAll
+          || handler instanceof FallbackExceptionHandler.ConstantValue) {
+        throw new IllegalArgumentException(
+            "Catch-all handler '%s' at position %d would shadow all subsequent handlers. "
+                .formatted(handler.name(), i)
+                + "Move it to the end of the handler chain or use a more specific handler.");
+      }
+    }
   }
 
   public static <T> Builder<T> builder(String name) {
