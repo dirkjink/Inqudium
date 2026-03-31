@@ -21,6 +21,7 @@ public final class InqProviderErrorEvent extends InqEvent {
   private final String spiInterfaceName;
   private final ProviderPhase phase;
   private final String errorMessage;
+
   /**
    * Creates a new provider error event.
    *
