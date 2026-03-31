@@ -382,10 +382,10 @@ public final class AdaptiveImperativeStateMachine
     long startWait = nanoTimeSource.getAsLong();
     long nanos = timeout.toNanos();
 
-    // Acquire the lock interruptibly: threads waiting for permits should be cancellable
-    // (e.g., during executor shutdown or parent timeout).
-    lock.lockInterruptibly();
     try {
+      // Acquire the lock interruptibly: threads waiting for permits should be cancellable
+      // (e.g., during executor shutdown or parent timeout).
+      lock.lockInterruptibly();
       // ── Wait loop: park until capacity is available ──
       //
       // The condition reads limitAlgorithm.getLimit() live on every iteration. This is

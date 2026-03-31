@@ -519,7 +519,7 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
         // progressively smaller, and the sum over a full window will mathematically fall
         // short of 1.0 (e.g., ~0.95). By fixing the denominator to the integer boundary,
         // we guarantee that a full window of requests sums up to exactly 1.0.
-        int visibleLimit = (int) current.currentLimit();
+        int visibleLimit = (int) (current.currentLimit() + 1e-9);
         double probingFactor = 1.0 / visibleLimit;
         newLimit = current.currentLimit() * gradient + probingFactor;
       } else {

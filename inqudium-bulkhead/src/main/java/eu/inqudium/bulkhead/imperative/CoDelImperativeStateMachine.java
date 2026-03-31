@@ -454,8 +454,8 @@ public final class CoDelImperativeStateMachine
     // methods in the base class (publishWaitTrace, handleAcquireFailure/Success).
     long waitStartNanos = nanoTimeSource.getAsLong();
 
-    lock.lockInterruptibly();
     try {
+      lock.lockInterruptibly();
       // Register this thread in the acquire-flow counter immediately after lock
       // acquisition. This is the earliest possible point where the thread becomes
       // visible to concurrent idle checks. See the acquireThreads field documentation
