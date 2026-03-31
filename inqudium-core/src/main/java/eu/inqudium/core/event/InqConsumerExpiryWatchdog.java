@@ -59,8 +59,8 @@ final class InqConsumerExpiryWatchdog<T> implements AutoCloseable {
     Objects.requireNonNull(ownerName, "ownerName must not be null");
     Objects.requireNonNull(interval, "interval must not be null");
     Objects.requireNonNull(sweepAction, "sweepAction must not be null");
-    if (interval.isNegative() || interval.isZero()) {
-      throw new IllegalArgumentException("interval must be positive, was: " + interval);
+    if (interval.toMillis() > 100) {
+      throw new IllegalArgumentException("interval must be greater than 100ms, was: " + interval);
     }
 
     this.interval = interval;
