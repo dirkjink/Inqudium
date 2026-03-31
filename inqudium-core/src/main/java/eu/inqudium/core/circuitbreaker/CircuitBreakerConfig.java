@@ -1,207 +1,129 @@
 package eu.inqudium.core.circuitbreaker;
 
-import eu.inqudium.core.InqCallIdGenerator;
-import eu.inqudium.core.InqClock;
-import eu.inqudium.core.InqConfig;
-import eu.inqudium.core.compatibility.InqCompatibility;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.Duration;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
- * Immutable configuration for the Circuit Breaker element (ADR-016).
- *
- * @since 0.1.0
+ * Immutable configuration for a circuit breaker instance.
+ * Use {@link #builder(String)} to construct.
  */
-public final class CircuitBreakerConfig implements InqConfig {
+public record CircuitBreakerConfig(
+        String name,
+        int failureThreshold,
+        int successThresholdInHalfOpen,
+        int permittedCallsInHalfOpen,
+        Duration waitDurationInOpenState,
+        Predicate<Throwable> recordFailurePredicate
+) {
 
-  private static final CircuitBreakerConfig DEFAULTS = CircuitBreakerConfig.builder().build();
-  private final float failureRateThreshold;
-  private final float slowCallRateThreshold;
-  private final Duration slowCallDurationThreshold;
-  private final SlidingWindowType slidingWindowType;
-  private final int slidingWindowSize;
-  private final int minimumNumberOfCalls;
-  private final Duration waitDurationInOpenState;
-  private final int permittedNumberOfCallsInHalfOpenState;
-  private final InqClock clock;
-  private final InqCallIdGenerator callIdGenerator;
-  private final InqCompatibility compatibility;
-  private final Logger logger;
-
-  private CircuitBreakerConfig(Builder b) {
-    this.failureRateThreshold = b.failureRateThreshold;
-    this.slowCallRateThreshold = b.slowCallRateThreshold;
-    this.slowCallDurationThreshold = b.slowCallDurationThreshold;
-    this.slidingWindowType = b.slidingWindowType;
-    this.slidingWindowSize = b.slidingWindowSize;
-    this.minimumNumberOfCalls = b.minimumNumberOfCalls;
-    this.waitDurationInOpenState = b.waitDurationInOpenState;
-    this.permittedNumberOfCallsInHalfOpenState = b.permittedNumberOfCallsInHalfOpenState;
-    this.clock = b.clock;
-    this.callIdGenerator = b.callIdGenerator;
-    this.compatibility = b.compatibility;
-    this.logger = b.logger;
-  }
-
-  public static CircuitBreakerConfig ofDefaults() {
-    return DEFAULTS;
-  }
-
-  public static Builder builder() {
-    return new Builder();
-  }
-
-  public float getFailureRateThreshold() {
-    return failureRateThreshold;
-  }
-
-  public float getSlowCallRateThreshold() {
-    return slowCallRateThreshold;
-  }
-
-  public Duration getSlowCallDurationThreshold() {
-    return slowCallDurationThreshold;
-  }
-
-  public SlidingWindowType getSlidingWindowType() {
-    return slidingWindowType;
-  }
-
-  public int getSlidingWindowSize() {
-    return slidingWindowSize;
-  }
-
-  public int getMinimumNumberOfCalls() {
-    return minimumNumberOfCalls;
-  }
-
-  public Duration getWaitDurationInOpenState() {
-    return waitDurationInOpenState;
-  }
-
-  public int getPermittedNumberOfCallsInHalfOpenState() {
-    return permittedNumberOfCallsInHalfOpenState;
-  }
-
-  public InqClock getClock() {
-    return clock;
-  }
-
-  @Override
-  public InqCallIdGenerator getCallIdGenerator() {
-    return callIdGenerator;
-  }
-
-  @Override
-  public InqCompatibility getCompatibility() {
-    return compatibility;
-  }
-
-  @Override
-  public Logger getLogger() {
-    return logger;
-  }
-
-  /**
-   * Creates the appropriate sliding window for this configuration.
-   *
-   * @return a new sliding window instance
-   */
-  public SlidingWindow createSlidingWindow() {
-    long thresholdNanos = slowCallDurationThreshold.toNanos();
-    return switch (slidingWindowType) {
-      case COUNT_BASED -> new CountBasedSlidingWindow(slidingWindowSize, thresholdNanos);
-      case TIME_BASED -> new TimeBasedSlidingWindow(slidingWindowSize, thresholdNanos, clock);
-    };
-  }
-
-  /**
-   * Sliding window type.
-   */
-  public enum SlidingWindowType {COUNT_BASED, TIME_BASED}
-
-  public static final class Builder {
-    private float failureRateThreshold = 50.0f;
-    private float slowCallRateThreshold = 100.0f;
-    private Duration slowCallDurationThreshold = Duration.ofSeconds(60);
-    private SlidingWindowType slidingWindowType = SlidingWindowType.COUNT_BASED;
-    private int slidingWindowSize = 100;
-    private int minimumNumberOfCalls = 100;
-    private Duration waitDurationInOpenState = Duration.ofSeconds(60);
-    private int permittedNumberOfCallsInHalfOpenState = 10;
-    private InqClock clock = InqClock.system();
-    private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
-    private InqCompatibility compatibility = InqCompatibility.ofDefaults();
-    private Logger logger = LoggerFactory.getLogger(CircuitBreakerConfig.class);
-
-    private Builder() {
+    public CircuitBreakerConfig {
+        Objects.requireNonNull(name, "name must not be null");
+        Objects.requireNonNull(waitDurationInOpenState, "waitDurationInOpenState must not be null");
+        Objects.requireNonNull(recordFailurePredicate, "recordFailurePredicate must not be null");
+        if (failureThreshold < 1) {
+            throw new IllegalArgumentException("failureThreshold must be >= 1, got " + failureThreshold);
+        }
+        if (successThresholdInHalfOpen < 1) {
+            throw new IllegalArgumentException("successThresholdInHalfOpen must be >= 1, got " + successThresholdInHalfOpen);
+        }
+        if (permittedCallsInHalfOpen < 1) {
+            throw new IllegalArgumentException("permittedCallsInHalfOpen must be >= 1, got " + permittedCallsInHalfOpen);
+        }
+        if (waitDurationInOpenState.isNegative() || waitDurationInOpenState.isZero()) {
+            throw new IllegalArgumentException("waitDurationInOpenState must be positive");
+        }
     }
 
-    public Builder failureRateThreshold(float threshold) {
-      this.failureRateThreshold = threshold;
-      return this;
+    public static Builder builder(String name) {
+        return new Builder(name);
     }
 
-    public Builder slowCallRateThreshold(float threshold) {
-      this.slowCallRateThreshold = threshold;
-      return this;
+    /**
+     * Checks whether the given throwable should be recorded as a failure.
+     */
+    public boolean shouldRecordAsFailure(Throwable throwable) {
+        return recordFailurePredicate.test(throwable);
     }
 
-    public Builder slowCallDurationThreshold(Duration duration) {
-      this.slowCallDurationThreshold = Objects.requireNonNull(duration);
-      return this;
-    }
+    public static final class Builder {
+        private final String name;
+        private int failureThreshold = 5;
+        private int successThresholdInHalfOpen = 3;
+        private int permittedCallsInHalfOpen = 3;
+        private Duration waitDurationInOpenState = Duration.ofSeconds(30);
+        private Predicate<Throwable> recordFailurePredicate = e -> true;
 
-    public Builder slidingWindowType(SlidingWindowType type) {
-      this.slidingWindowType = Objects.requireNonNull(type);
-      return this;
-    }
+        private Builder(String name) {
+            this.name = Objects.requireNonNull(name);
+        }
 
-    public Builder slidingWindowSize(int size) {
-      this.slidingWindowSize = size;
-      return this;
-    }
+        public Builder failureThreshold(int failureThreshold) {
+            this.failureThreshold = failureThreshold;
+            return this;
+        }
 
-    public Builder minimumNumberOfCalls(int min) {
-      this.minimumNumberOfCalls = min;
-      return this;
-    }
+        public Builder successThresholdInHalfOpen(int successThresholdInHalfOpen) {
+            this.successThresholdInHalfOpen = successThresholdInHalfOpen;
+            return this;
+        }
 
-    public Builder waitDurationInOpenState(Duration duration) {
-      this.waitDurationInOpenState = Objects.requireNonNull(duration);
-      return this;
-    }
+        public Builder permittedCallsInHalfOpen(int permittedCallsInHalfOpen) {
+            this.permittedCallsInHalfOpen = permittedCallsInHalfOpen;
+            return this;
+        }
 
-    public Builder permittedNumberOfCallsInHalfOpenState(int count) {
-      this.permittedNumberOfCallsInHalfOpenState = count;
-      return this;
-    }
+        public Builder waitDurationInOpenState(Duration waitDurationInOpenState) {
+            this.waitDurationInOpenState = waitDurationInOpenState;
+            return this;
+        }
 
-    public Builder clock(InqClock clock) {
-      this.clock = Objects.requireNonNull(clock);
-      return this;
-    }
+        public Builder recordFailurePredicate(Predicate<Throwable> recordFailurePredicate) {
+            this.recordFailurePredicate = recordFailurePredicate;
+            return this;
+        }
 
-    public Builder callIdGenerator(InqCallIdGenerator gen) {
-      this.callIdGenerator = Objects.requireNonNull(gen);
-      return this;
-    }
+        /**
+         * Convenience method: only record exceptions of the given types as failures.
+         */
+        @SafeVarargs
+        public final Builder recordExceptions(Class<? extends Throwable>... exceptionTypes) {
+            this.recordFailurePredicate = throwable -> {
+                for (Class<? extends Throwable> type : exceptionTypes) {
+                    if (type.isInstance(throwable)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            return this;
+        }
 
-    public Builder compatibility(InqCompatibility c) {
-      this.compatibility = Objects.requireNonNull(c);
-      return this;
-    }
+        /**
+         * Convenience method: ignore (do not record) exceptions of the given types.
+         */
+        @SafeVarargs
+        public final Builder ignoreExceptions(Class<? extends Throwable>... exceptionTypes) {
+            this.recordFailurePredicate = throwable -> {
+                for (Class<? extends Throwable> type : exceptionTypes) {
+                    if (type.isInstance(throwable)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            return this;
+        }
 
-    public Builder logger(Logger logger) {
-      this.logger = Objects.requireNonNull(logger);
-      return this;
+        public CircuitBreakerConfig build() {
+            return new CircuitBreakerConfig(
+                    name,
+                    failureThreshold,
+                    successThresholdInHalfOpen,
+                    permittedCallsInHalfOpen,
+                    waitDurationInOpenState,
+                    recordFailurePredicate
+            );
+        }
     }
-
-    public CircuitBreakerConfig build() {
-      return new CircuitBreakerConfig(this);
-    }
-  }
 }

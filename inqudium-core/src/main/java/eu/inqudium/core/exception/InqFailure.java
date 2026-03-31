@@ -2,10 +2,6 @@ package eu.inqudium.core.exception;
 
 import eu.inqudium.core.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
-import eu.inqudium.core.circuitbreaker.InqCallNotPermittedException;
-import eu.inqudium.core.ratelimiter.InqRequestNotPermittedException;
-import eu.inqudium.core.retry.InqRetryExhaustedException;
-import eu.inqudium.core.timelimiter.InqTimeLimitExceededException;
 
 import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
@@ -167,34 +163,6 @@ public final class InqFailure {
   }
 
   /**
-   * Invokes the consumer if the found exception is a {@link InqCallNotPermittedException}.
-   *
-   * @param consumer the handler for circuit breaker open events
-   * @return this instance for chaining
-   */
-  public InqFailure ifCircuitBreakerOpen(Consumer<InqCallNotPermittedException> consumer) {
-    if (found instanceof InqCallNotPermittedException ex) {
-      consumer.accept(ex);
-      handled = true;
-    }
-    return this;
-  }
-
-  /**
-   * Invokes the consumer if the found exception is a {@link InqRequestNotPermittedException}.
-   *
-   * @param consumer the handler for rate limiter denied events
-   * @return this instance for chaining
-   */
-  public InqFailure ifRateLimited(Consumer<InqRequestNotPermittedException> consumer) {
-    if (found instanceof InqRequestNotPermittedException ex) {
-      consumer.accept(ex);
-      handled = true;
-    }
-    return this;
-  }
-
-  /**
    * Invokes the consumer if the found exception is a {@link InqBulkheadFullException}.
    *
    * @param consumer the handler for bulkhead full events
@@ -216,34 +184,6 @@ public final class InqFailure {
    */
   public InqFailure ifBulkheadInterrupted(Consumer<InqBulkheadInterruptedException> consumer) {
     if (found instanceof InqBulkheadInterruptedException ex) {
-      consumer.accept(ex);
-      handled = true;
-    }
-    return this;
-  }
-
-  /**
-   * Invokes the consumer if the found exception is a {@link InqTimeLimitExceededException}.
-   *
-   * @param consumer the handler for time limit exceeded events
-   * @return this instance for chaining
-   */
-  public InqFailure ifTimeLimitExceeded(Consumer<InqTimeLimitExceededException> consumer) {
-    if (found instanceof InqTimeLimitExceededException ex) {
-      consumer.accept(ex);
-      handled = true;
-    }
-    return this;
-  }
-
-  /**
-   * Invokes the consumer if the found exception is a {@link InqRetryExhaustedException}.
-   *
-   * @param consumer the handler for retry exhausted events
-   * @return this instance for chaining
-   */
-  public InqFailure ifRetryExhausted(Consumer<InqRetryExhaustedException> consumer) {
-    if (found instanceof InqRetryExhaustedException ex) {
       consumer.accept(ex);
       handled = true;
     }
