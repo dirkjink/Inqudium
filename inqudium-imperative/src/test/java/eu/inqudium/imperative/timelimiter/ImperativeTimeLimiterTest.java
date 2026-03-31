@@ -536,8 +536,7 @@ class ImperativeTimeLimiterTest {
       // Given
       TimeLimiterConfig config = TimeLimiterConfig.builder("custom-exception")
           .timeout(Duration.ofMillis(100))
-          .exceptionFactory(d -> new IllegalStateException("custom: " + d.toMillis() + "ms"))
-          .build();
+          .exceptionFactory((name, duration) -> new IllegalStateException("Limiter '" + name + "' custom timeout: " + duration.toMillis() + "ms")).build();
       ImperativeTimeLimiter limiter = new ImperativeTimeLimiter(config);
 
       // When / Then
