@@ -46,7 +46,7 @@ class InqCallIdGeneratorTest {
 
   @Nested
   @DisplayName("Custom generators")
-  class CustomGenerators {
+  class CustomBackoffStrategyGenerators {
 
     @Test
     void should_support_sequential_counter_generator() {

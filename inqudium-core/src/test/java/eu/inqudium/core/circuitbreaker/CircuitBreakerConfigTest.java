@@ -55,7 +55,7 @@ class CircuitBreakerConfigTest {
 
   @Nested
   @DisplayName("Custom Metrics Strategy")
-  class CustomMetricsStrategy {
+  class CustomBackoffStrategyMetricsStrategy {
 
     @Test
     @DisplayName("should use the explicitly provided metrics factory")

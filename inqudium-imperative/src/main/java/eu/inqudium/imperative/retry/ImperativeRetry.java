@@ -7,7 +7,7 @@ import eu.inqudium.core.retry.RetryEvent;
 import eu.inqudium.core.retry.RetryException;
 import eu.inqudium.core.retry.RetrySnapshot;
 import eu.inqudium.core.retry.RetryState;
-import eu.inqudium.core.retry.BackoffStrategy;
+import eu.inqudium.core.retry.strategy.BackoffStrategy;
 
 import java.time.Clock;
 import java.time.Duration;

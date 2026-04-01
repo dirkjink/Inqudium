@@ -13,7 +13,7 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("FixedWindowStrategy — Fixed Window Counter Rate Limiting")
-class FixedWindowStrategyTest {
+class FixedBackoffStrategyWindowStrategyTest {
 
   private static final Instant NOW = Instant.parse("2025-01-01T00:00:00Z");
 

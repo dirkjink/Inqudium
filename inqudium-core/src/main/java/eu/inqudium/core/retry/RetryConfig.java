@@ -1,5 +1,7 @@
 package eu.inqudium.core.retry;
 
+import eu.inqudium.core.retry.strategy.BackoffStrategy;
+
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Predicate;

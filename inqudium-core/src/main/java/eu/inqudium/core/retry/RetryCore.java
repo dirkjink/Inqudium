@@ -1,5 +1,7 @@
 package eu.inqudium.core.retry;
 
+import eu.inqudium.core.retry.strategy.DecorrelatedJitterBackoffStrategy;
+
 import java.time.Duration;
 import java.time.Instant;
 
@@ -169,7 +171,7 @@ public final class RetryCore {
   /**
    * Extracts the previous retry delay from the snapshot, or {@link Duration#ZERO}
    * if this is the first retry. Used to feed stateful backoff strategies
-   * (e.g., {@link BackoffStrategy.DecorrelatedJitter}).
+   * (e.g., {@link DecorrelatedJitterBackoffStrategy}).
    */
   private static Duration previousDelayOrZero(RetrySnapshot snapshot) {
     return snapshot.nextRetryDelay() != null ? snapshot.nextRetryDelay() : Duration.ZERO;

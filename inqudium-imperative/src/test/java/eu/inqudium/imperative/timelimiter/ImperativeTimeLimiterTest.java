@@ -279,7 +279,7 @@ class ImperativeTimeLimiterTest {
 
   @Nested
   @DisplayName("Custom Timeout Override")
-  class CustomTimeoutOverride {
+  class CustomBackoffStrategyTimeoutOverride {
 
     @Test
     @DisplayName("should use the per-call timeout instead of the configured default")
@@ -528,7 +528,7 @@ class ImperativeTimeLimiterTest {
 
   @Nested
   @DisplayName("Custom Exception Factory")
-  class CustomExceptionFactory {
+  class CustomBackoffStrategyExceptionFactory {
 
     @Test
     @DisplayName("should throw the custom exception when the operation times out")

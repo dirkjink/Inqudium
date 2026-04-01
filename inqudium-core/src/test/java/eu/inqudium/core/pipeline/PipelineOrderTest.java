@@ -104,7 +104,7 @@ class PipelineOrderTest {
 
   @Nested
   @DisplayName("Custom order")
-  class CustomOrder {
+  class CustomBackoffStrategyOrder {
 
     @Test
     void should_respect_custom_element_sequence() {

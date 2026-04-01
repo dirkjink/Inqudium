@@ -1,5 +1,6 @@
 package eu.inqudium.core.retry;
 
+import eu.inqudium.core.retry.strategy.BackoffStrategy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
