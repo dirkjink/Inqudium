@@ -46,17 +46,16 @@ public record RateLimiterConfig<S extends RateLimiterState>(
   }
 
   /**
-   * Startet den Builder standardmäßig mit dem Token Bucket Algorithmus.
+   * Creates a builder with the default Token Bucket algorithm.
    */
   public static Builder<TokenBucketState> builder(String name) {
     return new Builder<>(name, new TokenBucketStrategy());
   }
 
-  public Duration nanosPerPermit() {
-    double totalNanos = (double) refillPeriod.toNanos();
-    double nanosPerPermit = totalNanos / refillPermits;
-    return Duration.ofNanos(Math.max(Math.round(nanosPerPermit), 1));
-  }
+  // Fix 10: Removed nanosPerPermit() — it was unused and accumulated
+  // rounding errors with non-divisible refillPermits values.
+  // If needed in the future, use integer-only arithmetic:
+  //   long nanosPerPermit = refillPeriod.toNanos() / refillPermits;
 
   public static final class Builder<S extends RateLimiterState> {
     private final String name;
@@ -64,7 +63,7 @@ public record RateLimiterConfig<S extends RateLimiterState>(
     private int refillPermits = 10;
     private Duration refillPeriod = Duration.ofSeconds(1);
     private Duration defaultTimeout = Duration.ZERO;
-    private final RateLimiterStrategy<S> strategy;
+    private RateLimiterStrategy<S> strategy;
 
     private Builder(String name, RateLimiterStrategy<S> strategy) {
       this.name = Objects.requireNonNull(name);
@@ -99,8 +98,8 @@ public record RateLimiterConfig<S extends RateLimiterState>(
     }
 
     /**
-     * Wechselt den zugrundeliegenden Algorithmus.
-     * Ändert den Typen des Builders auf den neuen State des Algorithmus.
+     * Switches the underlying algorithm.
+     * Changes the builder's type parameter to the new strategy's state type.
      */
     public <T extends RateLimiterState> Builder<T> withStrategy(RateLimiterStrategy<T> newStrategy) {
       Builder<T> newBuilder = new Builder<>(this.name, Objects.requireNonNull(newStrategy));

@@ -204,8 +204,8 @@ class TokenBucketStrategyTest {
   class DrainResetRefund {
 
     @Test
-    @DisplayName("Should drain the bucket by setting available permits to zero and incrementing the epoch")
-    void should_drain_the_bucket_by_setting_available_permits_to_zero_and_incrementing_the_epoch() {
+    @DisplayName("Should drain the bucket by setting available permits to zero without changing the epoch")
+    void should_drain_the_bucket_by_setting_available_permits_to_zero_without_changing_the_epoch() {
       // Given
       RateLimiterConfig<TokenBucketState> config = defaultConfig();
       TokenBucketState state = strategy.initial(config, NOW);
@@ -213,9 +213,9 @@ class TokenBucketStrategyTest {
       // When
       TokenBucketState drained = strategy.drain(state, config, NOW);
 
-      // Then
+      // Then — permits are zeroed but epoch is unchanged (existing reservations are honored)
       assertThat(drained.availablePermits()).isZero();
-      assertThat(drained.epoch()).isEqualTo(1L);
+      assertThat(drained.epoch()).isEqualTo(state.epoch());
     }
 
     @Test

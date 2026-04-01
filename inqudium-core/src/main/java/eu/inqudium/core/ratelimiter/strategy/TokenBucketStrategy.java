@@ -7,6 +7,23 @@ import eu.inqudium.core.ratelimiter.ReservationResult;
 import java.time.Duration;
 import java.time.Instant;
 
+/**
+ * Token Bucket rate limiting strategy.
+ *
+ * <p>Permits are consumed from the bucket and refilled at a fixed rate.
+ * The bucket can go into "debt" (negative permits) for reservations,
+ * bounded by a debt floor of {@code -capacity}.
+ *
+ * <h2>Drain vs. Reset semantics</h2>
+ * <ul>
+ *   <li><strong>drain:</strong> Removes all available permits but honors existing
+ *       reservations. Parked threads continue waiting and eventually proceed.
+ *       The epoch is unchanged — no invalidation occurs.</li>
+ *   <li><strong>reset:</strong> Restores the bucket to full capacity and increments
+ *       the epoch, invalidating all pending reservations. Parked threads wake up
+ *       and must re-acquire permits from the fresh bucket.</li>
+ * </ul>
+ */
 public class TokenBucketStrategy implements RateLimiterStrategy<TokenBucketState> {
 
   @Override
@@ -14,6 +31,10 @@ public class TokenBucketStrategy implements RateLimiterStrategy<TokenBucketState
     return new TokenBucketState(config.capacity(), now, 0L);
   }
 
+  /**
+   * Refills the bucket based on elapsed time since the last refill.
+   * Only complete refill periods count — partial periods are not credited.
+   */
   private TokenBucketState refill(TokenBucketState state, RateLimiterConfig<TokenBucketState> config, Instant now) {
     long elapsedNanos = Duration.between(state.lastRefillTime(), now).toNanos();
     if (elapsedNanos <= 0) return state;
@@ -26,6 +47,7 @@ public class TokenBucketStrategy implements RateLimiterStrategy<TokenBucketState
     Instant newRefillTime = state.lastRefillTime().plusNanos(completePeriods * periodNanos);
     long tokensToAdd = completePeriods * config.refillPermits();
 
+    // Fast-path: if enough periods have passed to fill the bucket from any debt level
     if (tokensToAdd >= (long) config.capacity() - Math.min(state.availablePermits(), 0)) {
       return state.withRefill(config.capacity(), newRefillTime);
     }
@@ -44,7 +66,7 @@ public class TokenBucketStrategy implements RateLimiterStrategy<TokenBucketState
       return RateLimitPermission.permitted(
           refilled.withAvailablePermits(refilled.availablePermits() - permits));
     }
-    return RateLimitPermission.rejected(refilled, estimateWaitDuration(refilled, config, now, permits));
+    return RateLimitPermission.rejected(refilled, estimateWaitDuration(refilled, config, permits));
   }
 
   @Override
@@ -58,11 +80,14 @@ public class TokenBucketStrategy implements RateLimiterStrategy<TokenBucketState
           refilled.withAvailablePermits(refilled.availablePermits() - permits));
     }
 
-    Duration waitDuration = estimateWaitDuration(refilled, config, now, permits);
+    Duration waitDuration = estimateWaitDuration(refilled, config, permits);
     if (timeout.isZero() || waitDuration.compareTo(timeout) > 0) {
       return ReservationResult.timedOut(refilled, waitDuration);
     }
 
+    // Debt floor prevents unbounded permit debt. If consuming these permits
+    // would push below -capacity, reject even if the wait duration would fit
+    // within the timeout — the system is too backlogged.
     int debtFloor = -config.capacity();
     if (refilled.availablePermits() - permits < debtFloor) {
       return ReservationResult.timedOut(refilled, waitDuration);
@@ -72,11 +97,26 @@ public class TokenBucketStrategy implements RateLimiterStrategy<TokenBucketState
         refilled.withAvailablePermits(refilled.availablePermits() - permits), waitDuration);
   }
 
+  /**
+   * Fix 8: Drain removes all available permits but does NOT increment the epoch.
+   *
+   * <p>This means existing reservations (parked threads) are honored — they
+   * continue waiting and proceed when their wait duration expires. Only future
+   * callers are affected by the empty bucket.
+   *
+   * <p>Use {@link #reset} to invalidate all pending reservations.
+   */
   @Override
   public TokenBucketState drain(TokenBucketState state, RateLimiterConfig<TokenBucketState> config, Instant now) {
-    return state.withAvailablePermits(0).withNextEpoch(now);
+    // Refill first to establish a consistent time baseline, then zero out
+    TokenBucketState refilled = refill(state, config, now);
+    return refilled.withAvailablePermits(0);
   }
 
+  /**
+   * Resets the bucket to full capacity and increments the epoch.
+   * All pending reservations are invalidated — parked threads will retry.
+   */
   @Override
   public TokenBucketState reset(TokenBucketState state, RateLimiterConfig<TokenBucketState> config, Instant now) {
     return state.withNextEpoch(config.capacity(), now);
@@ -94,8 +134,23 @@ public class TokenBucketStrategy implements RateLimiterStrategy<TokenBucketState
     return refill(state, config, now).availablePermits();
   }
 
-  private Duration estimateWaitDuration(TokenBucketState state, RateLimiterConfig<TokenBucketState> config, Instant now, int requiredPermits) {
+  /**
+   * Estimates how long a caller would need to wait for the required permits
+   * to become available through natural refilling.
+   *
+   * <p><strong>Fix 11 — Note on debt interaction:</strong> When {@code availablePermits}
+   * is negative (due to prior reservations that pushed the bucket into debt), the
+   * deficit correctly includes that debt. However, the estimated wait duration is
+   * theoretical — the {@code debtFloor} check in {@link #reservePermissions} may
+   * reject the reservation before this wait would ever occur. The debtFloor acts
+   * as a backpressure mechanism: even if the wait fits within the timeout, a
+   * request is rejected if accepting it would create excessive permit debt.
+   */
+  private Duration estimateWaitDuration(
+      TokenBucketState state, RateLimiterConfig<TokenBucketState> config, int requiredPermits) {
     if (state.availablePermits() >= requiredPermits) return Duration.ZERO;
+
+    // deficit includes any existing debt (negative availablePermits)
     int deficit = requiredPermits - state.availablePermits();
     long cyclesNeeded = ((long) deficit + config.refillPermits() - 1) / config.refillPermits();
     return config.refillPeriod().multipliedBy(cyclesNeeded);
