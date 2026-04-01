@@ -20,7 +20,7 @@ public record CircuitBreakerConfig(
     int permittedCallsInHalfOpen,
     Duration waitDurationInOpenState,
     Predicate<Throwable> recordFailurePredicate,
-    Function<Instant, FailureMetrics> metricsFactory // <--- Die neue Factory
+    Function<Instant, FailureMetrics> metricsFactory
 ) {
 
   public CircuitBreakerConfig {
@@ -59,19 +59,20 @@ public record CircuitBreakerConfig(
   public static final class Builder {
     private final String name;
 
-    // Standard-Werte sind nun auf die Time-Based Error Rate Metrik optimiert
-    private int failureThreshold = 50; // 50% Ausfallrate
+    private int failureThreshold = 50; // 50% failure rate
     private int successThresholdInHalfOpen = 3;
     private int permittedCallsInHalfOpen = 3;
     private Duration waitDurationInOpenState = Duration.ofSeconds(30);
-    private Predicate<Throwable> recordFailurePredicate = e -> true;
-    private boolean predicateSetViaConvenienceMethod = false;
 
-    // Spezifische Einstellungen für die Standard-Metrik
+    // ======================== Fix 2a: Default predicate excludes Errors ========================
+    // Only Exceptions indicate downstream failures. JVM-level Errors (OOM, StackOverflow)
+    // should not trip the circuit breaker.
+    private Predicate<Throwable> recordFailurePredicate = e -> e instanceof Exception;
+    private PredicateSource predicateSource = PredicateSource.NONE;
+    // Settings for the default metric strategy
     private int slidingWindowSeconds = 10;
     private int minimumNumberOfCalls = 10;
-
-    // Erlaubt das Überschreiben der Metrik-Strategie
+    // Allows overriding the metric strategy
     private Function<Instant, FailureMetrics> customMetricsFactory = null;
 
     private Builder(String name) {
@@ -125,17 +126,38 @@ public record CircuitBreakerConfig(
       return this;
     }
 
+    /**
+     * Set a custom predicate for determining which throwables count as failures.
+     *
+     * <p>Cannot be used after {@link #recordExceptions} or {@link #ignoreExceptions}
+     * has already been called.
+     */
     public Builder recordFailurePredicate(Predicate<Throwable> recordFailurePredicate) {
+      if (predicateSource == PredicateSource.RECORD_EXCEPTIONS
+          || predicateSource == PredicateSource.IGNORE_EXCEPTIONS) {
+        throw new IllegalStateException(
+            "Cannot use recordFailurePredicate() after %s was already called."
+                .formatted(predicateSource));
+      }
       this.recordFailurePredicate = recordFailurePredicate;
-      this.predicateSetViaConvenienceMethod = false;
+      this.predicateSource = PredicateSource.RAW;
       return this;
     }
 
+    // ======================== Fix 8: Hardened predicate configuration ========================
+
+    /**
+     * Only record failures for the specified exception types.
+     *
+     * <p>Cannot be combined with {@link #ignoreExceptions} or called after any
+     * other predicate configuration method.
+     */
     @SafeVarargs
     public final Builder recordExceptions(Class<? extends Throwable>... exceptionTypes) {
-      // (Identisch zur vorherigen Implementierung)
-      if (predicateSetViaConvenienceMethod) {
-        throw new IllegalStateException("recordExceptions() and ignoreExceptions() cannot both be used on the same builder.");
+      if (predicateSource != PredicateSource.NONE) {
+        throw new IllegalStateException(
+            "recordExceptions() cannot be combined with other predicate configuration methods. "
+                + "Already configured via: " + predicateSource);
       }
       this.recordFailurePredicate = throwable -> {
         for (Class<? extends Throwable> type : exceptionTypes) {
@@ -143,15 +165,22 @@ public record CircuitBreakerConfig(
         }
         return false;
       };
-      this.predicateSetViaConvenienceMethod = true;
+      this.predicateSource = PredicateSource.RECORD_EXCEPTIONS;
       return this;
     }
 
+    /**
+     * Record all exceptions as failures EXCEPT the specified types.
+     *
+     * <p>Cannot be combined with {@link #recordExceptions} or called after any
+     * other predicate configuration method.
+     */
     @SafeVarargs
     public final Builder ignoreExceptions(Class<? extends Throwable>... exceptionTypes) {
-      // (Identisch zur vorherigen Implementierung)
-      if (predicateSetViaConvenienceMethod) {
-        throw new IllegalStateException("recordExceptions() and ignoreExceptions() cannot both be used on the same builder.");
+      if (predicateSource != PredicateSource.NONE) {
+        throw new IllegalStateException(
+            "ignoreExceptions() cannot be combined with other predicate configuration methods. "
+                + "Already configured via: " + predicateSource);
       }
       this.recordFailurePredicate = throwable -> {
         for (Class<? extends Throwable> type : exceptionTypes) {
@@ -159,12 +188,12 @@ public record CircuitBreakerConfig(
         }
         return true;
       };
-      this.predicateSetViaConvenienceMethod = true;
+      this.predicateSource = PredicateSource.IGNORE_EXCEPTIONS;
       return this;
     }
 
     public CircuitBreakerConfig build() {
-      // Wenn der Nutzer keine eigene Factory gesetzt hat, nutzen wir den Goldstandard
+      // If the user has not provided a custom factory, use the default time-based strategy
       Function<Instant, FailureMetrics> factoryToUse = customMetricsFactory != null
           ? customMetricsFactory
           : now -> TimeBasedErrorRateMetrics.initial(slidingWindowSeconds, minimumNumberOfCalls, now);
@@ -179,5 +208,8 @@ public record CircuitBreakerConfig(
           factoryToUse
       );
     }
+
+    // ======================== Fix 8: Hardened predicate source tracking ========================
+    private enum PredicateSource {NONE, RAW, RECORD_EXCEPTIONS, IGNORE_EXCEPTIONS}
   }
 }

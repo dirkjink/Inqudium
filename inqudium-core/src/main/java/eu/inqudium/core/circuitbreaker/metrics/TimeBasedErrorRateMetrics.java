@@ -4,6 +4,7 @@ import eu.inqudium.core.circuitbreaker.CircuitBreakerConfig;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Objects;
 
 /**
  * Immutable implementation of a Time-Based Error Rate algorithm.
@@ -23,6 +24,15 @@ public record TimeBasedErrorRateMetrics(
     long lastUpdatedEpochSecond
 ) implements FailureMetrics {
 
+  // ======================== Fix 1: Defensive array copy on construction ========================
+
+  public TimeBasedErrorRateMetrics {
+    successBuckets = Arrays.copyOf(successBuckets, successBuckets.length);
+    failureBuckets = Arrays.copyOf(failureBuckets, failureBuckets.length);
+  }
+
+  // ======================== Fix 1: Defensive array copy on access ========================
+
   public static TimeBasedErrorRateMetrics initial(int windowSizeInSeconds, int minimumNumberOfCalls, Instant now) {
     if (windowSizeInSeconds <= 0) {
       throw new IllegalArgumentException("windowSizeInSeconds must be greater than 0");
@@ -40,6 +50,41 @@ public record TimeBasedErrorRateMetrics(
   }
 
   @Override
+  public int[] successBuckets() {
+    return Arrays.copyOf(successBuckets, successBuckets.length);
+  }
+
+  // ======================== Fix 1: Structural equals and hashCode ========================
+
+  @Override
+  public int[] failureBuckets() {
+    return Arrays.copyOf(failureBuckets, failureBuckets.length);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof TimeBasedErrorRateMetrics that)) return false;
+    return windowSizeInSeconds == that.windowSizeInSeconds
+        && minimumNumberOfCalls == that.minimumNumberOfCalls
+        && lastUpdatedEpochSecond == that.lastUpdatedEpochSecond
+        && Arrays.equals(successBuckets, that.successBuckets)
+        && Arrays.equals(failureBuckets, that.failureBuckets);
+  }
+
+  // ======================== Factory ========================
+
+  @Override
+  public int hashCode() {
+    int result = Objects.hash(windowSizeInSeconds, minimumNumberOfCalls, lastUpdatedEpochSecond);
+    result = 31 * result + Arrays.hashCode(successBuckets);
+    result = 31 * result + Arrays.hashCode(failureBuckets);
+    return result;
+  }
+
+  // ======================== Recording ========================
+
+  @Override
   public FailureMetrics recordSuccess(Instant now) {
     return recordOutcome(now, true);
   }
@@ -55,9 +100,10 @@ public record TimeBasedErrorRateMetrics(
     // Fast-forward to clear expired buckets
     TimeBasedErrorRateMetrics updatedState = fastForward(currentEpochSecond);
 
-    // Create new copies of the buckets to mutate
-    int[] newSuccesses = Arrays.copyOf(updatedState.successBuckets(), windowSizeInSeconds);
-    int[] newFailures = Arrays.copyOf(updatedState.failureBuckets(), windowSizeInSeconds);
+    // Access internal fields directly (not the defensive-copy accessors)
+    // since we are inside the record and will immediately copy anyway.
+    int[] newSuccesses = Arrays.copyOf(updatedState.successBuckets, windowSizeInSeconds);
+    int[] newFailures = Arrays.copyOf(updatedState.failureBuckets, windowSizeInSeconds);
 
     // Determine the correct bucket index
     int currentBucketIndex = (int) (currentEpochSecond % windowSizeInSeconds);
@@ -73,7 +119,7 @@ public record TimeBasedErrorRateMetrics(
     }
 
     // Ensure the internal clock never moves backwards
-    long newLastUpdatedEpochSecond = Math.max(updatedState.lastUpdatedEpochSecond(), currentEpochSecond);
+    long newLastUpdatedEpochSecond = Math.max(updatedState.lastUpdatedEpochSecond, currentEpochSecond);
 
     return new TimeBasedErrorRateMetrics(
         windowSizeInSeconds,
@@ -84,29 +130,48 @@ public record TimeBasedErrorRateMetrics(
     );
   }
 
+  // ======================== Fix 9: Shared evaluation to avoid double fastForward ========================
+
+  private EvaluationResult evaluate(Instant now) {
+    TimeBasedErrorRateMetrics evaluated = fastForward(now.getEpochSecond());
+    int totalSuccesses = Arrays.stream(evaluated.successBuckets).sum();
+    int totalFailures = Arrays.stream(evaluated.failureBuckets).sum();
+    return new EvaluationResult(totalSuccesses, totalFailures, totalSuccesses + totalFailures);
+  }
+
   @Override
   public boolean isThresholdReached(CircuitBreakerConfig config, Instant now) {
-    // Fast-forward first to ensure old data falls out of the window before evaluating
-    TimeBasedErrorRateMetrics evaluatedState = fastForward(now.getEpochSecond());
+    EvaluationResult eval = evaluate(now);
 
-    int totalSuccesses = Arrays.stream(evaluatedState.successBuckets()).sum();
-    int totalFailures = Arrays.stream(evaluatedState.failureBuckets()).sum();
-    int totalCalls = totalSuccesses + totalFailures;
-
-    if (totalCalls < minimumNumberOfCalls) {
+    if (eval.totalCalls() < minimumNumberOfCalls) {
       return false;
     }
 
-    double failureRate = (double) totalFailures / totalCalls;
+    double failureRate = (double) eval.totalFailures() / eval.totalCalls();
     double rateThreshold = config.failureThreshold() / 100.0;
 
     return failureRate >= rateThreshold;
   }
 
   @Override
+  public String getTripReason(CircuitBreakerConfig config, Instant now) {
+    EvaluationResult eval = evaluate(now);
+
+    if (eval.totalCalls() == 0) {
+      return "Circuit tripped, but no calls were recorded in the current window.";
+    }
+
+    return "Failure rate of %.1f%% (%d failures out of %d calls) in the last %d seconds exceeded the threshold of %d%%."
+        .formatted(eval.failureRatePercent(), eval.totalFailures(), eval.totalCalls(),
+            windowSizeInSeconds, config.failureThreshold());
+  }
+
+  @Override
   public FailureMetrics reset(Instant now) {
     return initial(windowSizeInSeconds, minimumNumberOfCalls, now);
   }
+
+  // ======================== Reset ========================
 
   private TimeBasedErrorRateMetrics fastForward(long currentEpochSecond) {
     if (currentEpochSecond <= lastUpdatedEpochSecond) {
@@ -125,6 +190,7 @@ public record TimeBasedErrorRateMetrics(
       );
     }
 
+    // Access internal fields directly — we are inside the record
     int[] newSuccesses = Arrays.copyOf(successBuckets, windowSizeInSeconds);
     int[] newFailures = Arrays.copyOf(failureBuckets, windowSizeInSeconds);
 
@@ -147,21 +213,16 @@ public record TimeBasedErrorRateMetrics(
     );
   }
 
-  @Override
-  public String getTripReason(CircuitBreakerConfig config, Instant now) {
-    TimeBasedErrorRateMetrics evaluatedState = fastForward(now.getEpochSecond());
+  // ======================== Internal: Sliding Window ========================
 
-    int totalSuccesses = java.util.Arrays.stream(evaluatedState.successBuckets()).sum();
-    int totalFailures = java.util.Arrays.stream(evaluatedState.failureBuckets()).sum();
-    int totalCalls = totalSuccesses + totalFailures;
-
-    if (totalCalls == 0) {
-      return "Circuit tripped, but no calls were recorded in the current window.";
+  /**
+   * Internal evaluation result that captures aggregated metrics after fast-forwarding.
+   * Used by both {@link #isThresholdReached} and {@link #getTripReason} to avoid
+   * redundant array copy and summation operations.
+   */
+  private record EvaluationResult(int totalSuccesses, int totalFailures, int totalCalls) {
+    double failureRatePercent() {
+      return totalCalls == 0 ? 0.0 : ((double) totalFailures / totalCalls) * 100.0;
     }
-
-    double failureRate = ((double) totalFailures / totalCalls) * 100.0;
-
-    return "Failure rate of %.1f%% (%d failures out of %d calls) in the last %d seconds exceeded the threshold of %d%%."
-        .formatted(failureRate, totalFailures, totalCalls, windowSizeInSeconds, config.failureThreshold());
   }
 }
