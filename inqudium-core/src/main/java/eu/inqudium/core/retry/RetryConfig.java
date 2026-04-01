@@ -82,9 +82,6 @@ public record RetryConfig(
     private BackoffStrategy backoffStrategy = BackoffStrategy.fixedDelay(Duration.ofMillis(500));
     private Predicate<Throwable> retryPredicate = e -> true;
     private Predicate<Object> resultPredicate = null;
-
-    // Fix 6: Hardened predicate source tracking (same pattern as CircuitBreakerConfig)
-    private enum PredicateSource { NONE, RAW, RETRY_ON_EXCEPTIONS, IGNORE_EXCEPTIONS }
     private PredicateSource predicateSource = PredicateSource.NONE;
 
     private Builder(String name) {
@@ -236,12 +233,15 @@ public record RetryConfig(
      */
     @SuppressWarnings("unchecked")
     public <T> Builder retryOnResult(Predicate<T> resultPredicate) {
-      this.resultPredicate = (Predicate<Object>) (Predicate<?>) resultPredicate;
+      this.resultPredicate = (Predicate<Object>) resultPredicate;
       return this;
     }
 
     public RetryConfig build() {
       return new RetryConfig(name, maxAttempts, backoffStrategy, retryPredicate, resultPredicate);
     }
+
+    // Fix 6: Hardened predicate source tracking (same pattern as CircuitBreakerConfig)
+    private enum PredicateSource {NONE, RAW, RETRY_ON_EXCEPTIONS, IGNORE_EXCEPTIONS}
   }
 }

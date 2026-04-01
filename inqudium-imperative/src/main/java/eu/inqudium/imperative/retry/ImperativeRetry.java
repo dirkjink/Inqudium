@@ -7,6 +7,7 @@ import eu.inqudium.core.retry.RetryEvent;
 import eu.inqudium.core.retry.RetryException;
 import eu.inqudium.core.retry.RetrySnapshot;
 import eu.inqudium.core.retry.RetryState;
+import eu.inqudium.core.retry.BackoffStrategy;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -30,7 +31,7 @@ import java.util.logging.Logger;
  * from the immutability of the snapshot and configuration.
  *
  * <p><strong>Clock and backoff behavior (Fix 8):</strong> The backoff delay
- * is computed by the {@link eu.inqudium.core.retry.BackoffStrategy} and honoured
+ * is computed by the {@link BackoffStrategy} and honoured
  * via {@link LockSupport#parkNanos}. When using an injectable {@link Clock}
  * (e.g., in tests), the remaining duration is calculated as
  * {@code Duration.between(clock.instant(), targetWakeup)}. If the clock

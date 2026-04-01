@@ -210,20 +210,6 @@ public sealed interface BackoffStrategy {
       }
     }
 
-    @Override
-    public Duration computeDelay(int attemptIndex) {
-      long fibValue = computeFibonacci(attemptIndex + 1);
-      long delayNanos = initialDelay.toNanos() * fibValue;
-      long maxNanos = maxDelay.toNanos();
-
-      // Guard against overflow or exceeding max
-      if (delayNanos < 0 || delayNanos > maxNanos || fibValue < 0) {
-        return maxDelay;
-      }
-
-      return Duration.ofNanos(delayNanos);
-    }
-
     /**
      * Computes the n-th Fibonacci number iteratively.
      * fib(0)=1, fib(1)=1, fib(2)=2, fib(3)=3, fib(4)=5, ...
@@ -241,6 +227,20 @@ public sealed interface BackoffStrategy {
         curr = next;
       }
       return curr;
+    }
+
+    @Override
+    public Duration computeDelay(int attemptIndex) {
+      long fibValue = computeFibonacci(attemptIndex + 1);
+      long delayNanos = initialDelay.toNanos() * fibValue;
+      long maxNanos = maxDelay.toNanos();
+
+      // Guard against overflow or exceeding max
+      if (delayNanos < 0 || delayNanos > maxNanos || fibValue < 0) {
+        return maxDelay;
+      }
+
+      return Duration.ofNanos(delayNanos);
     }
   }
 
@@ -345,7 +345,7 @@ public sealed interface BackoffStrategy {
    * @param initialDelay the minimum delay and baseline for the first retry
    * @param maxDelay     ceiling for the computed delay
    * @see <a href="https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/">
-   *      AWS Architecture Blog: Exponential Backoff and Jitter</a>
+   * AWS Architecture Blog: Exponential Backoff and Jitter</a>
    */
   record DecorrelatedJitter(Duration initialDelay, Duration maxDelay) implements BackoffStrategy {
 
