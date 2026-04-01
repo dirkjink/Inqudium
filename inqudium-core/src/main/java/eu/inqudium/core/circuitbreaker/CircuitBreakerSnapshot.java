@@ -37,7 +37,7 @@ public record CircuitBreakerSnapshot(
    * and the HALF_OPEN counters to their initial values.
    */
   public CircuitBreakerSnapshot withState(CircuitState newState, Instant now) {
-    return new CircuitBreakerSnapshot(newState, failureMetrics.reset(), 0, 0, now);
+    return new CircuitBreakerSnapshot(newState, failureMetrics.reset(now), 0, 0, now);
   }
 
   /**

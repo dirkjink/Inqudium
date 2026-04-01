@@ -100,7 +100,7 @@ public final class CircuitBreakerCore {
     return switch (snapshot.state()) {
       case CLOSED -> {
         // Delegate success recording to the configured metrics strategy
-        FailureMetrics updatedMetrics = snapshot.failureMetrics().recordSuccess();
+        FailureMetrics updatedMetrics = snapshot.failureMetrics().recordSuccess(now);
         yield snapshot.withUpdatedFailureMetrics(updatedMetrics);
       }
 
@@ -139,10 +139,10 @@ public final class CircuitBreakerCore {
     return switch (snapshot.state()) {
       case CLOSED -> {
         // Delegate failure recording to the configured metrics strategy
-        FailureMetrics updatedMetrics = snapshot.failureMetrics().recordFailure();
+        FailureMetrics updatedMetrics = snapshot.failureMetrics().recordFailure(now);
 
         // Evaluate if the strategy signals that the threshold is reached
-        if (updatedMetrics.isThresholdReached(config)) {
+        if (updatedMetrics.isThresholdReached(config, now)) {
           // Transition CLOSED → OPEN
           yield snapshot.withState(CircuitState.OPEN, now);
         }

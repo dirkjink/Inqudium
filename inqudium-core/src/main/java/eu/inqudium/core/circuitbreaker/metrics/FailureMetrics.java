@@ -2,6 +2,8 @@ package eu.inqudium.core.circuitbreaker.metrics;
 
 import eu.inqudium.core.circuitbreaker.CircuitBreakerConfig;
 
+import java.time.Instant;
+
 /**
  * Strategy interface for tracking failures and determining if the circuit should open.
  * Implementations must be immutable to fit into the functional core.
@@ -11,20 +13,20 @@ public interface FailureMetrics {
   /**
    * Records a successful call and returns the updated metrics state.
    */
-  FailureMetrics recordSuccess();
+  FailureMetrics recordSuccess(Instant now);
 
   /**
    * Records a failed call and returns the updated metrics state.
    */
-  FailureMetrics recordFailure();
+  FailureMetrics recordFailure(Instant now);
 
   /**
    * Evaluates if the failure threshold has been reached based on the current state and configuration.
    */
-  boolean isThresholdReached(CircuitBreakerConfig config);
+  boolean isThresholdReached(CircuitBreakerConfig config, Instant now);
 
   /**
    * Resets the metrics to their initial state (e.g., when transitioning to CLOSED).
    */
-  FailureMetrics reset();
+  FailureMetrics reset(Instant now);
 }
