@@ -1,8 +1,8 @@
 package eu.inqudium.imperative.bulkhead.strategy;
 
+import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import eu.inqudium.core.log.Logger;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -25,8 +25,7 @@ import java.util.function.LongSupplier;
  */
 public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
 
-  private static final Logger LOG = LoggerFactory.getLogger(CoDelBulkheadStrategy.class);
-
+  private final Logger logger;
   private final int maxConcurrent;
   private final long targetDelayNanos;
   private final long intervalNanos;
@@ -39,7 +38,7 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
   private int activeCalls = 0;
   private int acquireThreads = 0;
 
-  public CoDelBulkheadStrategy(int maxConcurrentCalls, Duration targetDelay,
+  public CoDelBulkheadStrategy(InqBulkheadConfig config, int maxConcurrentCalls, Duration targetDelay,
                                Duration interval, LongSupplier nanoTimeSource) {
     if (maxConcurrentCalls < 0) {
       throw new IllegalArgumentException("maxConcurrentCalls must be >= 0, got " + maxConcurrentCalls);
@@ -52,6 +51,7 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
     if (interval.isNegative() || interval.isZero()) {
       throw new IllegalArgumentException("interval must be positive");
     }
+    this.logger = config.general().loggerFactory().getLogger(getClass());
     this.maxConcurrent = maxConcurrentCalls;
     this.targetDelayNanos = targetDelay.toNanos();
     this.intervalNanos = interval.toNanos();
@@ -90,7 +90,7 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
           } else if (now - firstAboveTargetNanos > intervalNanos) {
             // Sustained congestion — reject (CoDel drop)
             permitAvailable.signal(); // chain-drain: wake next waiter
-            LOG.debug("CoDel drop: sojourn={}ns target={}ns interval={}ns",
+            logger.debug().log("CoDel drop: sojourn={}ns target={}ns interval={}ns",
                 sojournNanos, targetDelayNanos, intervalNanos);
             return false;
           }

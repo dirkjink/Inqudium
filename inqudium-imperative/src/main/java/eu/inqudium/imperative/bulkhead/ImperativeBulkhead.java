@@ -14,10 +14,9 @@ import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.NonBlockingBulkheadStrategy;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.invoke.InqCall;
+import eu.inqudium.core.log.Logger;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -36,8 +35,7 @@ import java.util.Objects;
  */
 public final class ImperativeBulkhead implements Bulkhead {
 
-  private static final Logger LOG = LoggerFactory.getLogger(ImperativeBulkhead.class);
-
+  private final Logger logger;
   private final String name;
   private final InqBulkheadConfig config;
   private final BlockingBulkheadStrategy strategy;
@@ -55,6 +53,7 @@ public final class ImperativeBulkhead implements Bulkhead {
               + strategy.getClass().getName()
               + ". Use the reactive bulkhead facade for NonBlockingBulkheadStrategy.");
     }
+    this.logger = config.general().loggerFactory().getLogger(getClass());
     this.name = config.name();
     this.config = config;
     this.strategy = blocking;
@@ -158,7 +157,7 @@ public final class ImperativeBulkhead implements Bulkhead {
         eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(
             callId, name, e.getClass().getSimpleName(), clock.instant()));
       } catch (RuntimeException traceError) {
-        LOG.error("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
+        logger.error().log("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
             + "Permit rolled back.", name, callId, traceError);
       }
       throw e;
@@ -168,7 +167,7 @@ public final class ImperativeBulkhead implements Bulkhead {
     try {
       publishWaitTrace(callId, startWait, true);
     } catch (RuntimeException e) {
-      LOG.error("Failed to publish wait trace for acquired call on bulkhead '{}', "
+      logger.error().log("Failed to publish wait trace for acquired call on bulkhead '{}', "
           + "callId='{}'. Telemetry-only failure.", name, callId, e);
     }
   }
@@ -177,14 +176,14 @@ public final class ImperativeBulkhead implements Bulkhead {
     try {
       publishWaitTrace(callId, startWait, false);
     } catch (RuntimeException e) {
-      LOG.error("Failed to publish wait trace for rejected call on bulkhead '{}', "
+      logger.error().log("Failed to publish wait trace for rejected call on bulkhead '{}', "
           + "callId='{}'. Telemetry-only failure.", name, callId, e);
     }
     try {
       eventPublisher.publish(new BulkheadOnRejectEvent(
           callId, name, strategy.concurrentCalls(), clock.instant()));
     } catch (RuntimeException e) {
-      LOG.error("Failed to publish reject event for bulkhead '{}', callId='{}'. "
+      logger.error().log("Failed to publish reject event for bulkhead '{}', callId='{}'. "
           + "Telemetry-only failure.", name, callId, e);
     }
   }
@@ -197,14 +196,14 @@ public final class ImperativeBulkhead implements Bulkhead {
     try {
       strategy.onCallComplete(rtt, businessError == null);
     } catch (RuntimeException algorithmError) {
-      LOG.error("Adaptive algorithm hook failed for bulkhead '{}', callId='{}'. "
+      logger.error().log("Adaptive algorithm hook failed for bulkhead '{}', callId='{}'. "
           + "Permit will still be released.", name, callId, algorithmError);
     } finally {
       try {
         strategy.release();
       } catch (RuntimeException e) {
         releaseError = e;
-        LOG.error("Strategy release failed for bulkhead '{}', callId='{}'. "
+        logger.error().log("Strategy release failed for bulkhead '{}', callId='{}'. "
             + "Telemetry will still be published.", name, callId, e);
       }
     }
@@ -213,7 +212,7 @@ public final class ImperativeBulkhead implements Bulkhead {
       eventPublisher.publish(new BulkheadOnReleaseEvent(
           callId, name, strategy.concurrentCalls(), clock.instant()));
     } catch (RuntimeException publisherError) {
-      LOG.error("Failed to publish release event for bulkhead '{}', callId='{}'. "
+      logger.error().log("Failed to publish release event for bulkhead '{}', callId='{}'. "
           + "Telemetry-only failure.", name, callId, publisherError);
     }
 

@@ -2,6 +2,7 @@ package eu.inqudium.core.config;
 
 import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.config.compatibility.InqCompatibility;
+import eu.inqudium.core.log.LoggerFactory;
 import eu.inqudium.core.time.CachedInqClock;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
@@ -14,9 +15,15 @@ public class GeneralExtensionBuilder {
   private InqNanoTimeSource nanoTimeSource = InqNanoTimeSource.system();
   private InqCompatibility compatibility = InqCompatibility.ofDefaults();
   private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
+  private LoggerFactory loggerFactory = LoggerFactory.NO_OP_LOGGER_FACTORY;
 
   public GeneralExtensionBuilder clock(InqClock clock) {
     this.clock = clock;
+    return this;
+  }
+
+  public GeneralExtensionBuilder loggerFactory(LoggerFactory loggerFactory) {
+    this.loggerFactory = loggerFactory;
     return this;
   }
 
@@ -40,7 +47,8 @@ public class GeneralExtensionBuilder {
         clock,
         nanoTimeSource,
         compatibility,
-        callIdGenerator
+        callIdGenerator,
+        loggerFactory
     );
   }
 }
