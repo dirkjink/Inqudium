@@ -28,8 +28,8 @@ public final class AdaptiveBulkheadStrategy implements BlockingBulkheadStrategy 
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition notFull = lock.newCondition();
 
-  private int activeCalls = 0;
-  private int oldLimit;
+  private volatile int activeCalls = 0;
+  private volatile int oldLimit;
 
   public AdaptiveBulkheadStrategy(InqLimitAlgorithm limitAlgorithm) {
     this.limitAlgorithm = Objects.requireNonNull(limitAlgorithm, "limitAlgorithm must not be null");
@@ -82,7 +82,7 @@ public final class AdaptiveBulkheadStrategy implements BlockingBulkheadStrategy 
   @Override
   public void onCallComplete(Duration rtt, boolean isSuccess) {
     // Step 1: Feed the algorithm (outside lock — algorithm is CAS-based)
-    limitAlgorithm.update(rtt, isSuccess);
+    limitAlgorithm.update(rtt, isSuccess, activeCalls);
 
     // Step 2: Detect and react to limit changes (under lock)
     lock.lock();

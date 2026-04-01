@@ -97,6 +97,18 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
   private final ContinuousTimeEwma baselineDriftEwma;
 
   /**
+   * The stateless calculator used to compute the continuous-time EWMA of the error rate.
+   * Ensures the reactive fallback is independent of the request rate (RPS).
+   */
+  private final ContinuousTimeEwma errorRateEwma;
+
+  /**
+   * The EWMA-smoothed error rate must strictly exceed this threshold before the
+   * reactive multiplicative decrease (fallback) is triggered.
+   */
+  private final double errorRateThreshold;
+
+  /**
    * The injectable nano-time source for all timing measurements related to the EWMA decay.
    */
   private final LongSupplier nanoTimeSource;
@@ -115,18 +127,20 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
    * Creates a new Vegas limit algorithm with the default baseline drift.
    *
    * @param initialLimit          The starting concurrency limit before any RTT feedback is
-   *                              received. Clamped to [{@code minLimit}, {@code maxLimit}].
+   * received. Clamped to [{@code minLimit}, {@code maxLimit}].
    * @param minLimit              The absolute minimum concurrency. Clamped to at least 1.
    * @param maxLimit              The absolute maximum concurrency. Clamped to at least
-   *                              {@code minLimit}.
+   * {@code minLimit}.
    * @param smoothingTimeConstant The time constant (Tau) for RTT smoothing. A larger
-   *                              duration means the average reacts more slowly and ignores short spikes.
+   * duration means the average reacts more slowly and ignores short spikes.
+   * @param errorRateThreshold    Threshold (0.0-1.0) for the smoothed error rate fallback.
    * @param nanoTimeSource        The time source used for calculating elapsed time.
    */
   public VegasLimitAlgorithm(int initialLimit,
                              int minLimit,
                              int maxLimit,
                              Duration smoothingTimeConstant,
+                             double errorRateThreshold,
                              LongSupplier nanoTimeSource) {
     // Uses a default slow drift (e.g., 10 seconds time constant) for the baseline
     this(initialLimit,
@@ -134,6 +148,7 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
         maxLimit,
         smoothingTimeConstant,
         Duration.ofSeconds(10),
+        errorRateThreshold,
         nanoTimeSource);
   }
 
@@ -143,24 +158,26 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
    * <p><b>Recommended production configuration:</b>
    * <pre>{@code
    * new VegasLimitAlgorithm(
-   *   50,    // initialLimit: conservative starting point
-   *   5,     // minLimit: always allow probe requests
-   *   200,   // maxLimit: prevent resource exhaustion
-   *   Duration.ofMillis(500), // smoothingTimeConstant: filters jitter well
-   *   Duration.ofSeconds(10), // baselineDriftTimeConstant: slow but safe recovery
-   *   System::nanoTime        // nanoTimeSource
+   * 50,    // initialLimit: conservative starting point
+   * 5,     // minLimit: always allow probe requests
+   * 200,   // maxLimit: prevent resource exhaustion
+   * Duration.ofMillis(500), // smoothingTimeConstant: filters jitter well
+   * Duration.ofSeconds(10), // baselineDriftTimeConstant: slow but safe recovery
+   * 0.05,                   // errorRateThreshold: 5% error rate triggers fallback
+   * System::nanoTime        // nanoTimeSource
    * );
    * }</pre>
    *
    * @param initialLimit              The starting concurrency limit. Clamped to
-   *                                  [{@code minLimit}, {@code maxLimit}].
+   * [{@code minLimit}, {@code maxLimit}].
    * @param minLimit                  The absolute minimum concurrency. Clamped to at least 1.
    * @param maxLimit                  The absolute maximum concurrency. Clamped to at least
-   *                                  {@code minLimit}.
+   * {@code minLimit}.
    * @param smoothingTimeConstant     The time constant (Tau) for continuous-time RTT smoothing.
    * @param baselineDriftTimeConstant The time constant (Tau) at which the no-load baseline
-   *                                  drifts toward the smoothed RTT. A null or zero duration
-   *                                  disables decay entirely.
+   * drifts toward the smoothed RTT. A null or zero duration
+   * disables decay entirely.
+   * @param errorRateThreshold        Threshold (0.0-1.0) for the smoothed error rate fallback.
    * @param nanoTimeSource            The time source used for calculating elapsed time.
    */
   public VegasLimitAlgorithm(int initialLimit,
@@ -168,12 +185,15 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
                              int maxLimit,
                              Duration smoothingTimeConstant,
                              Duration baselineDriftTimeConstant,
+                             double errorRateThreshold,
                              LongSupplier nanoTimeSource) {
 
     this.minLimit = Math.max(1, minLimit);
     this.maxLimit = Math.max(this.minLimit, maxLimit);
 
     this.rttSmoothingEwma = new ContinuousTimeEwma(smoothingTimeConstant);
+    this.errorRateEwma = new ContinuousTimeEwma(smoothingTimeConstant);
+    this.errorRateThreshold = Math.max(0.0, Math.min(1.0, errorRateThreshold));
 
     if (baselineDriftTimeConstant != null && baselineDriftTimeConstant.toNanos() > 0) {
       this.baselineDriftEwma = new ContinuousTimeEwma(baselineDriftTimeConstant);
@@ -184,7 +204,7 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
     this.nanoTimeSource = nanoTimeSource != null ? nanoTimeSource : System::nanoTime;
 
     double bounded = Math.max(this.minLimit, Math.min(initialLimit, this.maxLimit));
-    this.state = new AtomicReference<>(new VegasState(Long.MAX_VALUE, 0, bounded, this.nanoTimeSource.getAsLong()));
+    this.state = new AtomicReference<>(new VegasState(Long.MAX_VALUE, 0, bounded, 0.0, this.nanoTimeSource.getAsLong()));
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -198,7 +218,7 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
   }
 
   @Override
-  public void update(Duration rtt, boolean isSuccess) {
+  public void update(Duration rtt, boolean isSuccess, int inFlightCalls) {
     long rttNanos = rtt.toNanos();
 
     // Guard: ignore degenerate RTT values.
@@ -210,6 +230,17 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
     VegasState next;
     do {
       current = state.get();
+
+      // ── Step 0: Update the Continuous-Time EWMA-smoothed error rate ──
+      //
+      // Track recent failures to stabilize the reactive fallback.
+      double errorSample = isSuccess ? 0.0 : 1.0;
+      double newErrorRate = errorRateEwma.calculate(
+          current.smoothedErrorRate(),
+          current.lastUpdateNanos(),
+          now,
+          errorSample
+      );
 
       final long newSmoothed;
       if (isSuccess) {
@@ -278,21 +309,26 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
         // ── Step 4: Calculate the New Concurrency Limit ──
         // ── Proactive Gradient-Based Adjustment ──
         int visibleLimit = (int) (current.currentLimit() + 1e-9);
-        double probingFactor = 1.0 / visibleLimit;
+        double probingFactor = 1.0 / Math.max(1, visibleLimit);
         newLimit = current.currentLimit() * gradient + probingFactor;
       } else {
         // ── Reactive Failure Fallback ──
         //
         // When a call fails (timeout, exception, 5xx), the RTT value is often
-        // unreliable. We apply a fixed multiplicative decrease of 20% (×0.8).
-        newLimit = current.currentLimit() * 0.8;
+        // unreliable. We only apply a multiplicative decrease if the smoothed
+        // error rate indicates sustained congestion rather than transient hiccups.
+        if (newErrorRate > errorRateThreshold) {
+          newLimit = current.currentLimit() * 0.8;
+        } else {
+          newLimit = current.currentLimit();
+        }
       }
 
       // ── Step 5: Clamp to Configured Bounds ──
       newLimit = Math.max(minLimit, Math.min(maxLimit, newLimit));
 
       // Bundle the updated state and the 'now' timestamp into an immutable snapshot.
-      next = new VegasState(newNoLoad, newSmoothed, newLimit, now);
+      next = new VegasState(newNoLoad, newSmoothed, newLimit, newErrorRate, now);
 
     } while (!state.compareAndSet(current, next));
   }
@@ -304,14 +340,15 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
   /**
    * Immutable snapshot of the algorithm's mutable state.
    *
-   * @param noLoadRttNanos   The no-load baseline in nanoseconds.
-   * @param smoothedRttNanos The continuous-time EWMA-smoothed current RTT in nanoseconds.
-   *                         A value of 0 indicates that no samples have been received yet.
-   * @param currentLimit     The current concurrency limit as a double to support the
-   *                         fractional results of gradient-based scaling.
-   * @param lastUpdateNanos  The timestamp of the last state update, used by the
-   *                         {@link ContinuousTimeEwma} calculators.
+   * @param noLoadRttNanos     The no-load baseline in nanoseconds.
+   * @param smoothedRttNanos   The continuous-time EWMA-smoothed current RTT in nanoseconds.
+   * A value of 0 indicates that no samples have been received yet.
+   * @param currentLimit       The current concurrency limit as a double to support the
+   * fractional results of gradient-based scaling.
+   * @param smoothedErrorRate  The time-smoothed error rate (0.0 to 1.0).
+   * @param lastUpdateNanos    The timestamp of the last state update, used by the
+   * {@link ContinuousTimeEwma} calculators.
    */
-  private record VegasState(long noLoadRttNanos, long smoothedRttNanos, double currentLimit, long lastUpdateNanos) {
+  private record VegasState(long noLoadRttNanos, long smoothedRttNanos, double currentLimit, double smoothedErrorRate, long lastUpdateNanos) {
   }
 }

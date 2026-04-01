@@ -18,5 +18,5 @@ public interface InqLimitAlgorithm {
    * @param rtt       the round-trip time of the call
    * @param isSuccess true if no business or technical error occurred
    */
-  void update(Duration rtt, boolean isSuccess);
+  void update(Duration rtt, boolean isSuccess, int inFlightCalls);
 }

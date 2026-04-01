@@ -123,13 +123,13 @@ public final class AdaptiveNonBlockingBulkheadStrategy implements NonBlockingBul
    * the algorithm never updates and the strategy behaves like a static limiter
    * at the algorithm's initial limit.
    *
-   * <p>The algorithm's {@link InqLimitAlgorithm#update(Duration, boolean)} is
+   * <p>The algorithm's {@link InqLimitAlgorithm#update(Duration, boolean, int)} is
    * CAS-based internally — no lock needed. The updated limit is visible to
    * concurrent {@link #tryAcquire()} calls on the next CAS iteration.
    */
   @Override
   public void onCallComplete(Duration rtt, boolean isSuccess) {
-    limitAlgorithm.update(rtt, isSuccess);
+    limitAlgorithm.update(rtt, isSuccess, activeCalls.get());
   }
 
   @Override

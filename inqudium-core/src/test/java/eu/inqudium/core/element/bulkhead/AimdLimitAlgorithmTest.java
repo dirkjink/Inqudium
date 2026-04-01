@@ -1,6 +1,7 @@
 package eu.inqudium.core.element.bulkhead;
 
 import eu.inqudium.core.element.bulkhead.algo.AimdLimitAlgorithm;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -11,49 +12,60 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AimdLimitAlgorithmTest {
 
   @Nested
+  @DisplayName("Additive Increase")
   class AdditiveIncrease {
 
     @Test
-    void a_successful_call_increases_the_limit_by_one_up_to_the_maximum() {
+    @DisplayName("A successful call increases the limit by one up to the maximum")
+    void aSuccessfulCallIncreasesTheLimitByOneUpToTheMaximum() {
       // Given
-      // Initial limit is 5, max is 7
+      // Initial limit is 5, max is 7.
+      // Using the 4-arg constructor sets minUtilizationThreshold to 0.0 internally.
       AimdLimitAlgorithm algorithm = new AimdLimitAlgorithm(5, 1, 7, 0.5);
 
       // When
-      algorithm.update(Duration.ofMillis(100), true);
+      // Simulate a successful call with current in-flight calls matching the limit
+      algorithm.update(Duration.ofMillis(100), true, 5);
 
       // Then
       assertThat(algorithm.getLimit()).isEqualTo(6);
 
-      // When we hit the limit
-      algorithm.update(Duration.ofMillis(100), true);
-      algorithm.update(Duration.ofMillis(100), true);
+      // When
+      // We hit the maximum limit
+      algorithm.update(Duration.ofMillis(100), true, 6);
+      algorithm.update(Duration.ofMillis(100), true, 7);
 
-      // Then it must not exceed the maximum
+      // Then
+      // It must not exceed the configured maximum limit
       assertThat(algorithm.getLimit()).isEqualTo(7);
     }
   }
 
   @Nested
+  @DisplayName("Multiplicative Decrease")
   class MultiplicativeDecrease {
 
     @Test
-    void a_failed_call_multiplies_the_limit_by_the_backoff_ratio_down_to_the_minimum() {
+    @DisplayName("A failed call multiplies the limit by the backoff ratio down to the minimum")
+    void aFailedCallMultipliesTheLimitByTheBackoffRatioDownToTheMinimum() {
       // Given
       // Initial limit is 10, backoff is 0.5 (halving)
       AimdLimitAlgorithm algorithm = new AimdLimitAlgorithm(10, 2, 20, 0.5);
 
       // When
-      algorithm.update(Duration.ofMillis(100), false);
+      // A failure occurs. The in-flight calls parameter is required but does not affect the decrease logic.
+      algorithm.update(Duration.ofMillis(100), false, 10);
 
       // Then
       assertThat(algorithm.getLimit()).isEqualTo(5);
 
-      // When it drops below minimum via halving
-      algorithm.update(Duration.ofMillis(100), false);
-      algorithm.update(Duration.ofMillis(100), false);
+      // When
+      // It drops below the minimum limit via consecutive halvings
+      algorithm.update(Duration.ofMillis(100), false, 5);
+      algorithm.update(Duration.ofMillis(100), false, 2);
 
-      // Then it must not drop below the specified minimum
+      // Then
+      // It must not drop below the specified absolute minimum
       assertThat(algorithm.getLimit()).isEqualTo(2);
     }
   }
