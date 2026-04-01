@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -27,26 +29,34 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Thread-safe, imperative time limiter implementation.
+ * Thread-safe time limiter with both blocking and non-blocking execution modes.
  *
- * <p>Each call to {@link #execute} spawns a virtual thread to run the callable
- * and waits for the result with a deadline. If the deadline expires, a
- * {@link TimeLimiterException} is thrown and the virtual thread is cancelled.
+ * <h2>Blocking API ({@code execute*})</h2>
+ * <p>The caller thread blocks until the operation completes, fails, or times out.
+ * A virtual thread runs the callable; the caller waits via {@code Future.get(timeout)}.
  *
- * <p><strong>Design intent (Fix 9):</strong> This implementation is optimised for
- * I/O-bound operations (HTTP calls, database queries, file I/O) where the
- * overhead of spawning a virtual thread is negligible compared to the operation
- * itself. For CPU-bound micro-operations where sub-millisecond overhead matters,
- * consider a deadline-check approach instead.
+ * <h2>Non-blocking API ({@code execute*Async})</h2>
+ * <p>Returns a {@link CompletableFuture} immediately. The caller can compose
+ * further pipeline stages without blocking. Timeout, event emission, and
+ * cancellation are handled inside the returned future's completion callbacks.
  *
- * <p><strong>CompletionStage caveat (Fix 11):</strong>
- * {@link #executeCompletionStage} converts the stage to a {@code CompletableFuture}
- * and calls {@code cancel(true)} on timeout. However, {@code CompletableFuture.cancel()}
- * does <em>not</em> interrupt the underlying computation — it only completes the
- * future exceptionally with a {@code CancellationException}. The asynchronous
- * operation may continue running in the background. For true cancellation, the
- * supplier should check for cancellation cooperatively (e.g., via a shared
- * {@code AtomicBoolean} or by inspecting the future's cancelled state).
+ * <ul>
+ *   <li>{@link #executeAsync(Callable)} — spawns a virtual thread, returns CF</li>
+ *   <li>{@link #executeFutureAsync(Supplier)} — bridges an external {@link Future}
+ *       to a CF via a lightweight virtual thread (necessary because {@code Future}
+ *       has no non-blocking completion API)</li>
+ *   <li>{@link #executeCompletionStageAsync(Supplier)} — attaches timeout handling
+ *       directly to the existing {@link CompletableFuture} pipeline using
+ *       {@link CompletableFuture#orTimeout}; no additional thread is spawned</li>
+ * </ul>
+ *
+ * <p><strong>Cancellation semantics:</strong> On timeout with {@code cancelOnTimeout=true}:
+ * <ul>
+ *   <li>Callable / FutureTask: {@code Thread.interrupt()} — true interruption</li>
+ *   <li>External Future: {@code future.cancel(true)} — may interrupt depending on impl</li>
+ *   <li>CompletionStage: {@code cf.cancel(true)} — does <em>not</em> interrupt the underlying
+ *       computation (see {@link CompletableFuture#cancel} Javadoc)</li>
+ * </ul>
  */
 public class ImperativeTimeLimiter {
 
@@ -56,8 +66,6 @@ public class ImperativeTimeLimiter {
   private final Clock clock;
   private final List<Consumer<TimeLimiterEvent>> eventListeners;
   private final String instanceId;
-
-  // Fix 4: Thread-safe counter for unique virtual thread names
   private final AtomicLong threadCounter = new AtomicLong(0);
 
   public ImperativeTimeLimiter(TimeLimiterConfig config) {
@@ -71,27 +79,44 @@ public class ImperativeTimeLimiter {
     this.instanceId = UUID.randomUUID().toString();
   }
 
-  // ======================== Callable Execution ========================
+  // ================================================================================
+  // Blocking API — Callable
+  // ================================================================================
+
+  private static Throwable unwrapCompletionException(Throwable ex) {
+    return (ex instanceof CompletionException && ex.getCause() != null)
+        ? ex.getCause() : ex;
+  }
+
+  private static <T> void validateCallable(Callable<T> callable) {
+    Objects.requireNonNull(callable, "callable must not be null");
+  }
+
+  private static void validateTimeout(Duration timeout) {
+    Objects.requireNonNull(timeout, "timeout must not be null");
+    if (timeout.isNegative() || timeout.isZero()) {
+      throw new IllegalArgumentException("timeout must be positive, got " + timeout);
+    }
+  }
 
   public <T> T execute(Callable<T> callable) throws Exception {
     return execute(callable, config.timeout());
   }
 
+  // ================================================================================
+  // Blocking API — External Future
+  // ================================================================================
+
   public <T> T execute(Callable<T> callable, Duration timeout) throws Exception {
-    Objects.requireNonNull(callable, "callable must not be null");
-    Objects.requireNonNull(timeout, "timeout must not be null");
-    if (timeout.isNegative() || timeout.isZero()) {
-      throw new IllegalArgumentException("timeout must be positive, got " + timeout);
-    }
+    validateCallable(callable);
+    validateTimeout(timeout);
 
     Instant now = clock.instant();
     ExecutionSnapshot snapshot = TimeLimiterCore.start(config, timeout, now);
     emitEvent(TimeLimiterEvent.started(config.name(), timeout, now));
 
-    // Fix 4: Unique thread name per execution to distinguish parallel calls in thread dumps
-    String threadName = "timelimiter-%s-%d".formatted(config.name(), threadCounter.incrementAndGet());
     FutureTask<T> task = new FutureTask<>(callable);
-    Thread.ofVirtual().name(threadName).start(task);
+    Thread.ofVirtual().name(nextThreadName()).start(task);
 
     try {
       return awaitFuture(task, snapshot, timeout);
@@ -101,11 +126,6 @@ public class ImperativeTimeLimiter {
     }
   }
 
-  /**
-   * Fix 1: Direct Runnable implementation with explicit InterruptedException handling.
-   * The previous delegation to the Callable variant wrapped InterruptedException
-   * in a bare RuntimeException, losing the interrupt semantics.
-   */
   public void execute(Runnable runnable) {
     Objects.requireNonNull(runnable, "runnable must not be null");
     try {
@@ -114,8 +134,6 @@ public class ImperativeTimeLimiter {
         return null;
       });
     } catch (InterruptedException e) {
-      // Interrupt flag was already restored in awaitFuture.
-      // Wrap as unchecked since execute(Runnable) cannot throw checked exceptions.
       throw new RuntimeException(e);
     } catch (RuntimeException | Error e) {
       throw e;
@@ -124,28 +142,22 @@ public class ImperativeTimeLimiter {
     }
   }
 
-  /**
-   * Executes with a fallback that activates when <em>this</em> time limiter times out.
-   */
+  // ================================================================================
+  // Blocking API — CompletionStage
+  // ================================================================================
+
   public <T> T executeWithFallback(Callable<T> callable, Supplier<T> fallback) throws Exception {
     try {
       return execute(callable);
     } catch (TimeLimiterException e) {
-      if (isOwnException(e)) {
-        return fallback.get();
-      }
+      if (isOwnException(e)) return fallback.get();
       throw e;
     }
   }
 
-  private boolean isOwnException(TimeLimiterException e) {
-    if (e.getInstanceId() != null) {
-      return Objects.equals(e.getInstanceId(), this.instanceId);
-    }
-    return Objects.equals(e.getTimeLimiterName(), config.name());
-  }
-
-  // ======================== Future Execution ========================
+  // ================================================================================
+  // Non-blocking API — Callable
+  // ================================================================================
 
   public <T> T executeFuture(Supplier<Future<T>> futureSupplier) throws Exception {
     return executeFuture(futureSupplier, config.timeout());
@@ -153,7 +165,7 @@ public class ImperativeTimeLimiter {
 
   public <T> T executeFuture(Supplier<Future<T>> futureSupplier, Duration timeout) throws Exception {
     Objects.requireNonNull(futureSupplier, "futureSupplier must not be null");
-    Objects.requireNonNull(timeout, "timeout must not be null");
+    validateTimeout(timeout);
 
     Instant now = clock.instant();
     ExecutionSnapshot snapshot = TimeLimiterCore.start(config, timeout, now);
@@ -168,38 +180,257 @@ public class ImperativeTimeLimiter {
     }
   }
 
-  /**
-   * Executes a {@link CompletionStage} with a timeout.
-   *
-   * <p><strong>Fix 11 — Cancellation caveat:</strong> On timeout,
-   * {@code cancel(true)} is called on the underlying {@code CompletableFuture}.
-   * However, {@code CompletableFuture.cancel()} does <em>not</em> interrupt
-   * the thread running the asynchronous operation — it only transitions the
-   * future to a cancelled state. The computation may continue in the background.
-   *
-   * <p>For true cooperative cancellation, the supplier should check the future's
-   * cancelled state periodically or use a shared cancellation signal.
-   */
   public <T> T executeCompletionStage(Supplier<CompletionStage<T>> stageSupplier) throws Exception {
     return executeFuture(() -> stageSupplier.get().toCompletableFuture());
   }
 
-  // ======================== Internal — Future awaiting ========================
+  /**
+   * Executes the callable asynchronously with timeout protection.
+   *
+   * <p>Spawns a virtual thread to run the callable and returns a
+   * {@link CompletableFuture} that completes when either:
+   * <ul>
+   *   <li>The callable returns a result — future completes normally</li>
+   *   <li>The callable throws — future completes exceptionally with the cause</li>
+   *   <li>The timeout expires — future completes exceptionally with
+   *       {@link TimeLimiterException}; the virtual thread is interrupted</li>
+   * </ul>
+   *
+   * @param callable the operation to execute
+   * @return a future that completes with the result or a timeout/failure exception
+   */
+  public <T> CompletableFuture<T> executeAsync(Callable<T> callable) {
+    return executeAsync(callable, config.timeout());
+  }
+
+  // ================================================================================
+  // Non-blocking API — External Future
+  // ================================================================================
+
+  public <T> CompletableFuture<T> executeAsync(Callable<T> callable, Duration timeout) {
+    validateCallable(callable);
+    validateTimeout(timeout);
+
+    Instant now = clock.instant();
+    ExecutionSnapshot snapshot = TimeLimiterCore.start(config, timeout, now);
+    emitEvent(TimeLimiterEvent.started(config.name(), timeout, now));
+
+    CompletableFuture<T> cf = new CompletableFuture<>();
+    Thread vThread = Thread.ofVirtual().name(nextThreadName()).start(() -> {
+      try {
+        cf.complete(callable.call());
+      } catch (Throwable t) {
+        cf.completeExceptionally(t);
+      }
+    });
+
+    // On timeout: interrupt the virtual thread for true cancellation
+    return attachTimeoutAndEvents(cf, snapshot, timeout, () -> vThread.interrupt());
+  }
 
   /**
-   * Awaits the future result with timeout handling.
+   * Async execution of a {@link Runnable} with timeout protection.
    *
-   * <p><strong>Fix 5:</strong> Uses nanosecond precision for the timeout to avoid
-   * sub-millisecond timeouts being rounded to zero (which would cause an immediate
-   * timeout check instead of a timed wait).
+   * @param runnable the operation to execute
+   * @return a future that completes with {@code null} or a timeout/failure exception
    */
+  public CompletableFuture<Void> executeAsync(Runnable runnable) {
+    return executeAsync(runnable, config.timeout());
+  }
+
+  // ================================================================================
+  // Non-blocking API — CompletionStage
+  // ================================================================================
+
+  public CompletableFuture<Void> executeAsync(Runnable runnable, Duration timeout) {
+    Objects.requireNonNull(runnable, "runnable must not be null");
+    return executeAsync(() -> {
+      runnable.run();
+      return null;
+    }, timeout);
+  }
+
+  /**
+   * Bridges an external {@link Future} into a timeout-protected {@link CompletableFuture}.
+   *
+   * <p>Since {@code Future} has no non-blocking completion API, a lightweight
+   * virtual thread is spawned to block on {@code future.get()} and bridge the
+   * result into the returned {@code CompletableFuture}. The timeout is enforced
+   * via {@link CompletableFuture#orTimeout} on the bridge future — no second
+   * blocking wait is involved.
+   *
+   * <p>On timeout, {@code future.cancel(true)} is called on the original future,
+   * which may interrupt the underlying operation depending on the {@code Future}
+   * implementation.
+   *
+   * @param futureSupplier supplier for the already-running future
+   * @return a future that completes with the result or a timeout/failure exception
+   */
+  public <T> CompletableFuture<T> executeFutureAsync(Supplier<Future<T>> futureSupplier) {
+    return executeFutureAsync(futureSupplier, config.timeout());
+  }
+
+  // ================================================================================
+  // Shared async infrastructure
+  // ================================================================================
+
+  public <T> CompletableFuture<T> executeFutureAsync(
+      Supplier<Future<T>> futureSupplier, Duration timeout) {
+    Objects.requireNonNull(futureSupplier, "futureSupplier must not be null");
+    validateTimeout(timeout);
+
+    Instant now = clock.instant();
+    ExecutionSnapshot snapshot = TimeLimiterCore.start(config, timeout, now);
+    emitEvent(TimeLimiterEvent.started(config.name(), timeout, now));
+
+    Future<T> future = futureSupplier.get();
+
+    // Bridge Future -> CompletableFuture via virtual thread.
+    // The virtual thread blocks on future.get() (cheap on virtual threads)
+    // while the CF gets the timeout attached non-blockingly via orTimeout.
+    CompletableFuture<T> cf = new CompletableFuture<>();
+    Thread.ofVirtual().name(nextBridgeThreadName()).start(() -> {
+      try {
+        cf.complete(future.get());
+      } catch (ExecutionException e) {
+        cf.completeExceptionally(e.getCause() != null ? e.getCause() : e);
+      } catch (InterruptedException e) {
+        // Bridge thread was interrupted (typically by orTimeout cancellation).
+        // The CF is already completed with TimeoutException by orTimeout —
+        // do not overwrite it. Just restore the interrupt flag.
+        Thread.currentThread().interrupt();
+      } catch (Throwable t) {
+        cf.completeExceptionally(t);
+      }
+    });
+
+    // On timeout: cancel the original Future (may interrupt the real operation)
+    return attachTimeoutAndEvents(cf, snapshot, timeout, () -> future.cancel(true));
+  }
+
+  // ================================================================================
+  // Blocking internals — Future awaiting
+  // ================================================================================
+
+  /**
+   * Attaches timeout protection directly to the existing {@link CompletionStage} pipeline.
+   *
+   * <p>No additional thread is spawned. The timeout is enforced via
+   * {@link CompletableFuture#orTimeout}, which uses the JDK's internal
+   * {@code ScheduledThreadPoolExecutor} to schedule the deadline check.
+   * Event emission and exception transformation are added as dependent
+   * pipeline stages via {@link CompletableFuture#handle}.
+   *
+   * <p><strong>Cancellation caveat:</strong> On timeout, {@code cf.cancel(true)}
+   * is called, but {@link CompletableFuture#cancel} does not interrupt the
+   * underlying computation. The asynchronous operation may continue in the
+   * background. For cooperative cancellation, the supplier should inspect
+   * the future's state or use a shared cancellation signal.
+   *
+   * @param stageSupplier supplier for the already-running completion stage
+   * @return the pipeline with timeout, events, and exception transformation attached
+   */
+  public <T> CompletableFuture<T> executeCompletionStageAsync(
+      Supplier<CompletionStage<T>> stageSupplier) {
+    return executeCompletionStageAsync(stageSupplier, config.timeout());
+  }
+
+  // ================================================================================
+  // Shared internals
+  // ================================================================================
+
+  public <T> CompletableFuture<T> executeCompletionStageAsync(
+      Supplier<CompletionStage<T>> stageSupplier, Duration timeout) {
+    Objects.requireNonNull(stageSupplier, "stageSupplier must not be null");
+    validateTimeout(timeout);
+
+    Instant now = clock.instant();
+    ExecutionSnapshot snapshot = TimeLimiterCore.start(config, timeout, now);
+    emitEvent(TimeLimiterEvent.started(config.name(), timeout, now));
+
+    CompletableFuture<T> cf = stageSupplier.get().toCompletableFuture();
+
+    // Attach directly to the existing pipeline — no new thread spawned.
+    // On timeout: cf.cancel(true) is called, but does NOT interrupt (documented caveat).
+    return attachTimeoutAndEvents(cf, snapshot, timeout, () -> cf.cancel(true));
+  }
+
+  /**
+   * Attaches timeout enforcement, event emission, and exception transformation
+   * to a {@link CompletableFuture}.
+   *
+   * <p>This is the shared backbone for all three async execution modes:
+   * <ol>
+   *   <li>{@link CompletableFuture#orTimeout} — schedules a deadline; if the CF
+   *       is not completed in time, it completes exceptionally with
+   *       {@link TimeoutException}</li>
+   *   <li>{@link CompletableFuture#handle} — intercepts every completion
+   *       (success, failure, timeout) to emit events and transform the
+   *       {@code TimeoutException} into a {@link TimeLimiterException}</li>
+   *   <li>The {@code onTimeoutCancel} callback — invoked on timeout when
+   *       {@code cancelOnTimeout} is enabled; specific to each execution mode</li>
+   * </ol>
+   *
+   * @param cf              the future to protect
+   * @param snapshot        the execution snapshot (RUNNING state)
+   * @param timeout         the effective timeout duration
+   * @param onTimeoutCancel cancellation action specific to the execution mode
+   * @return a new dependent future with timeout and event handling attached
+   */
+  private <T> CompletableFuture<T> attachTimeoutAndEvents(
+      CompletableFuture<T> cf,
+      ExecutionSnapshot snapshot,
+      Duration timeout,
+      Runnable onTimeoutCancel) {
+
+    // Schedule the deadline on the CF (modifies in place, returns same reference)
+    cf.orTimeout(timeout.toNanos(), TimeUnit.NANOSECONDS);
+
+    // Intercept completion to emit events and transform exceptions
+    return cf.handle((result, ex) -> {
+      Instant eventTime = clock.instant();
+
+      // Happy path: completed within the deadline
+      if (ex == null) {
+        ExecutionSnapshot completed = TimeLimiterCore.recordSuccess(snapshot, eventTime);
+        emitEvent(TimeLimiterEvent.completed(
+            config.name(), completed.elapsed(eventTime), timeout, eventTime));
+        return result;
+      }
+
+      Throwable cause = unwrapCompletionException(ex);
+
+      // Timeout path: orTimeout completed the CF with TimeoutException
+      if (cause instanceof TimeoutException) {
+        ExecutionSnapshot timedOut = TimeLimiterCore.recordTimeout(snapshot, eventTime);
+        emitEvent(TimeLimiterEvent.timedOut(
+            config.name(), timedOut.elapsed(eventTime), timeout, eventTime));
+
+        if (config.cancelOnTimeout()) {
+          onTimeoutCancel.run();
+          Instant cancelledAt = clock.instant();
+          ExecutionSnapshot cancelled = TimeLimiterCore.recordCancellation(timedOut, cancelledAt);
+          emitEvent(TimeLimiterEvent.cancelled(
+              config.name(), cancelled.elapsed(cancelledAt), timeout, cancelledAt));
+        }
+
+        throw new CompletionException(createTimeoutExceptionWithIdentity(timeout));
+      }
+
+      // Failure path: operation threw within the deadline
+      ExecutionSnapshot failed = TimeLimiterCore.recordFailure(snapshot, cause, eventTime);
+      emitEvent(TimeLimiterEvent.failed(
+          config.name(), failed.elapsed(eventTime), timeout, eventTime));
+      throw new CompletionException(cause);
+    });
+  }
+
   private <T> T awaitFuture(
       Future<T> future,
       ExecutionSnapshot snapshot,
       Duration timeout) throws Exception {
 
     try {
-      // Fix 5: Use nanosecond precision to preserve sub-millisecond timeouts
       T result = future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
 
       Instant completedAt = clock.instant();
@@ -215,13 +446,12 @@ public class ImperativeTimeLimiter {
           config.name(), timedOut.elapsed(timedOutAt), timeout, timedOutAt));
 
       if (config.cancelOnTimeout()) {
-        // Fix 6: No isDone() check — cancel() is idempotent on completed futures
         boolean cancelled = future.cancel(true);
         if (cancelled) {
           Instant cancelledAt = clock.instant();
-          ExecutionSnapshot cancelledSnapshot = TimeLimiterCore.recordCancellation(timedOut, cancelledAt);
+          ExecutionSnapshot cs = TimeLimiterCore.recordCancellation(timedOut, cancelledAt);
           emitEvent(TimeLimiterEvent.cancelled(
-              config.name(), cancelledSnapshot.elapsed(cancelledAt), timeout, cancelledAt));
+              config.name(), cs.elapsed(cancelledAt), timeout, cancelledAt));
         }
       }
 
@@ -249,74 +479,49 @@ public class ImperativeTimeLimiter {
     }
   }
 
-  // ======================== Internal — Exception creation ========================
-
-  /**
-   * Creates the timeout exception via the configured factory, then injects the instanceId.
-   *
-   * <p><strong>Fix 2:</strong> Instead of discarding the factory-produced exception
-   * and creating a fresh one, we use {@link TimeLimiterException#withInstanceId} to
-   * preserve all factory customizations (subclass type, extra fields, cause chain,
-   * suppressed exceptions). For non-TimeLimiterException types from custom factories,
-   * the exception is returned as-is — {@link #isOwnException} handles those via
-   * name-based fallback comparison.
-   */
   private RuntimeException createTimeoutExceptionWithIdentity(Duration effectiveTimeout) {
     RuntimeException exception = config.createTimeoutException(effectiveTimeout);
     if (exception instanceof TimeLimiterException tle) {
-      // Inject instanceId while preserving all factory customizations
       return tle.withInstanceId(instanceId);
     }
-    // Custom non-TimeLimiterException type — return as-is.
-    // isOwnException falls back to name comparison for these.
     return exception;
   }
 
-  // ======================== Internal — Task cancellation ========================
-
-  /**
-   * Safely cancels a future, catching any exceptions from the cancel call.
-   *
-   * <p><strong>Fix 6:</strong> Removed the {@code isDone()} check before
-   * {@code cancel()} — {@code Future.cancel()} is idempotent on completed futures
-   * (returns {@code false} without side effects). The check was a no-op that
-   * introduced a needless race condition window.
-   */
   private void cancelTaskSafely(Future<?> future) {
     try {
       future.cancel(true);
     } catch (Throwable t) {
       LOG.log(Level.WARNING,
           "Failed to cancel task for time limiter '%s': %s"
-              .formatted(config.name(), t.getMessage()),
-          t);
+              .formatted(config.name(), t.getMessage()), t);
     }
   }
 
-  // ======================== Listeners ========================
+  private boolean isOwnException(TimeLimiterException e) {
+    if (e.getInstanceId() != null) {
+      return Objects.equals(e.getInstanceId(), this.instanceId);
+    }
+    return Objects.equals(e.getTimeLimiterName(), config.name());
+  }
 
-  /**
-   * Registers an event listener.
-   *
-   * <p><strong>Fix 7:</strong> Returns a {@link Runnable} that, when executed,
-   * unregisters this listener. Prevents memory leaks when listeners are
-   * registered from short-lived contexts.
-   *
-   * @param listener the listener to be notified on time limiter events
-   * @return a disposable handle that removes the listener when invoked
-   */
+  private String nextThreadName() {
+    return "timelimiter-%s-%d".formatted(config.name(), threadCounter.incrementAndGet());
+  }
+
+  private String nextBridgeThreadName() {
+    return "timelimiter-%s-bridge-%d".formatted(config.name(), threadCounter.incrementAndGet());
+  }
+
+  // ================================================================================
+  // Listeners & Introspection
+  // ================================================================================
+
   public Runnable onEvent(Consumer<TimeLimiterEvent> listener) {
     Objects.requireNonNull(listener, "listener must not be null");
     eventListeners.add(listener);
     return () -> eventListeners.remove(listener);
   }
 
-  /**
-   * Fix 3: Catches {@link Throwable} (not just {@link Exception}) to prevent
-   * an {@link Error} from a monitoring listener from breaking the execution flow.
-   * This is especially critical because events are emitted after the virtual thread
-   * has been started — an unhandled Error would leak the thread.
-   */
   private void emitEvent(TimeLimiterEvent event) {
     for (Consumer<TimeLimiterEvent> listener : eventListeners) {
       try {
@@ -324,13 +529,10 @@ public class ImperativeTimeLimiter {
       } catch (Throwable t) {
         LOG.log(Level.WARNING,
             "Event listener threw exception for time limiter '%s' (event: %s): %s"
-                .formatted(config.name(), event.type(), t.getMessage()),
-            t);
+                .formatted(config.name(), event.type(), t.getMessage()), t);
       }
     }
   }
-
-  // ======================== Introspection ========================
 
   public TimeLimiterConfig getConfig() {
     return config;
