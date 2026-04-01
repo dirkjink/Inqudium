@@ -41,53 +41,6 @@ public final class FallbackCore {
     return snapshot.withSucceeded(now);
   }
 
-  public static <T> ExceptionResolution<T> resolveExceptionHandler(
-      FallbackSnapshot snapshot,
-      FallbackConfig<T> config,
-      Throwable failure,
-      Instant now) {
-
-    requireState(snapshot, FallbackState.EXECUTING, "resolveExceptionHandler");
-
-    FallbackExceptionHandler<T> handler = config.findHandlerForException(failure);
-    if (handler == null) {
-      FallbackSnapshot unhandled = snapshot.withUnhandled(failure, now);
-      return new ExceptionResolution<>(null, unhandled, false);
-    }
-
-    FallbackSnapshot fallingBack = snapshot.withFallingBack(failure, handler.name(), now);
-    return new ExceptionResolution<>(handler, fallingBack, true);
-  }
-
-  /**
-   * Resolves a result handler for the given primary result.
-   *
-   * <p>Fix 4: Always returns a non-null {@link ResultResolution} for API consistency
-   * with {@link #resolveExceptionHandler}. When no handler matches, the resolution
-   * contains {@code matched=false} and the snapshot transitions to SUCCEEDED.
-   *
-   * @return a resolution indicating whether a result handler matched
-   */
-  public static <T> ResultResolution<T> resolveResultHandler(
-      FallbackSnapshot snapshot,
-      FallbackConfig<T> config,
-      T result,
-      Instant now) {
-
-    requireState(snapshot, FallbackState.EXECUTING, "resolveResultHandler");
-
-    FallbackResultHandler<T> handler = config.findHandlerForResult(result);
-    if (handler == null) {
-      // Fix 4: Return a non-null resolution with matched=false instead of null.
-      // Snapshot transitions to SUCCEEDED since the result is acceptable.
-      FallbackSnapshot succeeded = snapshot.withSucceeded(now);
-      return new ResultResolution<>(null, succeeded, false);
-    }
-
-    FallbackSnapshot fallingBack = snapshot.withFallingBack(null, handler.name(), now);
-    return new ResultResolution<>(handler, fallingBack, true);
-  }
-
   public static FallbackSnapshot recordFallbackSuccess(FallbackSnapshot snapshot, Instant now) {
     requireState(snapshot, FallbackState.FALLING_BACK, "recordFallbackSuccess");
     return snapshot.withRecovered(now);
@@ -121,19 +74,5 @@ public final class FallbackCore {
       throw new IllegalStateException(
           "Cannot %s in state %s (expected %s)".formatted(operation, snapshot.state(), required));
     }
-  }
-
-  public record ExceptionResolution<T>(
-      FallbackExceptionHandler<T> handler,
-      FallbackSnapshot snapshot,
-      boolean matched
-  ) {
-  }
-
-  public record ResultResolution<T>(
-      FallbackResultHandler<T> handler,
-      FallbackSnapshot snapshot,
-      boolean matched
-  ) {
   }
 }

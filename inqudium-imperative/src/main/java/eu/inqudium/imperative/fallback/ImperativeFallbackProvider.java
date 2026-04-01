@@ -5,6 +5,8 @@ import eu.inqudium.core.fallback.FallbackCore;
 import eu.inqudium.core.fallback.FallbackEvent;
 import eu.inqudium.core.fallback.FallbackException;
 import eu.inqudium.core.fallback.FallbackSnapshot;
+import eu.inqudium.core.fallback.FallbackExceptionHandler;
+import eu.inqudium.core.fallback.FallbackResultHandler;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -18,7 +20,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Thread-safe, imperative fallback provider implementation.
+ * Thread-safe, imperative fallback provider implementation optimized for low GC overhead.
  */
 public class ImperativeFallbackProvider<T> {
 
@@ -43,16 +45,15 @@ public class ImperativeFallbackProvider<T> {
 
     Instant now = clock.instant();
     FallbackSnapshot snapshot = FallbackCore.start(now);
-    emitEvent(FallbackEvent.primaryStarted(config.name(), now));
+    emitEventIfListening(() -> FallbackEvent.primaryStarted(config.name(), now));
 
     T result;
     try {
       result = callable.call();
     } catch (Throwable primary) {
-      // Fix 2: Bypassing the fallback chain for InterruptedException
       if (primary instanceof InterruptedException) {
         Thread.currentThread().interrupt();
-        throw (InterruptedException) primary; // Throw directly, avoid FallbackException
+        throw (InterruptedException) primary;
       }
       return handlePrimaryFailure(snapshot, primary);
     }
@@ -77,19 +78,22 @@ public class ImperativeFallbackProvider<T> {
   private T executeWithoutResultCheck(Callable<T> callable) throws Exception {
     Instant now = clock.instant();
     FallbackSnapshot snapshot = FallbackCore.start(now);
-    emitEvent(FallbackEvent.primaryStarted(config.name(), now));
+    emitEventIfListening(() -> FallbackEvent.primaryStarted(config.name(), now));
 
     try {
       T result = callable.call();
 
-      Instant resultTime = clock.instant();
-      snapshot = FallbackCore.recordPrimarySuccess(snapshot, resultTime);
-      emitEvent(FallbackEvent.primarySucceeded(
-          config.name(), snapshot.elapsed(resultTime), resultTime));
+      // ==========================================
+      // HOT-PATH: Erfolg bei Runnables
+      // ==========================================
+      if (!eventListeners.isEmpty()) {
+        Instant resultTime = clock.instant();
+        Duration elapsed = Duration.between(snapshot.startTime(), resultTime);
+        emitEvent(FallbackEvent.primarySucceeded(config.name(), elapsed, resultTime));
+      }
       return result;
 
     } catch (Throwable primary) {
-      // Fix 2: Bypassing the fallback chain for InterruptedException
       if (primary instanceof InterruptedException) {
         Thread.currentThread().interrupt();
         throw (InterruptedException) primary;
@@ -99,43 +103,51 @@ public class ImperativeFallbackProvider<T> {
   }
 
   private T handleResult(FallbackSnapshot snapshot, T result) throws Exception {
-    Instant resultTime = clock.instant();
+    // DIREKTER LOOKUP
+    FallbackResultHandler<T> handler = config.findHandlerForResult(result);
 
-    FallbackCore.ResultResolution<T> resultResolution =
-        FallbackCore.resolveResultHandler(snapshot, config, result, resultTime);
-
-    if (!resultResolution.matched()) {
-      snapshot = resultResolution.snapshot();
-      emitEvent(FallbackEvent.primarySucceeded(
-          config.name(), snapshot.elapsed(resultTime), resultTime));
+    if (handler == null) {
+      // ==========================================
+      // HOT-PATH: Erfolg & kein Fallback nötig
+      // ==========================================
+      if (!eventListeners.isEmpty()) {
+        Instant resultTime = clock.instant();
+        Duration elapsed = Duration.between(snapshot.startTime(), resultTime);
+        emitEvent(FallbackEvent.primarySucceeded(config.name(), elapsed, resultTime));
+      }
       return result;
     }
 
-    snapshot = resultResolution.snapshot();
-    emitEvent(FallbackEvent.resultFallbackInvoked(
-        config.name(), resultResolution.handler().name(), Duration.ZERO, resultTime));
+    // ==========================================
+    // SLOW-PATH: Result-Fallback notwendig
+    // ==========================================
+    Instant resultTime = clock.instant();
+    snapshot = snapshot.withFallingBack(null, handler.name(), resultTime);
+    emitEventIfListening(() -> FallbackEvent.resultFallbackInvoked(
+        config.name(), handler.name(), Duration.ZERO, resultTime));
 
     try {
-      // Fix 1: Provide the rejected original result to the handler
-      T fallbackResult = FallbackCore.invokeResultHandler(resultResolution.handler(), result);
+      T fallbackResult = FallbackCore.invokeResultHandler(handler, result);
       Instant recoveredTime = clock.instant();
       snapshot = FallbackCore.recordFallbackSuccess(snapshot, recoveredTime);
 
-      emitEvent(FallbackEvent.resultFallbackRecovered(
-          config.name(), resultResolution.handler().name(),
-          snapshot.fallbackElapsed(recoveredTime), recoveredTime));
+      if (!eventListeners.isEmpty()) {
+        emitEvent(FallbackEvent.resultFallbackRecovered(
+            config.name(), handler.name(),
+            snapshot.fallbackElapsed(recoveredTime), recoveredTime));
+      }
       return fallbackResult;
 
     } catch (Throwable fallbackEx) {
       Instant fbFailedTime = clock.instant();
       snapshot = FallbackCore.recordFallbackFailure(snapshot, fallbackEx, fbFailedTime);
 
-      emitEvent(FallbackEvent.fallbackFailed(
-          config.name(), resultResolution.handler().name(),
-          snapshot.fallbackElapsed(fbFailedTime), fallbackEx, fbFailedTime));
+      if (!eventListeners.isEmpty()) {
+        emitEvent(FallbackEvent.fallbackFailed(
+            config.name(), handler.name(),
+            snapshot.fallbackElapsed(fbFailedTime), fallbackEx, fbFailedTime));
+      }
 
-      // Fix 4: Propagate transparently instead of wrapping in FallbackException
-      // Allows active rejection like throwing IllegalStateException to remain clean
       if (fallbackEx instanceof Exception e) throw e;
       if (fallbackEx instanceof Error err) throw err;
       throw new RuntimeException(fallbackEx);
@@ -144,43 +156,53 @@ public class ImperativeFallbackProvider<T> {
 
   private T handlePrimaryFailure(FallbackSnapshot snapshot, Throwable primary) throws Exception {
     Instant failedTime = clock.instant();
-    emitEvent(FallbackEvent.primaryFailed(
-        config.name(), snapshot.elapsed(failedTime), primary, failedTime));
 
-    FallbackCore.ExceptionResolution<T> resolution =
-        FallbackCore.resolveExceptionHandler(snapshot, config, primary, failedTime);
+    if (!eventListeners.isEmpty()) {
+      Duration elapsed = Duration.between(snapshot.startTime(), failedTime);
+      emitEvent(FallbackEvent.primaryFailed(config.name(), elapsed, primary, failedTime));
+    }
 
-    if (!resolution.matched()) {
-      snapshot = resolution.snapshot();
-      emitEvent(FallbackEvent.noHandlerMatched(
-          config.name(), snapshot.elapsed(failedTime), primary, failedTime));
+    // DIREKTER LOOKUP
+    FallbackExceptionHandler<T> handler = config.findHandlerForException(primary);
 
+    if (handler == null) {
+      if (!eventListeners.isEmpty()) {
+        Duration elapsed = Duration.between(snapshot.startTime(), failedTime);
+        emitEvent(FallbackEvent.noHandlerMatched(config.name(), elapsed, primary, failedTime));
+      }
       if (primary instanceof Exception e) throw e;
       if (primary instanceof Error err) throw err;
       throw new RuntimeException(primary);
     }
 
-    snapshot = resolution.snapshot();
-    emitEvent(FallbackEvent.fallbackInvoked(
-        config.name(), resolution.handler().name(), Duration.ZERO, failedTime));
+    // ==========================================
+    // SLOW-PATH: Exception-Fallback notwendig
+    // ==========================================
+    snapshot = snapshot.withFallingBack(primary, handler.name(), failedTime);
+    emitEventIfListening(() -> FallbackEvent.fallbackInvoked(
+        config.name(), handler.name(), Duration.ZERO, failedTime));
 
     try {
-      T fallbackValue = FallbackCore.invokeExceptionHandler(resolution.handler(), primary);
+      T fallbackValue = FallbackCore.invokeExceptionHandler(handler, primary);
       Instant recoveredTime = clock.instant();
       snapshot = FallbackCore.recordFallbackSuccess(snapshot, recoveredTime);
 
-      emitEvent(FallbackEvent.fallbackRecovered(
-          config.name(), resolution.handler().name(),
-          snapshot.fallbackElapsed(recoveredTime), recoveredTime));
+      if (!eventListeners.isEmpty()) {
+        emitEvent(FallbackEvent.fallbackRecovered(
+            config.name(), handler.name(),
+            snapshot.fallbackElapsed(recoveredTime), recoveredTime));
+      }
       return fallbackValue;
 
     } catch (Throwable fallbackEx) {
       Instant fbFailedTime = clock.instant();
       snapshot = FallbackCore.recordFallbackFailure(snapshot, fallbackEx, fbFailedTime);
 
-      emitEvent(FallbackEvent.fallbackFailed(
-          config.name(), resolution.handler().name(),
-          snapshot.fallbackElapsed(fbFailedTime), fallbackEx, fbFailedTime));
+      if (!eventListeners.isEmpty()) {
+        emitEvent(FallbackEvent.fallbackFailed(
+            config.name(), handler.name(),
+            snapshot.fallbackElapsed(fbFailedTime), fallbackEx, fbFailedTime));
+      }
 
       throw new FallbackException(config.name(), primary, fallbackEx);
     }
@@ -190,11 +212,21 @@ public class ImperativeFallbackProvider<T> {
     eventListeners.add(Objects.requireNonNull(listener));
   }
 
+  /**
+   * Helper method to avoid instantiating FallbackEvent objects if no listeners are present.
+   * Useful for events that don't need pre-calculated variables.
+   */
+  private void emitEventIfListening(java.util.function.Supplier<FallbackEvent> eventSupplier) {
+    if (!eventListeners.isEmpty()) {
+      emitEvent(eventSupplier.get());
+    }
+  }
+
   private void emitEvent(FallbackEvent event) {
     for (Consumer<FallbackEvent> listener : eventListeners) {
       try {
         listener.accept(event);
-      } catch (Throwable t) { // Fix 3: Catch Throwable to prevent NoClassDefFoundError crashes
+      } catch (Throwable t) {
         LOG.log(Level.WARNING,
             "Event listener threw exception for fallback '%s' (event: %s): %s"
                 .formatted(config.name(), event.type(), t.getMessage()),

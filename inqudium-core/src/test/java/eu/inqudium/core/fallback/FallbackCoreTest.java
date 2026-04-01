@@ -113,7 +113,7 @@ class FallbackCoreTest {
   }
 
   // ================================================================
-  // Handler Resolution — Exception-Based
+  // Handler Resolution — Exception-Based (Testing Configuration)
   // ================================================================
 
   @Nested
@@ -128,18 +128,14 @@ class FallbackCoreTest {
           .onException(IOException.class, e -> "io-fallback")
           .onException(TimeoutException.class, e -> "timeout-fallback")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
       IOException ioError = new IOException("connection refused");
 
       // When
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config, ioError, NOW);
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(ioError);
 
       // Then
-      assertThat(resolution.matched()).isTrue();
-      assertThat(resolution.handler().name()).isEqualTo("IOException");
-      assertThat(resolution.snapshot().state()).isEqualTo(FallbackState.FALLING_BACK);
-      assertThat(resolution.snapshot().primaryFailure()).isSameAs(ioError);
+      assertThat(handler).isNotNull();
+      assertThat(handler.name()).isEqualTo("IOException");
     }
 
     @Test
@@ -150,14 +146,13 @@ class FallbackCoreTest {
           .onException("specific", IOException.class, e -> "specific-handler")
           .onAnyException("catch-all", e -> "catch-all-handler")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config, new IOException(), NOW);
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(new IOException());
 
-      // Then — first registered handler wins
-      assertThat(resolution.handler().name()).isEqualTo("specific");
+      // Then — First registered handler wins
+      assertThat(handler).isNotNull();
+      assertThat(handler.name()).isEqualTo("specific");
     }
 
     @Test
@@ -168,34 +163,29 @@ class FallbackCoreTest {
           .onException(IOException.class, e -> "io-handler")
           .onAnyException("catch-all", e -> "catch-all-value")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When — IllegalStateException does not match IOException
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config, new IllegalStateException(), NOW);
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(new IllegalStateException());
 
       // Then
-      assertThat(resolution.matched()).isTrue();
-      assertThat(resolution.handler().name()).isEqualTo("catch-all");
+      assertThat(handler).isNotNull();
+      assertThat(handler.name()).isEqualTo("catch-all");
     }
 
     @Test
-    @DisplayName("Should return unmatched when no handler matches the exception")
-    void should_return_unmatched_when_no_handler_matches_the_exception() {
-      // Given — only handles IOException
+    @DisplayName("Should return null when no handler matches the exception")
+    void should_return_null_when_no_handler_matches_the_exception() {
+      // Given — Only handles IOException
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
           .onException(IOException.class, e -> "io-handler")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config,
-              new IllegalArgumentException("no match"), NOW);
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(
+          new IllegalArgumentException("no match"));
 
       // Then
-      assertThat(resolution.matched()).isFalse();
-      assertThat(resolution.snapshot().state()).isEqualTo(FallbackState.UNHANDLED);
+      assertThat(handler).isNull();
     }
 
     @Test
@@ -207,16 +197,14 @@ class FallbackCoreTest {
               ex -> ex.getMessage() != null && ex.getMessage().contains("timeout"),
               e -> "timeout-fallback")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config,
-              new RuntimeException("connection timeout"), NOW);
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(
+          new RuntimeException("connection timeout"));
 
       // Then
-      assertThat(resolution.matched()).isTrue();
-      assertThat(resolution.handler().name()).isEqualTo("timeout-msg");
+      assertThat(handler).isNotNull();
+      assertThat(handler.name()).isEqualTo("timeout-msg");
     }
 
     @Test
@@ -226,21 +214,19 @@ class FallbackCoreTest {
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
           .withDefault("constant-fallback")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config, new RuntimeException(), NOW);
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(new RuntimeException());
 
       // Then
-      assertThat(resolution.matched()).isTrue();
-      String value = FallbackCore.invokeExceptionHandler(resolution.handler(), new RuntimeException());
+      assertThat(handler).isNotNull();
+      String value = FallbackCore.invokeExceptionHandler(handler, new RuntimeException());
       assertThat(value).isEqualTo("constant-fallback");
     }
   }
 
   // ================================================================
-  // Handler Resolution — Result-Based
+  // Handler Resolution — Result-Based (Testing Configuration)
   // ================================================================
 
   @Nested
@@ -248,25 +234,19 @@ class FallbackCoreTest {
   class ResultHandlerResolution {
 
     @Test
-    @DisplayName("Should return unmatched resolution when the result is acceptable")
-    void should_return_unmatched_resolution_when_the_result_is_acceptable() {
+    @DisplayName("Should return null when the result is acceptable")
+    void should_return_null_when_the_result_is_acceptable() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
-          // Provide Function taking rejected result instead of Supplier
           .onResult(result -> result == null, rejectedResult -> "default")
           .onAnyException(e -> "error-fallback")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.ResultResolution<String> resolution =
-          FallbackCore.resolveResultHandler(executing, config, "valid", NOW);
+      FallbackResultHandler<String> handler = config.findHandlerForResult("valid");
 
       // Then
-      assertThat(resolution).isNotNull();
-      assertThat(resolution.matched()).isFalse();
-      assertThat(resolution.handler()).isNull();
-      assertThat(resolution.snapshot().state()).isEqualTo(FallbackState.SUCCEEDED);
+      assertThat(handler).isNull();
     }
 
     @Test
@@ -274,40 +254,31 @@ class FallbackCoreTest {
     void should_resolve_the_result_handler_when_the_result_matches_the_predicate() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
-          // Provide Function taking rejected result instead of Supplier
           .onResult("null-check", result -> result == null, rejectedResult -> "default-value")
           .onAnyException(e -> "error-fallback")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.ResultResolution<String> resolution =
-          FallbackCore.resolveResultHandler(executing, config, null, NOW);
+      FallbackResultHandler<String> handler = config.findHandlerForResult(null);
 
       // Then
-      assertThat(resolution).isNotNull();
-      assertThat(resolution.matched()).isTrue();
-      assertThat(resolution.handler().name()).isEqualTo("null-check");
+      assertThat(handler).isNotNull();
+      assertThat(handler.name()).isEqualTo("null-check");
     }
 
     @Test
-    @DisplayName("Should return unmatched resolution when no result handler is registered")
-    void should_return_unmatched_resolution_when_no_result_handler_is_registered() {
-      // Given — only exception handlers
+    @DisplayName("Should return null when no result handler is registered")
+    void should_return_null_when_no_result_handler_is_registered() {
+      // Given — Only exception handlers
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
           .onAnyException(e -> "error-fallback")
           .build();
-      FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.ResultResolution<String> resolution =
-          FallbackCore.resolveResultHandler(executing, config, null, NOW);
+      FallbackResultHandler<String> handler = config.findHandlerForResult(null);
 
       // Then
-      assertThat(resolution).isNotNull();
-      assertThat(resolution.matched()).isFalse();
-      assertThat(resolution.handler()).isNull();
-      assertThat(resolution.snapshot().state()).isEqualTo(FallbackState.SUCCEEDED);
+      assertThat(handler).isNull();
     }
   }
 
@@ -444,11 +415,11 @@ class FallbackCoreTest {
     @Test
     @DisplayName("Should invoke a result handler and return the fallback value")
     void should_invoke_a_result_handler_and_return_the_fallback_value() {
-      // Given — Function taking rejected result instead of Supplier
+      // Given
       FallbackResultHandler<String> handler = new FallbackResultHandler.ForResult<>(
           "null-handler", result -> result == null, rejectedResult -> "default");
 
-      // When — Pass the rejected original result as second argument
+      // When
       String result = FallbackCore.invokeResultHandler(handler, null);
 
       // Then
@@ -457,7 +428,7 @@ class FallbackCoreTest {
   }
 
   // ================================================================
-  // Full Lifecycle
+  // Full Lifecycle (Manually stepping through core transitions)
   // ================================================================
 
   @Nested
@@ -486,16 +457,17 @@ class FallbackCoreTest {
           .onAnyException(e -> "recovered")
           .build();
       FallbackSnapshot executing = FallbackCore.start(NOW);
+      RuntimeException primaryError = new RuntimeException("fail");
 
-      // When — primary fails, handler resolved, fallback succeeds
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config, new RuntimeException("fail"), NOW);
-      assertThat(resolution.matched()).isTrue();
+      // When — Simulating the manual steps performed by the imperative provider
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(primaryError);
+      FallbackSnapshot fallingBack = executing.withFallingBack(primaryError, handler.name(), NOW);
 
-      String value = FallbackCore.invokeExceptionHandler(resolution.handler(), new RuntimeException());
-      FallbackSnapshot recovered = FallbackCore.recordFallbackSuccess(resolution.snapshot(), NOW.plusMillis(5));
+      String value = FallbackCore.invokeExceptionHandler(handler, primaryError);
+      FallbackSnapshot recovered = FallbackCore.recordFallbackSuccess(fallingBack, NOW.plusMillis(5));
 
       // Then
+      assertThat(handler).isNotNull();
       assertThat(value).isEqualTo("recovered");
       assertThat(recovered.state()).isEqualTo(FallbackState.RECOVERED);
       assertThat(recovered.fallbackInvoked()).isTrue();
@@ -509,15 +481,16 @@ class FallbackCoreTest {
           .onException(IOException.class, e -> "io-fallback")
           .build();
       FallbackSnapshot executing = FallbackCore.start(NOW);
+      IllegalStateException primaryError = new IllegalStateException("no match");
 
       // When
-      FallbackCore.ExceptionResolution<String> resolution =
-          FallbackCore.resolveExceptionHandler(executing, config,
-              new IllegalStateException("no match"), NOW);
+      FallbackExceptionHandler<String> handler = config.findHandlerForException(primaryError);
+      // Simulate imperative shell generating the unhandled state
+      FallbackSnapshot unhandled = executing.withUnhandled(primaryError, NOW);
 
       // Then
-      assertThat(resolution.matched()).isFalse();
-      assertThat(resolution.snapshot().state()).isEqualTo(FallbackState.UNHANDLED);
+      assertThat(handler).isNull();
+      assertThat(unhandled.state()).isEqualTo(FallbackState.UNHANDLED);
     }
   }
 
