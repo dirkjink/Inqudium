@@ -23,12 +23,7 @@ import java.time.Instant;
  * Each execution gets its own {@link RetrySnapshot}.
  *
  * <p>The core does <strong>not</strong> perform any waiting or scheduling.
- * It only computes the next state and the required delay. The wrappers
- * decide how to honour the delay:
- * <ul>
- *   <li>Imperative: {@code LockSupport.parkNanos} / {@code Thread.sleep}</li>
- *   <li>Reactive: {@code Mono.delay}</li>
- * </ul>
+ * It only computes the next state and the required delay.
  */
 public final class RetryCore {
 
@@ -78,13 +73,6 @@ public final class RetryCore {
   /**
    * Evaluates a failure and decides whether to retry, fail, or declare exhaustion.
    *
-   * <p>This is the central decision function. It checks:
-   * <ol>
-   *   <li>Is the exception retryable according to the config's predicate?</li>
-   *   <li>Are there remaining attempts?</li>
-   *   <li>If yes to both: compute the backoff delay and return {@link RetryDecision.DoRetry}.</li>
-   * </ol>
-   *
    * @param snapshot the current snapshot (must be in ATTEMPTING)
    * @param config   the retry configuration
    * @param failure  the exception from the failed attempt
@@ -98,19 +86,16 @@ public final class RetryCore {
 
     requireState(snapshot, RetryState.ATTEMPTING, "evaluateFailure");
 
-    // Check if the exception is retryable
     if (!config.shouldRetryOnException(failure)) {
       return new RetryDecision.DoNotRetry(
           snapshot.withFailed(failure), failure);
     }
 
-    // Check if retries remain
     if (snapshot.attemptNumber() >= config.maxAttempts()) {
       return new RetryDecision.RetriesExhausted(
           snapshot.withExhausted(failure), failure, false);
     }
 
-    // Compute backoff delay — retryIndex is 0-based
     int retryIndex = snapshot.attemptNumber() - 1;
     Duration delay = config.backoffStrategy().computeDelay(retryIndex);
 
@@ -120,10 +105,6 @@ public final class RetryCore {
 
   /**
    * Evaluates a result and decides whether it should trigger a retry.
-   *
-   * <p>Fix 1: Always returns a non-null {@link RetryDecision} for API consistency
-   * with {@link #evaluateFailure}. When the result is acceptable, returns
-   * {@link RetryDecision.Accept} with the snapshot transitioned to COMPLETED.
    *
    * @param snapshot the current snapshot (must be in ATTEMPTING)
    * @param config   the retry configuration
@@ -138,13 +119,10 @@ public final class RetryCore {
     requireState(snapshot, RetryState.ATTEMPTING, "evaluateResult");
 
     if (!config.shouldRetryOnResult(result)) {
-      // Fix 1: Return a typed Accept decision instead of null
       return new RetryDecision.Accept(snapshot.withCompleted());
     }
 
     if (snapshot.attemptNumber() >= config.maxAttempts()) {
-      // Fix 8: Mark as resultBased so the wrapper can produce a more descriptive exception.
-      // The synthetic failure clearly identifies this as a result-based exhaustion.
       Throwable syntheticFailure = new RetryOnResultExhaustedException(result);
       return new RetryDecision.RetriesExhausted(
           snapshot.withExhausted(syntheticFailure),
@@ -161,30 +139,18 @@ public final class RetryCore {
 
   // ======================== Query Helpers ========================
 
-  /**
-   * Returns the total number of attempts performed so far.
-   */
   public static int attemptCount(RetrySnapshot snapshot) {
     return snapshot.totalAttempts();
   }
 
-  /**
-   * Returns the number of retries performed (attempts - 1).
-   */
   public static int retryCount(RetrySnapshot snapshot) {
     return snapshot.retryCount();
   }
 
-  /**
-   * Returns whether retries remain for the given snapshot and config.
-   */
   public static boolean hasRetriesRemaining(RetrySnapshot snapshot, RetryConfig config) {
     return snapshot.attemptNumber() < config.maxAttempts();
   }
 
-  /**
-   * Returns the total elapsed duration since the first attempt.
-   */
   public static Duration totalElapsed(RetrySnapshot snapshot, Instant now) {
     return snapshot.totalElapsed(now);
   }
@@ -199,15 +165,21 @@ public final class RetryCore {
   }
 
   /**
-   * Fix 8: Dedicated exception for result-based retry exhaustion.
-   * This clearly distinguishes "unacceptable result after all retries" from
-   * "exception-based failure after all retries" in the failures list and exception hierarchy.
+   * Dedicated exception for result-based retry exhaustion.
+   * Clearly distinguishes "unacceptable result after all retries" from
+   * "exception-based failure after all retries".
+   *
+   * <p><strong>Fix 7:</strong> The result's {@code toString()} is NOT included
+   * in the exception message to avoid leaking sensitive data (e.g., API responses
+   * with credentials) into logs. The result object is available programmatically
+   * via {@link #getResult()} for callers that need to inspect it.
    */
   public static class RetryOnResultExhaustedException extends RuntimeException {
     private final Object result;
 
     public RetryOnResultExhaustedException(Object result) {
-      super("Retry exhausted: unacceptable result after all attempts: " + result);
+      super("Retry exhausted: unacceptable result after all attempts (type: %s)"
+          .formatted(result == null ? "null" : result.getClass().getName()));
       this.result = result;
     }
 

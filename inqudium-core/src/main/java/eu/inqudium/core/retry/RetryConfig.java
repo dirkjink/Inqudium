@@ -56,14 +56,24 @@ public record RetryConfig(
   /**
    * Checks whether the given result should trigger a retry.
    *
-   * <p><strong>Type safety note:</strong> The result predicate is stored as
-   * {@code Predicate<Object>} because {@code RetryConfig} is not type-parameterised.
-   * A {@link ClassCastException} at runtime is possible if the predicate's actual
-   * type parameter does not match the callable's return type. Callers should ensure
-   * type consistency between {@link Builder#retryOnResult} and the callable.
+   * <p><strong>Fix 5:</strong> Wraps the predicate evaluation in a try-catch to
+   * produce a clear error message when the result type does not match the
+   * predicate's expected type. Without this, a {@link ClassCastException}
+   * would surface deep in the retry loop with no indication of the root cause.
    */
   public boolean shouldRetryOnResult(Object result) {
-    return resultPredicate != null && resultPredicate.test(result);
+    if (resultPredicate == null) {
+      return false;
+    }
+    try {
+      return resultPredicate.test(result);
+    } catch (ClassCastException e) {
+      throw new ClassCastException(
+          "Result predicate type mismatch in retry '%s': the predicate cannot evaluate a result of type %s. "
+              .formatted(name, result == null ? "null" : result.getClass().getName())
+              + "Ensure the type parameter of retryOnResult() matches the callable's return type. "
+              + "Original: " + e.getMessage());
+    }
   }
 
   public static final class Builder {
@@ -73,8 +83,9 @@ public record RetryConfig(
     private Predicate<Throwable> retryPredicate = e -> true;
     private Predicate<Object> resultPredicate = null;
 
-    // Fix 6: Track whether the predicate was set via a convenience method
-    private boolean predicateSetViaConvenienceMethod = false;
+    // Fix 6: Hardened predicate source tracking (same pattern as CircuitBreakerConfig)
+    private enum PredicateSource { NONE, RAW, RETRY_ON_EXCEPTIONS, IGNORE_EXCEPTIONS }
+    private PredicateSource predicateSource = PredicateSource.NONE;
 
     private Builder(String name) {
       this.name = Objects.requireNonNull(name);
@@ -116,27 +127,35 @@ public record RetryConfig(
     }
 
     /**
-     * Sets the retry predicate directly. Resets the convenience method guard.
+     * Sets the retry predicate directly.
+     *
+     * <p>Cannot be used after {@link #retryOnExceptions} or {@link #ignoreExceptions}
+     * has already been called.
      */
     public Builder retryPredicate(Predicate<Throwable> retryPredicate) {
+      if (predicateSource == PredicateSource.RETRY_ON_EXCEPTIONS
+          || predicateSource == PredicateSource.IGNORE_EXCEPTIONS) {
+        throw new IllegalStateException(
+            "Cannot use retryPredicate() after %s was already called."
+                .formatted(predicateSource));
+      }
       this.retryPredicate = retryPredicate;
-      this.predicateSetViaConvenienceMethod = false;
+      this.predicateSource = PredicateSource.RAW;
       return this;
     }
 
     /**
      * Only retry on the specified exception types.
      *
-     * <p>Cannot be combined with {@link #ignoreExceptions} — an
-     * {@link IllegalStateException} is thrown if both are called on the same builder.
+     * <p>Cannot be combined with {@link #ignoreExceptions} or called after any
+     * other predicate configuration method.
      */
     @SafeVarargs
     public final Builder retryOnExceptions(Class<? extends Throwable>... exceptionTypes) {
-      // Fix 6: Prevent silent overwriting when combined with ignoreExceptions
-      if (predicateSetViaConvenienceMethod) {
+      if (predicateSource != PredicateSource.NONE) {
         throw new IllegalStateException(
-            "retryOnExceptions() and ignoreExceptions() cannot both be used on the same builder. "
-                + "Use retryPredicate() for complex filtering logic.");
+            "retryOnExceptions() cannot be combined with other predicate configuration methods. "
+                + "Already configured via: " + predicateSource);
       }
       this.retryPredicate = throwable -> {
         for (Class<? extends Throwable> type : exceptionTypes) {
@@ -146,23 +165,22 @@ public record RetryConfig(
         }
         return false;
       };
-      this.predicateSetViaConvenienceMethod = true;
+      this.predicateSource = PredicateSource.RETRY_ON_EXCEPTIONS;
       return this;
     }
 
     /**
      * Do not retry on the specified exception types.
      *
-     * <p>Cannot be combined with {@link #retryOnExceptions} — an
-     * {@link IllegalStateException} is thrown if both are called on the same builder.
+     * <p>Cannot be combined with {@link #retryOnExceptions} or called after any
+     * other predicate configuration method.
      */
     @SafeVarargs
     public final Builder ignoreExceptions(Class<? extends Throwable>... exceptionTypes) {
-      // Fix 6: Prevent silent overwriting when combined with retryOnExceptions
-      if (predicateSetViaConvenienceMethod) {
+      if (predicateSource != PredicateSource.NONE) {
         throw new IllegalStateException(
-            "retryOnExceptions() and ignoreExceptions() cannot both be used on the same builder. "
-                + "Use retryPredicate() for complex filtering logic.");
+            "ignoreExceptions() cannot be combined with other predicate configuration methods. "
+                + "Already configured via: " + predicateSource);
       }
       this.retryPredicate = throwable -> {
         for (Class<? extends Throwable> type : exceptionTypes) {
@@ -172,7 +190,7 @@ public record RetryConfig(
         }
         return true;
       };
-      this.predicateSetViaConvenienceMethod = true;
+      this.predicateSource = PredicateSource.IGNORE_EXCEPTIONS;
       return this;
     }
 
@@ -183,7 +201,8 @@ public record RetryConfig(
      * <p><strong>Type safety caveat:</strong> Because {@code RetryConfig} is not
      * type-parameterised, there is no compile-time guarantee that the predicate's
      * type parameter matches the callable's return type. A {@link ClassCastException}
-     * at runtime is possible if types are mismatched.
+     * at runtime is caught and re-thrown with a descriptive message by
+     * {@link RetryConfig#shouldRetryOnResult}.
      */
     @SuppressWarnings("unchecked")
     public <T> Builder retryOnResult(Predicate<T> resultPredicate) {
