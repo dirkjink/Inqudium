@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("FallbackCore — Functional Per-Execution State Machine")
 class FallbackCoreTest {
 
-  private static final Instant NOW = Instant.parse("2025-01-01T00:00:00Z");
+  // Base arbitrary nanosecond time for testing
+  private static final long NOW = 1_000_000_000L;
 
   // ================================================================
   // Initial State
@@ -36,7 +36,9 @@ class FallbackCoreTest {
       assertThat(snapshot.primaryFailure()).isNull();
       assertThat(snapshot.fallbackFailure()).isNull();
       assertThat(snapshot.handlerName()).isNull();
-      assertThat(snapshot.startTime()).isNull();
+      assertThat(snapshot.startNanos()).isZero();
+      assertThat(snapshot.fallbackStartNanos()).isZero();
+      assertThat(snapshot.endNanos()).isZero();
     }
   }
 
@@ -56,7 +58,7 @@ class FallbackCoreTest {
 
       // Then
       assertThat(snapshot.state()).isEqualTo(FallbackState.EXECUTING);
-      assertThat(snapshot.startTime()).isEqualTo(NOW);
+      assertThat(snapshot.startNanos()).isEqualTo(NOW);
     }
   }
 
@@ -73,7 +75,7 @@ class FallbackCoreTest {
     void should_transition_to_succeeded_state_with_end_time() {
       // Given
       FallbackSnapshot executing = FallbackCore.start(NOW);
-      Instant completedAt = NOW.plusMillis(50);
+      long completedAt = NOW + Duration.ofMillis(50).toNanos();
 
       // When
       FallbackSnapshot succeeded = FallbackCore.recordPrimarySuccess(executing, completedAt);
@@ -82,7 +84,7 @@ class FallbackCoreTest {
       assertThat(succeeded.state()).isEqualTo(FallbackState.SUCCEEDED);
       assertThat(succeeded.state().isTerminal()).isTrue();
       assertThat(succeeded.state().isSuccess()).isTrue();
-      assertThat(succeeded.endTime()).isEqualTo(completedAt);
+      assertThat(succeeded.endNanos()).isEqualTo(completedAt);
       assertThat(succeeded.fallbackInvoked()).isFalse();
     }
 
@@ -91,12 +93,13 @@ class FallbackCoreTest {
     void should_report_the_correct_elapsed_duration() {
       // Given
       FallbackSnapshot executing = FallbackCore.start(NOW);
+      long completedAt = NOW + Duration.ofMillis(200).toNanos();
 
       // When
-      FallbackSnapshot succeeded = FallbackCore.recordPrimarySuccess(executing, NOW.plusMillis(200));
+      FallbackSnapshot succeeded = FallbackCore.recordPrimarySuccess(executing, completedAt);
 
       // Then
-      assertThat(succeeded.elapsed(NOW.plusMillis(200))).isEqualTo(Duration.ofMillis(200));
+      assertThat(succeeded.elapsed(completedAt)).isEqualTo(Duration.ofMillis(200));
     }
 
     @Test
@@ -296,9 +299,10 @@ class FallbackCoreTest {
       // Given
       FallbackSnapshot fallingBack = FallbackCore.start(NOW)
           .withFallingBack(new RuntimeException(), "test-handler", NOW);
+      long recoveredAt = NOW + Duration.ofMillis(10).toNanos();
 
       // When
-      FallbackSnapshot recovered = FallbackCore.recordFallbackSuccess(fallingBack, NOW.plusMillis(10));
+      FallbackSnapshot recovered = FallbackCore.recordFallbackSuccess(fallingBack, recoveredAt);
 
       // Then
       assertThat(recovered.state()).isEqualTo(FallbackState.RECOVERED);
@@ -335,10 +339,10 @@ class FallbackCoreTest {
       RuntimeException fallbackError = new RuntimeException("fallback failed");
       FallbackSnapshot fallingBack = FallbackCore.start(NOW)
           .withFallingBack(primary, "failing-handler", NOW);
+      long failedAt = NOW + Duration.ofMillis(5).toNanos();
 
       // When
-      FallbackSnapshot failed = FallbackCore.recordFallbackFailure(
-          fallingBack, fallbackError, NOW.plusMillis(5));
+      FallbackSnapshot failed = FallbackCore.recordFallbackFailure(fallingBack, fallbackError, failedAt);
 
       // Then
       assertThat(failed.state()).isEqualTo(FallbackState.FALLBACK_FAILED);
@@ -440,9 +444,10 @@ class FallbackCoreTest {
     void should_complete_a_primary_success_lifecycle_without_invoking_any_fallback() {
       // Given
       FallbackSnapshot snapshot = FallbackCore.start(NOW);
+      long completedAt = NOW + Duration.ofMillis(10).toNanos();
 
       // When
-      FallbackSnapshot completed = FallbackCore.recordPrimarySuccess(snapshot, NOW.plusMillis(10));
+      FallbackSnapshot completed = FallbackCore.recordPrimarySuccess(snapshot, completedAt);
 
       // Then
       assertThat(completed.state()).isEqualTo(FallbackState.SUCCEEDED);
@@ -464,7 +469,9 @@ class FallbackCoreTest {
       FallbackSnapshot fallingBack = executing.withFallingBack(primaryError, handler.name(), NOW);
 
       String value = FallbackCore.invokeExceptionHandler(handler, primaryError);
-      FallbackSnapshot recovered = FallbackCore.recordFallbackSuccess(fallingBack, NOW.plusMillis(5));
+
+      long recoveredAt = NOW + Duration.ofMillis(5).toNanos();
+      FallbackSnapshot recovered = FallbackCore.recordFallbackSuccess(fallingBack, recoveredAt);
 
       // Then
       assertThat(handler).isNotNull();
@@ -544,11 +551,12 @@ class FallbackCoreTest {
       FallbackSnapshot executing = FallbackCore.start(NOW);
 
       // When
-      FallbackCore.recordPrimarySuccess(executing, NOW.plusMillis(10));
+      long completedAt = NOW + Duration.ofMillis(10).toNanos();
+      FallbackCore.recordPrimarySuccess(executing, completedAt);
 
       // Then
       assertThat(executing.state()).isEqualTo(FallbackState.EXECUTING);
-      assertThat(executing.endTime()).isNull();
+      assertThat(executing.endNanos()).isZero();
     }
   }
 
@@ -563,7 +571,8 @@ class FallbackCoreTest {
     @Test
     @DisplayName("Should reject an empty handler list")
     void should_reject_an_empty_handler_list() {
-      assertThatThrownBy(() -> new FallbackConfig<String>("test", java.util.List.of(), java.util.List.of()))
+      // Given array constructors for the updated configuration
+      assertThatThrownBy(() -> new FallbackConfig<String>("test", new FallbackExceptionHandler[0], new FallbackResultHandler[0]))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("At least one");
     }

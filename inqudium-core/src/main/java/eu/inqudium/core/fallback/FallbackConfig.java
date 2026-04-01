@@ -5,31 +5,33 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Immutable configuration for a fallback provider instance.
  */
 public record FallbackConfig<T>(
     String name,
-    List<FallbackExceptionHandler<T>> exceptionHandlers,
-    List<FallbackResultHandler<T>> resultHandlers
+    FallbackExceptionHandler<T>[] exceptionHandlers,
+    FallbackResultHandler<T>[] resultHandlers
 ) {
 
   public FallbackConfig {
     Objects.requireNonNull(name, "name must not be null");
     Objects.requireNonNull(exceptionHandlers, "exceptionHandlers must not be null");
     Objects.requireNonNull(resultHandlers, "resultHandlers must not be null");
-    exceptionHandlers = List.copyOf(exceptionHandlers);
-    resultHandlers = List.copyOf(resultHandlers);
 
-    if (exceptionHandlers.isEmpty() && resultHandlers.isEmpty()) {
+    // Defensive copy to maintain immutability
+    exceptionHandlers = exceptionHandlers.clone();
+    resultHandlers = resultHandlers.clone();
+
+    if (exceptionHandlers.length == 0 && resultHandlers.length == 0) {
       throw new IllegalArgumentException("At least one fallback handler must be registered");
     }
 
-    // Fix 6: Validate that catch-all / default handlers do not shadow subsequent handlers.
-    // Only the LAST exception handler is allowed to be a catch-all or constant value.
-    for (int i = 0; i < exceptionHandlers.size() - 1; i++) {
-      FallbackExceptionHandler<T> handler = exceptionHandlers.get(i);
+    // Validate that catch-all / default handlers do not shadow subsequent handlers.
+    for (int i = 0; i < exceptionHandlers.length - 1; i++) {
+      FallbackExceptionHandler<T> handler = exceptionHandlers[i];
       if (handler instanceof FallbackExceptionHandler.CatchAll
           || handler instanceof FallbackExceptionHandler.ConstantValue) {
         throw new IllegalArgumentException(
@@ -45,18 +47,20 @@ public record FallbackConfig<T>(
   }
 
   public FallbackExceptionHandler<T> findHandlerForException(Throwable throwable) {
-    for (FallbackExceptionHandler<T> handler : exceptionHandlers) {
-      if (handler.matches(throwable)) {
-        return handler;
+    // Zero iterator allocation: using raw array iteration
+    for (int i = 0; i < exceptionHandlers.length; i++) {
+      if (exceptionHandlers[i].matches(throwable)) {
+        return exceptionHandlers[i];
       }
     }
     return null;
   }
 
   public FallbackResultHandler<T> findHandlerForResult(T result) {
-    for (FallbackResultHandler<T> handler : resultHandlers) {
-      if (handler.matches(result)) {
-        return handler;
+    // Zero iterator allocation: using raw array iteration
+    for (int i = 0; i < resultHandlers.length; i++) {
+      if (resultHandlers[i].matches(result)) {
+        return resultHandlers[i];
       }
     }
     return null;
@@ -109,14 +113,12 @@ public record FallbackConfig<T>(
       return this;
     }
 
-    // Fix 1: Angepasst auf Function<T, T>
     public Builder<T> onResult(Predicate<T> predicate, Function<T, T> fallback) {
       resultHandlers.add(new FallbackResultHandler.ForResult<>(
           "result-" + resultHandlers.size(), predicate, fallback));
       return this;
     }
 
-    // Fix 1: Angepasst auf Function<T, T>
     public Builder<T> onResult(String handlerName, Predicate<T> predicate, Function<T, T> fallback) {
       resultHandlers.add(new FallbackResultHandler.ForResult<>(handlerName, predicate, fallback));
       return this;
@@ -132,8 +134,13 @@ public record FallbackConfig<T>(
       return this;
     }
 
+    @SuppressWarnings("unchecked")
     public FallbackConfig<T> build() {
-      return new FallbackConfig<>(name, exceptionHandlers, resultHandlers);
+      return new FallbackConfig<>(
+          name,
+          exceptionHandlers.toArray(new FallbackExceptionHandler[0]),
+          resultHandlers.toArray(new FallbackResultHandler[0])
+      );
     }
   }
 }

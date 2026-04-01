@@ -1,30 +1,7 @@
 package eu.inqudium.core.fallback;
 
-import java.time.Instant;
-
 /**
  * Pure functional core of the fallback provider.
- *
- * <p>All methods are static and side-effect-free. They manage the
- * per-execution fallback lifecycle as an immutable state machine:
- *
- * <pre>
- *   IDLE ──[start]──► EXECUTING ──[success]──────────────► SUCCEEDED
- *                         │
- *                         ├──[failure, handler found]──► FALLING_BACK ──[ok]──► RECOVERED
- *                         │                                   │
- *                         │                                   └──[fail]──► FALLBACK_FAILED
- *                         │
- *                         └──[failure, no handler]──► UNHANDLED
- * </pre>
- *
- * <p>The core does <strong>not</strong> invoke any handlers or callables.
- * It only manages state transitions and resolves which handler matches.
- * The wrappers are responsible for actually calling the primary operation
- * and the fallback handler.
- *
- * <p>Like TimeLimiter and Retry, there is no shared mutable state between
- * executions. Each execution gets its own {@link FallbackSnapshot}.
  */
 public final class FallbackCore {
 
@@ -32,27 +9,27 @@ public final class FallbackCore {
     // Utility class — not instantiable
   }
 
-  public static FallbackSnapshot start(Instant now) {
-    return FallbackSnapshot.idle().withExecuting(now);
+  public static FallbackSnapshot start(long currentNanos) {
+    return FallbackSnapshot.idle().withExecuting(currentNanos);
   }
 
-  public static FallbackSnapshot recordPrimarySuccess(FallbackSnapshot snapshot, Instant now) {
+  public static FallbackSnapshot recordPrimarySuccess(FallbackSnapshot snapshot, long currentNanos) {
     requireState(snapshot, FallbackState.EXECUTING, "recordPrimarySuccess");
-    return snapshot.withSucceeded(now);
+    return snapshot.withSucceeded(currentNanos);
   }
 
-  public static FallbackSnapshot recordFallbackSuccess(FallbackSnapshot snapshot, Instant now) {
+  public static FallbackSnapshot recordFallbackSuccess(FallbackSnapshot snapshot, long currentNanos) {
     requireState(snapshot, FallbackState.FALLING_BACK, "recordFallbackSuccess");
-    return snapshot.withRecovered(now);
+    return snapshot.withRecovered(currentNanos);
   }
 
   public static FallbackSnapshot recordFallbackFailure(
       FallbackSnapshot snapshot,
       Throwable fallbackFailure,
-      Instant now) {
+      long currentNanos) {
 
     requireState(snapshot, FallbackState.FALLING_BACK, "recordFallbackFailure");
-    return snapshot.withFallbackFailed(fallbackFailure, now);
+    return snapshot.withFallbackFailed(fallbackFailure, currentNanos);
   }
 
   @SuppressWarnings("unchecked")

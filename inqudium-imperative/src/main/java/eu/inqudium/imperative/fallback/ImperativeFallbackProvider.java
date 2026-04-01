@@ -1,5 +1,6 @@
 package eu.inqudium.imperative.fallback;
 
+import eu.inqudium.core.exception.InqException;
 import eu.inqudium.core.fallback.FallbackConfig;
 import eu.inqudium.core.fallback.FallbackCore;
 import eu.inqudium.core.fallback.FallbackEvent;
@@ -43,14 +44,15 @@ public class ImperativeFallbackProvider<T> {
   public T execute(Callable<T> callable) throws Exception {
     Objects.requireNonNull(callable, "callable must not be null");
 
-    Instant now = clock.instant();
-    FallbackSnapshot snapshot = FallbackCore.start(now);
-    emitEventIfListening(() -> FallbackEvent.primaryStarted(config.name(), now));
+    long startNanos = System.nanoTime();
+    FallbackSnapshot snapshot = FallbackCore.start(startNanos);
+    emitEventIfListening(() -> FallbackEvent.primaryStarted(config.name(), clock.instant()));
 
     T result;
     try {
       result = callable.call();
     } catch (Throwable primary) {
+      InqException.rethrowIfFatal(primary); // 3. Fail-Fast for JVM Errors
       if (primary instanceof InterruptedException) {
         Thread.currentThread().interrupt();
         throw (InterruptedException) primary;
@@ -76,24 +78,22 @@ public class ImperativeFallbackProvider<T> {
   }
 
   private T executeWithoutResultCheck(Callable<T> callable) throws Exception {
-    Instant now = clock.instant();
-    FallbackSnapshot snapshot = FallbackCore.start(now);
-    emitEventIfListening(() -> FallbackEvent.primaryStarted(config.name(), now));
+    long startNanos = System.nanoTime();
+    FallbackSnapshot snapshot = FallbackCore.start(startNanos);
+    emitEventIfListening(() -> FallbackEvent.primaryStarted(config.name(), clock.instant()));
 
     try {
       T result = callable.call();
 
-      // ==========================================
-      // HOT-PATH: Erfolg bei Runnables
-      // ==========================================
       if (!eventListeners.isEmpty()) {
-        Instant resultTime = clock.instant();
-        Duration elapsed = Duration.between(snapshot.startTime(), resultTime);
-        emitEvent(FallbackEvent.primarySucceeded(config.name(), elapsed, resultTime));
+        long endNanos = System.nanoTime();
+        Duration elapsed = Duration.ofNanos(endNanos - snapshot.startNanos());
+        emitEvent(FallbackEvent.primarySucceeded(config.name(), elapsed, clock.instant()));
       }
       return result;
 
     } catch (Throwable primary) {
+      InqException.rethrowIfFatal(primary); // 3. Fail-Fast for JVM Errors
       if (primary instanceof InterruptedException) {
         Thread.currentThread().interrupt();
         throw (InterruptedException) primary;
@@ -103,49 +103,44 @@ public class ImperativeFallbackProvider<T> {
   }
 
   private T handleResult(FallbackSnapshot snapshot, T result) throws Exception {
-    // DIREKTER LOOKUP
+    // Zero Iterator Allocation (due to array iteration inside config)
     FallbackResultHandler<T> handler = config.findHandlerForResult(result);
 
     if (handler == null) {
-      // ==========================================
-      // HOT-PATH: Erfolg & kein Fallback nötig
-      // ==========================================
       if (!eventListeners.isEmpty()) {
-        Instant resultTime = clock.instant();
-        Duration elapsed = Duration.between(snapshot.startTime(), resultTime);
-        emitEvent(FallbackEvent.primarySucceeded(config.name(), elapsed, resultTime));
+        long endNanos = System.nanoTime();
+        Duration elapsed = Duration.ofNanos(endNanos - snapshot.startNanos());
+        emitEvent(FallbackEvent.primarySucceeded(config.name(), elapsed, clock.instant()));
       }
       return result;
     }
 
-    // ==========================================
-    // SLOW-PATH: Result-Fallback notwendig
-    // ==========================================
-    Instant resultTime = clock.instant();
-    snapshot = snapshot.withFallingBack(null, handler.name(), resultTime);
+    long fallbackStartNanos = System.nanoTime();
+    snapshot = snapshot.withFallingBack(null, handler.name(), fallbackStartNanos);
     emitEventIfListening(() -> FallbackEvent.resultFallbackInvoked(
-        config.name(), handler.name(), Duration.ZERO, resultTime));
+        config.name(), handler.name(), Duration.ZERO, clock.instant()));
 
     try {
       T fallbackResult = FallbackCore.invokeResultHandler(handler, result);
-      Instant recoveredTime = clock.instant();
-      snapshot = FallbackCore.recordFallbackSuccess(snapshot, recoveredTime);
+      long recoveredNanos = System.nanoTime();
+      snapshot = FallbackCore.recordFallbackSuccess(snapshot, recoveredNanos);
 
       if (!eventListeners.isEmpty()) {
         emitEvent(FallbackEvent.resultFallbackRecovered(
             config.name(), handler.name(),
-            snapshot.fallbackElapsed(recoveredTime), recoveredTime));
+            snapshot.fallbackElapsed(recoveredNanos), clock.instant()));
       }
       return fallbackResult;
 
     } catch (Throwable fallbackEx) {
-      Instant fbFailedTime = clock.instant();
-      snapshot = FallbackCore.recordFallbackFailure(snapshot, fallbackEx, fbFailedTime);
+      InqException.rethrowIfFatal(fallbackEx); // Fail-fast before handling the failure
+      long fbFailedNanos = System.nanoTime();
+      snapshot = FallbackCore.recordFallbackFailure(snapshot, fallbackEx, fbFailedNanos);
 
       if (!eventListeners.isEmpty()) {
         emitEvent(FallbackEvent.fallbackFailed(
             config.name(), handler.name(),
-            snapshot.fallbackElapsed(fbFailedTime), fallbackEx, fbFailedTime));
+            snapshot.fallbackElapsed(fbFailedNanos), fallbackEx, clock.instant()));
       }
 
       if (fallbackEx instanceof Exception e) throw e;
@@ -155,53 +150,51 @@ public class ImperativeFallbackProvider<T> {
   }
 
   private T handlePrimaryFailure(FallbackSnapshot snapshot, Throwable primary) throws Exception {
-    Instant failedTime = clock.instant();
+    long failedNanos = System.nanoTime();
 
     if (!eventListeners.isEmpty()) {
-      Duration elapsed = Duration.between(snapshot.startTime(), failedTime);
-      emitEvent(FallbackEvent.primaryFailed(config.name(), elapsed, primary, failedTime));
+      Duration elapsed = Duration.ofNanos(failedNanos - snapshot.startNanos());
+      emitEvent(FallbackEvent.primaryFailed(config.name(), elapsed, primary, clock.instant()));
     }
 
-    // DIREKTER LOOKUP
+    // Zero Iterator Allocation
     FallbackExceptionHandler<T> handler = config.findHandlerForException(primary);
 
     if (handler == null) {
       if (!eventListeners.isEmpty()) {
-        Duration elapsed = Duration.between(snapshot.startTime(), failedTime);
-        emitEvent(FallbackEvent.noHandlerMatched(config.name(), elapsed, primary, failedTime));
+        Duration elapsed = Duration.ofNanos(failedNanos - snapshot.startNanos());
+        emitEvent(FallbackEvent.noHandlerMatched(config.name(), elapsed, primary, clock.instant()));
       }
       if (primary instanceof Exception e) throw e;
       if (primary instanceof Error err) throw err;
       throw new RuntimeException(primary);
     }
 
-    // ==========================================
-    // SLOW-PATH: Exception-Fallback notwendig
-    // ==========================================
-    snapshot = snapshot.withFallingBack(primary, handler.name(), failedTime);
+    snapshot = snapshot.withFallingBack(primary, handler.name(), failedNanos);
     emitEventIfListening(() -> FallbackEvent.fallbackInvoked(
-        config.name(), handler.name(), Duration.ZERO, failedTime));
+        config.name(), handler.name(), Duration.ZERO, clock.instant()));
 
     try {
       T fallbackValue = FallbackCore.invokeExceptionHandler(handler, primary);
-      Instant recoveredTime = clock.instant();
-      snapshot = FallbackCore.recordFallbackSuccess(snapshot, recoveredTime);
+      long recoveredNanos = System.nanoTime();
+      snapshot = FallbackCore.recordFallbackSuccess(snapshot, recoveredNanos);
 
       if (!eventListeners.isEmpty()) {
         emitEvent(FallbackEvent.fallbackRecovered(
             config.name(), handler.name(),
-            snapshot.fallbackElapsed(recoveredTime), recoveredTime));
+            snapshot.fallbackElapsed(recoveredNanos), clock.instant()));
       }
       return fallbackValue;
 
     } catch (Throwable fallbackEx) {
-      Instant fbFailedTime = clock.instant();
-      snapshot = FallbackCore.recordFallbackFailure(snapshot, fallbackEx, fbFailedTime);
+      InqException.rethrowIfFatal(fallbackEx); // Fail-fast for handler issues
+      long fbFailedNanos = System.nanoTime();
+      snapshot = FallbackCore.recordFallbackFailure(snapshot, fallbackEx, fbFailedNanos);
 
       if (!eventListeners.isEmpty()) {
         emitEvent(FallbackEvent.fallbackFailed(
             config.name(), handler.name(),
-            snapshot.fallbackElapsed(fbFailedTime), fallbackEx, fbFailedTime));
+            snapshot.fallbackElapsed(fbFailedNanos), fallbackEx, clock.instant()));
       }
 
       throw new FallbackException(config.name(), primary, fallbackEx);
@@ -212,10 +205,6 @@ public class ImperativeFallbackProvider<T> {
     eventListeners.add(Objects.requireNonNull(listener));
   }
 
-  /**
-   * Helper method to avoid instantiating FallbackEvent objects if no listeners are present.
-   * Useful for events that don't need pre-calculated variables.
-   */
   private void emitEventIfListening(java.util.function.Supplier<FallbackEvent> eventSupplier) {
     if (!eventListeners.isEmpty()) {
       emitEvent(eventSupplier.get());
