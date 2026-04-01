@@ -12,9 +12,21 @@ import java.util.Objects;
 import java.util.function.LongSupplier;
 
 /**
- * Immutable configuration for the Bulkhead element (ADR-020).
+ * Immutable configuration for the Bulkhead element.
  *
- * @since 0.1.0
+ * <p>Carries a pluggable {@link BulkheadStrategy} that defines how concurrent
+ * access is controlled. The builder automatically selects the appropriate strategy
+ * based on the configured options:
+ * <ul>
+ *   <li>CoDel parameters → {@link CoDelBulkheadStrategy}</li>
+ *   <li>Limit algorithm → {@link AdaptiveBulkheadStrategy}</li>
+ *   <li>Neither → {@link SemaphoreBulkheadStrategy} (default)</li>
+ * </ul>
+ *
+ * <p>Alternatively, a strategy can be set explicitly via
+ * {@link Builder#strategy(BulkheadStrategy)}, which overrides the automatic selection.
+ *
+ * @since 0.3.0
  */
 public final class BulkheadConfig implements InqConfig {
   private static final BulkheadConfig DEFAULTS = BulkheadConfig.builder().build();
@@ -25,28 +37,26 @@ public final class BulkheadConfig implements InqConfig {
   private final InqClock clock;
   private final Logger logger;
   private final InqCallIdGenerator callIdGenerator;
-
-  // Adaptive concurrency limits
-  private final InqLimitAlgorithm limitAlgorithm;
-
-  // Injectable nano-time source for deterministic testing
   private final LongSupplier nanoTimeSource;
+  private final BulkheadStrategy strategy;
 
-  // CoDel-specific configuration fields
+  // Retained for introspection (what was configured, not what strategy was selected)
+  private final InqLimitAlgorithm limitAlgorithm;
   private final Duration codelTargetDelay;
   private final Duration codelInterval;
 
-  private BulkheadConfig(Builder b) {
+  private BulkheadConfig(Builder b, BulkheadStrategy strategy) {
     this.maxConcurrentCalls = b.maxConcurrentCalls;
     this.maxWaitDuration = b.maxWaitDuration;
     this.compatibility = b.compatibility;
     this.clock = b.clock;
     this.logger = b.logger;
     this.callIdGenerator = b.callIdGenerator;
-    this.limitAlgorithm = b.limitAlgorithm;
     this.nanoTimeSource = b.nanoTimeSource;
+    this.limitAlgorithm = b.limitAlgorithm;
     this.codelTargetDelay = b.codelTargetDelay;
     this.codelInterval = b.codelInterval;
+    this.strategy = strategy;
   }
 
   public static BulkheadConfig ofDefaults() {
@@ -85,61 +95,43 @@ public final class BulkheadConfig implements InqConfig {
     return callIdGenerator;
   }
 
-  /**
-   * Returns the algorithm used for adaptive concurrency limits.
-   * If null, the bulkhead uses a static limit based on {@link #getMaxConcurrentCalls()}.
-   *
-   * @return the limit algorithm or null
-   */
   public InqLimitAlgorithm getLimitAlgorithm() {
     return limitAlgorithm;
   }
 
-  /**
-   * Returns the nano-time source used for RTT measurement and CoDel timing.
-   * Defaults to {@code System::nanoTime} but can be replaced for deterministic testing.
-   *
-   * @return the nano-time supplier
-   */
   public LongSupplier getNanoTimeSource() {
     return nanoTimeSource;
   }
 
-  /**
-   * Returns the CoDel target delay, or null if CoDel is not configured.
-   *
-   * @return the target delay or null
-   */
   public Duration getCodelTargetDelay() {
     return codelTargetDelay;
   }
 
-  /**
-   * Returns the CoDel interval window, or null if CoDel is not configured.
-   *
-   * @return the interval or null
-   */
   public Duration getCodelInterval() {
     return codelInterval;
   }
 
-  /**
-   * Returns true if CoDel queue management is configured.
-   */
   public boolean isCoDelEnabled() {
     return codelTargetDelay != null && codelInterval != null;
+  }
+
+  /**
+   * Returns the bulkhead strategy that was automatically selected or explicitly set.
+   */
+  public BulkheadStrategy getStrategy() {
+    return strategy;
   }
 
   @Override
   public boolean equals(Object o) {
     if (o == null || getClass() != o.getClass()) return false;
     BulkheadConfig that = (BulkheadConfig) o;
-    return maxConcurrentCalls == that.maxConcurrentCalls &&
-        Objects.equals(maxWaitDuration, that.maxWaitDuration) &&
-        Objects.equals(compatibility, that.compatibility) &&
-        Objects.equals(limitAlgorithm, that.limitAlgorithm) &&
-        Objects.equals(codelTargetDelay, that.codelTargetDelay) &&
-        Objects.equals(codelInterval, that.codelInterval);
+    return maxConcurrentCalls == that.maxConcurrentCalls
+        && Objects.equals(maxWaitDuration, that.maxWaitDuration)
+        && Objects.equals(compatibility, that.compatibility)
+        && Objects.equals(limitAlgorithm, that.limitAlgorithm)
+        && Objects.equals(codelTargetDelay, that.codelTargetDelay)
+        && Objects.equals(codelInterval, that.codelInterval);
   }
 
   @Override
@@ -159,52 +151,30 @@ public final class BulkheadConfig implements InqConfig {
     private LongSupplier nanoTimeSource = System::nanoTime;
     private Duration codelTargetDelay = null;
     private Duration codelInterval = null;
+    private BulkheadStrategy explicitStrategy = null;
 
     private Builder() {
     }
 
-    /**
-     * Added validation — maxConcurrentCalls must be >= 0.
-     * A value of 0 creates a bulkhead that rejects every request immediately,
-     * which is a legitimate state (e.g., a "closed" bulkhead or for testing).
-     * Negative values cause undefined behavior in Semaphore and are rejected.
-     *
-     * @param max the maximum number of concurrent calls, must be >= 0
-     * @return the builder instance
-     * @throws IllegalArgumentException if max is negative
-     */
     public Builder maxConcurrentCalls(int max) {
       if (max < 0) {
-        throw new IllegalArgumentException(
-            "maxConcurrentCalls must be >= 0, but was: " + max);
+        throw new IllegalArgumentException("maxConcurrentCalls must be >= 0, but was: " + max);
       }
       this.maxConcurrentCalls = max;
       return this;
     }
 
-    /**
-     * Added validation — maxWaitDuration must not be negative.
-     * Negative durations would cause immediate timeout failures with misleading behavior.
-     *
-     * @param duration the maximum wait duration, must be >= 0
-     * @return the builder instance
-     * @throws NullPointerException     if duration is null
-     * @throws IllegalArgumentException if duration is negative
-     */
     public Builder maxWaitDuration(Duration duration) {
       Objects.requireNonNull(duration, "maxWaitDuration must not be null");
       if (duration.isNegative()) {
-        throw new IllegalArgumentException(
-            "maxWaitDuration must not be negative, but was: " + duration);
+        throw new IllegalArgumentException("maxWaitDuration must not be negative, but was: " + duration);
       }
       try {
         duration.toNanos();
         this.maxWaitDuration = duration;
       } catch (ArithmeticException e) {
         this.maxWaitDuration = Duration.ofNanos(Long.MAX_VALUE);
-        logger.warn("Bulkhead configuration with extremely large wait duration. " +
-                "Will safely fall back to {} DAYS during permit acquisition to prevent arithmetic overflow.",
-            maxWaitDuration.toDays());
+        logger.warn("Extremely large wait duration — clamped to {} days.", maxWaitDuration.toDays());
       }
       return this;
     }
@@ -229,45 +199,16 @@ public final class BulkheadConfig implements InqConfig {
       return this;
     }
 
-    /**
-     * Sets the adaptive limit algorithm (e.g., AIMD or Vegas).
-     * If set, the bulkhead will dynamically adjust its concurrency limits.
-     *
-     * <p>Cannot be combined with CoDel configuration. If both are set,
-     * {@link #build()} will throw an exception.
-     *
-     * @param limitAlgorithm the algorithm to use, or null for static limits
-     * @return the builder instance
-     */
     public Builder limitAlgorithm(InqLimitAlgorithm limitAlgorithm) {
       this.limitAlgorithm = limitAlgorithm;
       return this;
     }
 
-    /**
-     * Sets a custom nano-time source.
-     * Useful for deterministic testing of CoDel and RTT measurement.
-     *
-     * @param nanoTimeSource the nano-time supplier
-     * @return the builder instance
-     */
     public Builder nanoTimeSource(LongSupplier nanoTimeSource) {
       this.nanoTimeSource = Objects.requireNonNull(nanoTimeSource, "nanoTimeSource must not be null");
       return this;
     }
 
-    /**
-     * Configures CoDel (Controlled Delay) queue management.
-     * Both parameters must be set together to enable CoDel.
-     *
-     * <p>Cannot be combined with a {@link #limitAlgorithm}. If both are set,
-     * {@link #build()} will throw an exception.
-     *
-     * @param targetDelay the acceptable maximum wait time for a request in the queue
-     * @param interval    the sliding time window for sustained-congestion detection
-     * @return the builder instance
-     * @throws IllegalArgumentException if either parameter is negative or zero
-     */
     public Builder codel(Duration targetDelay, Duration interval) {
       Objects.requireNonNull(targetDelay, "CoDel targetDelay must not be null");
       Objects.requireNonNull(interval, "CoDel interval must not be null");
@@ -283,20 +224,55 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     /**
-     * Added cross-field validation during build.
+     * Sets an explicit strategy, overriding the automatic selection.
      *
-     * @return the immutable configuration
-     * @throws IllegalStateException if incompatible options are combined
+     * <p>When set, the builder ignores {@link #limitAlgorithm} and {@link #codel}
+     * for strategy selection (but they are still available via getters for introspection).
+     */
+    public Builder strategy(BulkheadStrategy strategy) {
+      this.explicitStrategy = Objects.requireNonNull(strategy, "strategy must not be null");
+      return this;
+    }
+
+    /**
+     * Builds the immutable configuration.
+     *
+     * <p>Strategy selection order:
+     * <ol>
+     *   <li>Explicit strategy (via {@link #strategy}) — used as-is</li>
+     *   <li>CoDel parameters → {@link CoDelBulkheadStrategy}</li>
+     *   <li>Limit algorithm → {@link AdaptiveBulkheadStrategy}</li>
+     *   <li>Default → {@link SemaphoreBulkheadStrategy}</li>
+     * </ol>
+     *
+     * @throws IllegalStateException if limitAlgorithm and CoDel are both set
+     *                               (without an explicit strategy to override)
      */
     public BulkheadConfig build() {
-      // Validate mutual exclusivity of adaptive algorithm and CoDel
-      if (limitAlgorithm != null && codelTargetDelay != null) {
-        throw new IllegalStateException(
-            "Cannot combine a limitAlgorithm with CoDel configuration. "
-                + "Use either limitAlgorithm() for adaptive limits (AIMD/Vegas) "
-                + "or codel() for queue-based delay management, but not both.");
+      BulkheadStrategy resolvedStrategy;
+
+      if (explicitStrategy != null) {
+        resolvedStrategy = explicitStrategy;
+      } else {
+        // Validate mutual exclusivity
+        if (limitAlgorithm != null && codelTargetDelay != null) {
+          throw new IllegalStateException(
+              "Cannot combine a limitAlgorithm with CoDel configuration. "
+                  + "Use either limitAlgorithm() or codel(), but not both. "
+                  + "Or set an explicit strategy() to override.");
+        }
+
+        if (codelTargetDelay != null && codelInterval != null) {
+          resolvedStrategy = new CoDelBulkheadStrategy(
+              maxConcurrentCalls, codelTargetDelay, codelInterval, nanoTimeSource);
+        } else if (limitAlgorithm != null) {
+          resolvedStrategy = new AdaptiveBulkheadStrategy(limitAlgorithm);
+        } else {
+          resolvedStrategy = new SemaphoreBulkheadStrategy(maxConcurrentCalls);
+        }
       }
-      return new BulkheadConfig(this);
+
+      return new BulkheadConfig(this, resolvedStrategy);
     }
   }
 }
