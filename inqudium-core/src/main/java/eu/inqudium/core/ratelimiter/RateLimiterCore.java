@@ -31,14 +31,22 @@ public final class RateLimiterCore {
       return snapshot;
     }
 
+    Instant newRefillTime = snapshot.lastRefillTime()
+        .plusNanos(completePeriods * periodNanos);
+
+    // Fix 4: Early exit when the refill would fill or overflow the bucket.
+    // Avoids unnecessary arithmetic for long inactivity periods (e.g. weeks)
+    // where completePeriods * refillPermits easily exceeds capacity.
     long tokensToAdd = completePeriods * config.refillPermits();
+    if (tokensToAdd >= (long) config.capacity() - Math.min(snapshot.availablePermits(), 0)) {
+      // Bucket is guaranteed to be full — no need to compute the exact sum
+      return snapshot.withRefill(config.capacity(), newRefillTime);
+    }
+
     int newPermits = (int) Math.min(
         (long) snapshot.availablePermits() + tokensToAdd,
         config.capacity()
     );
-
-    Instant newRefillTime = snapshot.lastRefillTime()
-        .plusNanos(completePeriods * periodNanos);
 
     return snapshot.withRefill(newPermits, newRefillTime);
   }
@@ -106,6 +114,16 @@ public final class RateLimiterCore {
       return ReservationResult.timedOut(refilled, waitDuration);
     }
 
+    // Fix 1: Enforce a debt floor to prevent unbounded negative permits.
+    // Without this guard, concurrent delayed reservations can drive availablePermits
+    // to arbitrarily negative values, causing ever-growing wait times and
+    // rendering the rate limiter effectively unusable after a burst.
+    // The floor is -capacity, allowing at most 'capacity' queued reservations.
+    int debtFloor = -config.capacity();
+    if (refilled.availablePermits() <= debtFloor) {
+      return ReservationResult.timedOut(refilled, waitDuration);
+    }
+
     RateLimiterSnapshot consumed = refilled.withAvailablePermits(
         refilled.availablePermits() - 1);
     return ReservationResult.delayed(consumed, waitDuration);
@@ -117,8 +135,23 @@ public final class RateLimiterCore {
     return snapshot.withAvailablePermits(0);
   }
 
-  public static RateLimiterSnapshot reset(RateLimiterConfig config, Instant now) {
-    return RateLimiterSnapshot.initial(config, now);
+  /**
+   * Resets the rate limiter to a fresh state.
+   *
+   * <p>Fix 2/7: Accepts the current snapshot so the epoch can be incremented.
+   * Pending reservations from the old epoch are invalidated — the wrapper
+   * checks the epoch after parking and re-acquires if it changed.
+   *
+   * @param current the current snapshot (used to derive the next epoch)
+   * @param config  the rate limiter configuration
+   * @param now     the current timestamp
+   * @return a fresh snapshot with a full bucket and incremented epoch
+   */
+  public static RateLimiterSnapshot reset(
+      RateLimiterSnapshot current,
+      RateLimiterConfig config,
+      Instant now) {
+    return current.withNextEpoch(config.capacity(), now);
   }
 
   // ======================== Query helpers ========================
@@ -140,8 +173,7 @@ public final class RateLimiterCore {
       return Duration.ZERO;
     }
 
-    // Fix 1A: Bucket-Schulden einberechnen.
-    // Wenn permits bei -5 steht, benötigen wir 6 nachgefüllte Permits, um auf +1 zu kommen.
+    // Account for bucket debt: if permits are at -5, we need 6 refilled permits to reach +1
     int deficit = 1 - snapshot.availablePermits();
     return estimateWaitForPermits(config, deficit);
   }

@@ -42,6 +42,7 @@ class RateLimiterCoreTest {
 
       // Then
       assertThat(snapshot.availablePermits()).isEqualTo(5);
+      assertThat(snapshot.epoch()).isZero();
     }
 
     @Test
@@ -71,7 +72,7 @@ class RateLimiterCoreTest {
     void should_not_refill_when_no_time_has_elapsed() {
       // Given
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       RateLimiterSnapshot refilled = RateLimiterCore.refill(snapshot, config, NOW);
@@ -85,7 +86,7 @@ class RateLimiterCoreTest {
     void should_refill_permits_after_one_full_period_has_elapsed() {
       // Given
       RateLimiterConfig config = defaultConfig(); // 5 permits per 1s
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       RateLimiterSnapshot refilled = RateLimiterCore.refill(snapshot, config, NOW.plusSeconds(1));
@@ -99,7 +100,7 @@ class RateLimiterCoreTest {
     void should_not_refill_before_a_full_period_has_completed() {
       // Given
       RateLimiterConfig config = defaultConfig(); // 5 permits per 1s
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When — only 500ms elapsed
       RateLimiterSnapshot refilled = RateLimiterCore.refill(snapshot, config, NOW.plusMillis(500));
@@ -117,7 +118,7 @@ class RateLimiterCoreTest {
           .refillPermits(2)
           .refillPeriod(Duration.ofSeconds(1))
           .build();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When — 3 seconds elapsed → 3 periods × 2 permits = 6
       RateLimiterSnapshot refilled = RateLimiterCore.refill(snapshot, config, NOW.plusSeconds(3));
@@ -131,7 +132,7 @@ class RateLimiterCoreTest {
     void should_cap_the_refill_at_the_configured_capacity() {
       // Given
       RateLimiterConfig config = defaultConfig(); // capacity=5, refill=5 per 1s
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(3, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(3, NOW, 0L);
 
       // When — refill 5, but 3+5=8 exceeds capacity 5
       RateLimiterSnapshot refilled = RateLimiterCore.refill(snapshot, config, NOW.plusSeconds(1));
@@ -145,7 +146,7 @@ class RateLimiterCoreTest {
     void should_preserve_the_fractional_remainder_of_elapsed_time_for_the_next_refill() {
       // Given
       RateLimiterConfig config = defaultConfig(); // 1s period
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When — 1.7s elapsed → 1 full period consumed
       RateLimiterSnapshot refilled = RateLimiterCore.refill(snapshot, config, NOW.plusMillis(1700));
@@ -159,7 +160,7 @@ class RateLimiterCoreTest {
     void should_not_change_the_snapshot_when_time_goes_backwards() {
       // Given
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(3, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(3, NOW, 0L);
 
       // When
       RateLimiterSnapshot refilled = RateLimiterCore.refill(snapshot, config, NOW.minusSeconds(5));
@@ -197,7 +198,7 @@ class RateLimiterCoreTest {
     void should_reject_when_the_bucket_is_empty() {
       // Given
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       RateLimitPermission result = RateLimiterCore.tryAcquirePermission(snapshot, config, NOW);
@@ -233,7 +234,7 @@ class RateLimiterCoreTest {
     void should_refill_and_then_permit_when_enough_time_has_elapsed() {
       // Given — empty bucket
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When — 1 second later, refill should occur
       RateLimitPermission result = RateLimiterCore.tryAcquirePermission(
@@ -253,7 +254,7 @@ class RateLimiterCoreTest {
           .refillPermits(5)
           .refillPeriod(Duration.ofSeconds(2))
           .build();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       RateLimitPermission result = RateLimiterCore.tryAcquirePermission(snapshot, config, NOW);
@@ -292,7 +293,7 @@ class RateLimiterCoreTest {
     void should_reject_when_not_enough_tokens_are_available_for_a_batch_request() {
       // Given
       RateLimiterConfig config = defaultConfig(); // capacity=5
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(2, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(2, NOW, 0L);
 
       // When
       RateLimitPermission result = RateLimiterCore.tryAcquirePermissions(
@@ -359,7 +360,7 @@ class RateLimiterCoreTest {
     void should_return_a_delayed_reservation_when_the_bucket_is_empty_but_timeout_allows_waiting() {
       // Given — empty bucket, timeout = 5s, refill = 5 per 1s
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       ReservationResult result = RateLimiterCore.reservePermission(
@@ -376,7 +377,7 @@ class RateLimiterCoreTest {
     void should_time_out_when_the_estimated_wait_exceeds_the_timeout() {
       // Given — empty bucket, timeout = 100ms, refill period = 1s
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       ReservationResult result = RateLimiterCore.reservePermission(
@@ -392,7 +393,7 @@ class RateLimiterCoreTest {
     void should_time_out_immediately_when_the_timeout_is_zero_and_bucket_is_empty() {
       // Given
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       ReservationResult result = RateLimiterCore.reservePermission(
@@ -437,6 +438,8 @@ class RateLimiterCoreTest {
 
       // Then
       assertThat(drained.lastRefillTime()).isEqualTo(NOW);
+      // Drain should preserve the epoch — only reset increments it
+      assertThat(drained.epoch()).isEqualTo(snapshot.epoch());
     }
 
     @Test
@@ -447,11 +450,13 @@ class RateLimiterCoreTest {
       Instant later = NOW.plusSeconds(100);
 
       // When
-      RateLimiterSnapshot fresh = RateLimiterCore.reset(config, later);
+      RateLimiterSnapshot fresh = RateLimiterCore.reset(RateLimiterSnapshot.initial(config, NOW), config, later);
 
       // Then
       assertThat(fresh.availablePermits()).isEqualTo(config.capacity());
       assertThat(fresh.lastRefillTime()).isEqualTo(later);
+      // Fix 2/7: Epoch should be incremented to invalidate pending reservations
+      assertThat(fresh.epoch()).isEqualTo(1L);
     }
   }
 
@@ -482,7 +487,7 @@ class RateLimiterCoreTest {
     void should_estimate_one_refill_period_when_the_bucket_is_empty() {
       // Given
       RateLimiterConfig config = defaultConfig(); // 1s period
-      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot snapshot = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       Duration wait = RateLimiterCore.estimateWaitDuration(snapshot, config, NOW);
@@ -536,7 +541,7 @@ class RateLimiterCoreTest {
     void should_not_modify_the_original_snapshot_when_refilling() {
       // Given
       RateLimiterConfig config = defaultConfig();
-      RateLimiterSnapshot original = new RateLimiterSnapshot(0, NOW);
+      RateLimiterSnapshot original = new RateLimiterSnapshot(0, NOW, 0L);
 
       // When
       RateLimiterCore.refill(original, config, NOW.plusSeconds(1));

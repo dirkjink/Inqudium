@@ -120,9 +120,18 @@ public sealed interface BackoffStrategy {
 
     @Override
     public Duration computeDelay(int attemptIndex) {
+      // Fix 2: Guard against overflow and IEEE 754 edge cases.
+      // Math.pow can produce Infinity or NaN for large attemptIndex values.
+      // Casting Infinity/NaN to long is undefined per JLS §5.1.3 — we must
+      // check before the cast and short-circuit to maxDelay.
       double delayMillis = initialDelay.toMillis() * Math.pow(multiplier, attemptIndex);
-      long cappedMillis = Math.min((long) delayMillis, maxDelay.toMillis());
-      return Duration.ofMillis(cappedMillis);
+      long maxMillis = maxDelay.toMillis();
+
+      if (Double.isInfinite(delayMillis) || Double.isNaN(delayMillis) || delayMillis >= maxMillis) {
+        return maxDelay;
+      }
+
+      return Duration.ofMillis((long) delayMillis);
     }
   }
 
@@ -146,12 +155,26 @@ public sealed interface BackoffStrategy {
       if (multiplier < 1.0) {
         throw new IllegalArgumentException("multiplier must be >= 1.0, got " + multiplier);
       }
+      // Fix 3: Validate maxDelay — Exponential does this, ExponentialWithJitter was missing it.
+      // A zero maxDelay would make jitter always 0; a negative one would throw in ThreadLocalRandom.
+      if (maxDelay.isNegative() || maxDelay.isZero()) {
+        throw new IllegalArgumentException("maxDelay must be positive");
+      }
     }
 
     @Override
     public Duration computeDelay(int attemptIndex) {
+      // Fix 2: Same overflow guard as in Exponential
       double delayMillis = initialDelay.toMillis() * Math.pow(multiplier, attemptIndex);
-      long cappedMillis = Math.min((long) delayMillis, maxDelay.toMillis());
+      long maxMillis = maxDelay.toMillis();
+
+      long cappedMillis;
+      if (Double.isInfinite(delayMillis) || Double.isNaN(delayMillis) || delayMillis >= maxMillis) {
+        cappedMillis = maxMillis;
+      } else {
+        cappedMillis = (long) delayMillis;
+      }
+
       // Full jitter: uniform random in [0, cappedMillis]
       long jitteredMillis = cappedMillis <= 0 ? 0 : ThreadLocalRandom.current().nextLong(cappedMillis + 1);
       return Duration.ofMillis(jitteredMillis);

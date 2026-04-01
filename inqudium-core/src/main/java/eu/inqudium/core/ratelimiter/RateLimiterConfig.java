@@ -55,13 +55,23 @@ public record RateLimiterConfig(
   }
 
   /**
-   * Returns the duration it takes to refill a single permit.
-   * Useful for calculating wait times.
+   * Returns the average duration it takes to refill a single permit.
+   *
+   * <p>Fix 5: Uses double-precision floating-point arithmetic to reduce
+   * rounding errors from integer division. The previous implementation
+   * lost precision when {@code refillPeriod.toNanos() < refillPermits}
+   * and silently clamped to 1ns, which could be off by orders of magnitude.
+   *
+   * <p>Note: This is an <em>average</em> — the actual refill is discrete
+   * (all permits arrive at once per cycle), so this value is useful for
+   * estimations and UI display, not for precise scheduling.
+   *
+   * @return the average duration per permit, at least 1 nanosecond
    */
   public Duration nanosPerPermit() {
-    long totalNanos = refillPeriod.toNanos();
-    long nanosPerPermit = totalNanos / refillPermits;
-    return Duration.ofNanos(Math.max(nanosPerPermit, 1));
+    double totalNanos = (double) refillPeriod.toNanos();
+    double nanosPerPermit = totalNanos / refillPermits;
+    return Duration.ofNanos(Math.max(Math.round(nanosPerPermit), 1));
   }
 
   public static final class Builder {

@@ -55,6 +55,12 @@ public record RetryConfig(
 
   /**
    * Checks whether the given result should trigger a retry.
+   *
+   * <p><strong>Type safety note:</strong> The result predicate is stored as
+   * {@code Predicate<Object>} because {@code RetryConfig} is not type-parameterised.
+   * A {@link ClassCastException} at runtime is possible if the predicate's actual
+   * type parameter does not match the callable's return type. Callers should ensure
+   * type consistency between {@link Builder#retryOnResult} and the callable.
    */
   public boolean shouldRetryOnResult(Object result) {
     return resultPredicate != null && resultPredicate.test(result);
@@ -66,6 +72,9 @@ public record RetryConfig(
     private BackoffStrategy backoffStrategy = BackoffStrategy.fixedDelay(Duration.ofMillis(500));
     private Predicate<Throwable> retryPredicate = e -> true;
     private Predicate<Object> resultPredicate = null;
+
+    // Fix 6: Track whether the predicate was set via a convenience method
+    private boolean predicateSetViaConvenienceMethod = false;
 
     private Builder(String name) {
       this.name = Objects.requireNonNull(name);
@@ -106,16 +115,29 @@ public record RetryConfig(
       return this;
     }
 
+    /**
+     * Sets the retry predicate directly. Resets the convenience method guard.
+     */
     public Builder retryPredicate(Predicate<Throwable> retryPredicate) {
       this.retryPredicate = retryPredicate;
+      this.predicateSetViaConvenienceMethod = false;
       return this;
     }
 
     /**
      * Only retry on the specified exception types.
+     *
+     * <p>Cannot be combined with {@link #ignoreExceptions} — an
+     * {@link IllegalStateException} is thrown if both are called on the same builder.
      */
     @SafeVarargs
     public final Builder retryOnExceptions(Class<? extends Throwable>... exceptionTypes) {
+      // Fix 6: Prevent silent overwriting when combined with ignoreExceptions
+      if (predicateSetViaConvenienceMethod) {
+        throw new IllegalStateException(
+            "retryOnExceptions() and ignoreExceptions() cannot both be used on the same builder. "
+                + "Use retryPredicate() for complex filtering logic.");
+      }
       this.retryPredicate = throwable -> {
         for (Class<? extends Throwable> type : exceptionTypes) {
           if (type.isInstance(throwable)) {
@@ -124,14 +146,24 @@ public record RetryConfig(
         }
         return false;
       };
+      this.predicateSetViaConvenienceMethod = true;
       return this;
     }
 
     /**
      * Do not retry on the specified exception types.
+     *
+     * <p>Cannot be combined with {@link #retryOnExceptions} — an
+     * {@link IllegalStateException} is thrown if both are called on the same builder.
      */
     @SafeVarargs
     public final Builder ignoreExceptions(Class<? extends Throwable>... exceptionTypes) {
+      // Fix 6: Prevent silent overwriting when combined with retryOnExceptions
+      if (predicateSetViaConvenienceMethod) {
+        throw new IllegalStateException(
+            "retryOnExceptions() and ignoreExceptions() cannot both be used on the same builder. "
+                + "Use retryPredicate() for complex filtering logic.");
+      }
       this.retryPredicate = throwable -> {
         for (Class<? extends Throwable> type : exceptionTypes) {
           if (type.isInstance(throwable)) {
@@ -140,12 +172,18 @@ public record RetryConfig(
         }
         return true;
       };
+      this.predicateSetViaConvenienceMethod = true;
       return this;
     }
 
     /**
      * Retry when the result satisfies the given predicate.
      * Useful for retrying on specific return values (e.g. null, empty).
+     *
+     * <p><strong>Type safety caveat:</strong> Because {@code RetryConfig} is not
+     * type-parameterised, there is no compile-time guarantee that the predicate's
+     * type parameter matches the callable's return type. A {@link ClassCastException}
+     * at runtime is possible if types are mismatched.
      */
     @SuppressWarnings("unchecked")
     public <T> Builder retryOnResult(Predicate<T> resultPredicate) {

@@ -277,8 +277,8 @@ class RetryCoreTest {
   class ResultBasedRetry {
 
     @Test
-    @DisplayName("should return null when the result is acceptable")
-    void should_return_null_when_the_result_is_acceptable() {
+    @DisplayName("should accept the result when it does not match the retry predicate")
+    void should_accept_the_result_when_it_does_not_match_the_retry_predicate() {
       // Given
       RetryConfig config = RetryConfig.builder("result-test")
           .maxAttempts(3)
@@ -290,7 +290,8 @@ class RetryCoreTest {
       RetryDecision decision = RetryCore.evaluateResult(attempting, config, "valid");
 
       // Then
-      assertThat(decision).isNull();
+      assertThat(decision).isInstanceOf(RetryDecision.Accept.class);
+      assertThat(decision.snapshot().state()).isEqualTo(RetryState.COMPLETED);
     }
 
     @Test
@@ -312,8 +313,8 @@ class RetryCoreTest {
     }
 
     @Test
-    @DisplayName("should return null when no result predicate is configured")
-    void should_return_null_when_no_result_predicate_is_configured() {
+    @DisplayName("should accept the result when no result predicate is configured")
+    void should_accept_the_result_when_no_result_predicate_is_configured() {
       // Given
       RetryConfig config = defaultConfig(); // no result predicate
       RetrySnapshot attempting = RetryCore.startFirstAttempt(NOW);
@@ -322,7 +323,8 @@ class RetryCoreTest {
       RetryDecision decision = RetryCore.evaluateResult(attempting, config, null);
 
       // Then
-      assertThat(decision).isNull();
+      assertThat(decision).isInstanceOf(RetryDecision.Accept.class);
+      assertThat(decision.snapshot().state()).isEqualTo(RetryState.COMPLETED);
     }
   }
 

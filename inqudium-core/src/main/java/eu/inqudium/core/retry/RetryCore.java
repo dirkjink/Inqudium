@@ -107,7 +107,7 @@ public final class RetryCore {
     // Check if retries remain
     if (snapshot.attemptNumber() >= config.maxAttempts()) {
       return new RetryDecision.RetriesExhausted(
-          snapshot.withExhausted(failure), failure);
+          snapshot.withExhausted(failure), failure, false);
     }
 
     // Compute backoff delay — retryIndex is 0-based
@@ -121,12 +121,14 @@ public final class RetryCore {
   /**
    * Evaluates a result and decides whether it should trigger a retry.
    *
-   * <p>Used when the config has a result predicate (e.g. retry on null).
+   * <p>Fix 1: Always returns a non-null {@link RetryDecision} for API consistency
+   * with {@link #evaluateFailure}. When the result is acceptable, returns
+   * {@link RetryDecision.Accept} with the snapshot transitioned to COMPLETED.
    *
    * @param snapshot the current snapshot (must be in ATTEMPTING)
    * @param config   the retry configuration
    * @param result   the result to evaluate
-   * @return a retry decision, or {@code null} if the result is acceptable
+   * @return a retry decision — never null
    */
   public static RetryDecision evaluateResult(
       RetrySnapshot snapshot,
@@ -136,15 +138,18 @@ public final class RetryCore {
     requireState(snapshot, RetryState.ATTEMPTING, "evaluateResult");
 
     if (!config.shouldRetryOnResult(result)) {
-      return null; // Result is acceptable — no retry needed
+      // Fix 1: Return a typed Accept decision instead of null
+      return new RetryDecision.Accept(snapshot.withCompleted());
     }
 
     if (snapshot.attemptNumber() >= config.maxAttempts()) {
-      // Fix 2B: Synthetischen Fehler erzeugen, anstatt hier schon eine RetryException zu bauen
-      Throwable syntheticFailure = new RuntimeException("Unacceptable result: " + result);
+      // Fix 8: Mark as resultBased so the wrapper can produce a more descriptive exception.
+      // The synthetic failure clearly identifies this as a result-based exhaustion.
+      Throwable syntheticFailure = new RetryOnResultExhaustedException(result);
       return new RetryDecision.RetriesExhausted(
           snapshot.withExhausted(syntheticFailure),
-          snapshot.lastFailure() != null ? snapshot.lastFailure() : syntheticFailure);
+          syntheticFailure,
+          true);
     }
 
     int retryIndex = snapshot.attemptNumber() - 1;
@@ -190,6 +195,27 @@ public final class RetryCore {
     if (snapshot.state() != required) {
       throw new IllegalStateException(
           "Cannot %s in state %s (expected %s)".formatted(operation, snapshot.state(), required));
+    }
+  }
+
+  /**
+   * Fix 8: Dedicated exception for result-based retry exhaustion.
+   * This clearly distinguishes "unacceptable result after all retries" from
+   * "exception-based failure after all retries" in the failures list and exception hierarchy.
+   */
+  public static class RetryOnResultExhaustedException extends RuntimeException {
+    private final Object result;
+
+    public RetryOnResultExhaustedException(Object result) {
+      super("Retry exhausted: unacceptable result after all attempts: " + result);
+      this.result = result;
+    }
+
+    /**
+     * Returns the unacceptable result that caused the exhaustion.
+     */
+    public Object getResult() {
+      return result;
     }
   }
 }
