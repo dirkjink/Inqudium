@@ -193,36 +193,41 @@ class TrafficShaperCoreTest {
   class QueueDepthTracking {
 
     @Test
-    @DisplayName("should increment queue depth for each admitted request")
-    void should_increment_queue_depth_for_each_admitted_request() {
+    @DisplayName("should increment queue depth only for delayed requests")
+    void should_increment_queue_depth_only_for_delayed_requests() {
       // Given
       ThrottleSnapshot snapshot = ThrottleSnapshot.initial(NOW);
       TrafficShaperConfig config = defaultConfig();
 
-      // When — schedule 3 requests
+      // When — schedule 3 requests at the same instant
       ThrottlePermission p1 = TrafficShaperCore.schedule(snapshot, config, NOW);
       ThrottlePermission p2 = TrafficShaperCore.schedule(p1.snapshot(), config, NOW);
       ThrottlePermission p3 = TrafficShaperCore.schedule(p2.snapshot(), config, NOW);
 
-      // Then
-      assertThat(p3.snapshot().queueDepth()).isEqualTo(3);
+      // Then — first is immediate (no queue), second and third are delayed
+      assertThat(p1.requiresWait()).isFalse();
+      assertThat(p2.requiresWait()).isTrue();
+      assertThat(p3.requiresWait()).isTrue();
+      assertThat(p3.snapshot().queueDepth()).isEqualTo(2);
+      assertThat(p3.snapshot().totalAdmitted()).isEqualTo(3);
     }
 
     @Test
     @DisplayName("should decrement queue depth when a request starts executing")
     void should_decrement_queue_depth_when_a_request_starts_executing() {
-      // Given — 3 requests queued
+      // Given — 3 requests scheduled (1 immediate + 2 delayed = queueDepth 2)
       ThrottleSnapshot snapshot = ThrottleSnapshot.initial(NOW);
       TrafficShaperConfig config = defaultConfig();
       ThrottlePermission p1 = TrafficShaperCore.schedule(snapshot, config, NOW);
       ThrottlePermission p2 = TrafficShaperCore.schedule(p1.snapshot(), config, NOW);
       ThrottlePermission p3 = TrafficShaperCore.schedule(p2.snapshot(), config, NOW);
+      assertThat(p3.snapshot().queueDepth()).isEqualTo(2);
 
-      // When — one request executes
+      // When — one delayed request starts executing
       ThrottleSnapshot afterExec = TrafficShaperCore.recordExecution(p3.snapshot());
 
       // Then
-      assertThat(afterExec.queueDepth()).isEqualTo(2);
+      assertThat(afterExec.queueDepth()).isEqualTo(1);
     }
 
     @Test
@@ -250,17 +255,17 @@ class TrafficShaperCoreTest {
     @Test
     @DisplayName("should reject when the queue depth exceeds the configured maximum")
     void should_reject_when_the_queue_depth_exceeds_the_configured_maximum() {
-      // Given — maxQueueDepth=5, schedule 5 requests to fill the queue
+      // Given — maxQueueDepth=5; first request is immediate (no queue), so 6 to fill
       TrafficShaperConfig config = defaultConfig();
-      ThrottleSnapshot snapshot = ThrottleSnapshot.initial(NOW);
-      ThrottleSnapshot current = snapshot;
-      for (int i = 0; i < 5; i++) {
+      ThrottleSnapshot current = ThrottleSnapshot.initial(NOW);
+      for (int i = 0; i < 6; i++) {
         ThrottlePermission perm = TrafficShaperCore.schedule(current, config, NOW);
         assertThat(perm.admitted()).isTrue();
         current = perm.snapshot();
       }
+      assertThat(current.queueDepth()).isEqualTo(5); // 1 immediate + 5 delayed
 
-      // When — 6th request
+      // When — 7th request exceeds maxQueueDepth
       ThrottlePermission overflow = TrafficShaperCore.schedule(current, config, NOW);
 
       // Then
@@ -270,35 +275,39 @@ class TrafficShaperCoreTest {
     @Test
     @DisplayName("should increment the total rejected counter on rejection")
     void should_increment_the_total_rejected_counter_on_rejection() {
-      // Given — fill the queue
+      // Given — fill the queue (first request is immediate, so we need 6 to reach maxQueueDepth=5)
       TrafficShaperConfig config = defaultConfig();
       ThrottleSnapshot current = ThrottleSnapshot.initial(NOW);
-      for (int i = 0; i < 5; i++) {
+      for (int i = 0; i < 6; i++) {
         current = TrafficShaperCore.schedule(current, config, NOW).snapshot();
       }
+      assertThat(current.queueDepth()).isEqualTo(5); // 1 immediate + 5 delayed
 
-      // When
+      // When — 7th request triggers rejection
       ThrottlePermission rejected = TrafficShaperCore.schedule(current, config, NOW);
 
       // Then
+      assertThat(rejected.admitted()).isFalse();
       assertThat(rejected.snapshot().totalRejected()).isEqualTo(1);
     }
 
     @Test
     @DisplayName("should not advance the scheduling timeline on rejection")
     void should_not_advance_the_scheduling_timeline_on_rejection() {
-      // Given — fill the queue
+      // Given — fill the queue (1 immediate + 5 delayed = queueDepth 5)
       TrafficShaperConfig config = defaultConfig();
       ThrottleSnapshot current = ThrottleSnapshot.initial(NOW);
-      for (int i = 0; i < 5; i++) {
+      for (int i = 0; i < 6; i++) {
         current = TrafficShaperCore.schedule(current, config, NOW).snapshot();
       }
+      assertThat(current.queueDepth()).isEqualTo(5);
       Instant slotBefore = current.nextFreeSlot();
 
-      // When
+      // When — 7th request is rejected
       ThrottlePermission rejected = TrafficShaperCore.schedule(current, config, NOW);
 
-      // Then — slot unchanged
+      // Then — slot unchanged, rejection does not advance the timeline
+      assertThat(rejected.admitted()).isFalse();
       assertThat(rejected.snapshot().nextFreeSlot()).isEqualTo(slotBefore);
     }
   }
@@ -363,8 +372,9 @@ class TrafficShaperCoreTest {
         current = perm.snapshot();
       }
 
-      // Then — all admitted, queue depth reflects reality
-      assertThat(current.queueDepth()).isEqualTo(10);
+      // Then — all admitted; first request was immediate (no queue), 9 delayed
+      assertThat(current.queueDepth()).isEqualTo(9);
+      assertThat(current.totalAdmitted()).isEqualTo(10);
       assertThat(current.totalRejected()).isZero();
     }
   }
@@ -399,16 +409,20 @@ class TrafficShaperCoreTest {
     @Test
     @DisplayName("should not reclaim slots when requests are still queued")
     void should_not_reclaim_slots_when_requests_are_still_queued() {
-      // Given — one request queued
+      // Given — schedule two requests: first is immediate, second is delayed (enters queue)
       ThrottleSnapshot snapshot = ThrottleSnapshot.initial(NOW);
       TrafficShaperConfig config = defaultConfig();
       ThrottlePermission p1 = TrafficShaperCore.schedule(snapshot, config, NOW);
+      // Second request at the same instant forces a delayed admission → queueDepth = 1
+      ThrottlePermission p2 = TrafficShaperCore.schedule(p1.snapshot(), config, NOW);
+
+      assertThat(p2.snapshot().queueDepth()).isEqualTo(1);
 
       // When — try to reclaim at a later time (but queue is not empty)
-      ThrottleSnapshot reclaimed = TrafficShaperCore.reclaimSlot(p1.snapshot(), NOW.plusSeconds(5));
+      ThrottleSnapshot reclaimed = TrafficShaperCore.reclaimSlot(p2.snapshot(), NOW.plusSeconds(5));
 
       // Then — slot NOT reclaimed because queueDepth > 0
-      assertThat(reclaimed.nextFreeSlot()).isEqualTo(p1.snapshot().nextFreeSlot());
+      assertThat(reclaimed.nextFreeSlot()).isEqualTo(p2.snapshot().nextFreeSlot());
     }
   }
 
@@ -540,12 +554,39 @@ class TrafficShaperCoreTest {
     }
 
     @Test
-    @DisplayName("should reject a negative max queue depth")
-    void should_reject_a_negative_max_queue_depth() {
+    @DisplayName("should reject a max queue depth below minus one")
+    void should_reject_a_max_queue_depth_below_minus_one() {
       assertThatThrownBy(() -> TrafficShaperConfig.builder("bad")
-          .maxQueueDepth(-1)
+          .maxQueueDepth(-2)
           .build())
           .isInstanceOf(IllegalArgumentException.class);
+    }
+    @Test
+    @DisplayName("should accept minus one as unlimited queue depth")
+    void should_accept_minus_one_as_unlimited_queue_depth() {
+      // Given / When
+      TrafficShaperConfig config = TrafficShaperConfig.builder("unlimited")
+          .maxQueueDepth(-1)
+          .build();
+
+      // Then
+      assertThat(config.maxQueueDepth()).isEqualTo(-1);
+      assertThat(config.isQueuingAllowed()).isTrue();
+      assertThat(config.hasQueueDepthLimit()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should treat zero queue depth as no queuing allowed")
+    void should_treat_zero_queue_depth_as_no_queuing_allowed() {
+      // Given / When
+      TrafficShaperConfig config = TrafficShaperConfig.builder("no-queue")
+          .maxQueueDepth(0)
+          .build();
+
+      // Then
+      assertThat(config.maxQueueDepth()).isZero();
+      assertThat(config.isQueuingAllowed()).isFalse();
+      assertThat(config.hasQueueDepthLimit()).isFalse();
     }
 
     @Test

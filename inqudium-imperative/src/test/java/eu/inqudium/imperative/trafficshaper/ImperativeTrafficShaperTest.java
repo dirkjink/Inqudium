@@ -75,12 +75,13 @@ class ImperativeTrafficShaperTest {
       shaper.execute(() -> "first");  // Slot: now
       shaper.execute(() -> "second"); // Slot: now + 100ms
 
-      // Then
-      assertThat(events).hasSize(4);
+      // Then — 3 events: ADMITTED_IMMEDIATE, ADMITTED_DELAYED, EXECUTING
+      assertThat(events).hasSize(3);
       assertThat(events.get(0).type()).isEqualTo(TrafficShaperEvent.Type.ADMITTED_IMMEDIATE);
-      assertThat(events.get(2).type()).isEqualTo(TrafficShaperEvent.Type.ADMITTED_DELAYED);
+      assertThat(events.get(1).type()).isEqualTo(TrafficShaperEvent.Type.ADMITTED_DELAYED);
+      assertThat(events.get(2).type()).isEqualTo(TrafficShaperEvent.Type.EXECUTING);
       // The wait duration of the second request should be around 100ms
-      assertThat(events.get(2).waitDuration()).isCloseTo(Duration.ofMillis(100), Duration.ofMillis(20));
+      assertThat(events.get(1).waitDuration()).isCloseTo(Duration.ofMillis(100), Duration.ofMillis(20));
     }
   }
 
@@ -220,10 +221,10 @@ class ImperativeTrafficShaperTest {
       shaper.execute(() -> "immediate");
       shaper.execute(() -> "delayed");
 
-      // Then
+      // Then — immediate requests skip the queue entirely (no EXECUTING event),
+      // only delayed requests emit EXECUTING after their wait completes
       assertThat(eventTypes).containsExactly(
           TrafficShaperEvent.Type.ADMITTED_IMMEDIATE,
-          TrafficShaperEvent.Type.EXECUTING,
           TrafficShaperEvent.Type.ADMITTED_DELAYED,
           TrafficShaperEvent.Type.EXECUTING
       );

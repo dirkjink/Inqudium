@@ -12,12 +12,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Thread-safe, imperative traffic shaper implementation.
@@ -33,10 +36,15 @@ import java.util.function.Supplier;
  */
 public class ImperativeTrafficShaper {
 
+  private static final Logger LOG = Logger.getLogger(ImperativeTrafficShaper.class.getName());
+
   private final TrafficShaperConfig config;
   private final AtomicReference<ThrottleSnapshot> snapshotRef;
   private final Clock clock;
   private final List<Consumer<TrafficShaperEvent>> eventListeners;
+
+  // Fix 5: Unique instance identifier for identity-based comparison
+  private final String instanceId;
 
   public ImperativeTrafficShaper(TrafficShaperConfig config) {
     this(config, Clock.systemUTC());
@@ -47,35 +55,40 @@ public class ImperativeTrafficShaper {
     this.clock = Objects.requireNonNull(clock, "clock must not be null");
     this.snapshotRef = new AtomicReference<>(ThrottleSnapshot.initial(clock.instant()));
     this.eventListeners = new CopyOnWriteArrayList<>();
+    this.instanceId = UUID.randomUUID().toString();
   }
 
   // ======================== Execution ========================
 
   public <T> T execute(Callable<T> callable) throws Exception {
+    // Fix 10: Fail fast on null — prevents consuming a slot for nothing
+    Objects.requireNonNull(callable, "callable must not be null");
     waitForSlot();
     return callable.call();
   }
 
   public void execute(Runnable runnable) {
+    Objects.requireNonNull(runnable, "runnable must not be null");
     try {
       execute(() -> {
         runnable.run();
         return null;
       });
     } catch (RuntimeException | Error e) {
-      // Fix 4B: Disjunkte Typen korrigiert. Fängt TrafficShaperException, RuntimeException und Errors.
       throw e;
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
+  /**
+   * Fix 5: Uses {@code instanceId} instead of name for identity-based comparison.
+   */
   public <T> T executeWithFallback(Callable<T> callable, Supplier<T> fallback) throws Exception {
     try {
       return execute(callable);
     } catch (TrafficShaperException e) {
-      // Fix 4A: Maskierung verschachtelter Traffic Shaper verhindern.
-      if (Objects.equals(e.getTrafficShaperName(), config.name())) {
+      if (Objects.equals(e.getInstanceId(), this.instanceId)) {
         return fallback.get();
       }
       throw e;
@@ -87,15 +100,17 @@ public class ImperativeTrafficShaper {
   private void waitForSlot() {
     ThrottlePermission permission = acquireSlot();
 
+    // Fix 1: Immediate requests don't enter the queue, so they don't need
+    // recordExecution(). Only delayed requests need the try-finally dequeue.
+    if (!permission.requiresWait()) {
+      return;
+    }
+
     try {
-      if (permission.requiresWait()) {
-        parkUntil(permission.scheduledSlot());
-      }
+      parkUntil(permission.scheduledSlot());
     } finally {
-      // Fix 1 & 2A: recordExecution() zwingend im finally-Block aufrufen!
-      // Wenn der Thread durch einen Timeout oder Interrupt abgebrochen wird,
-      // MUSS die Queue-Depth zwingend wieder dekrementiert werden,
-      // sonst leakt die Queue für immer voll.
+      // Fix 1: Only dequeue delayed requests. This is in finally to ensure
+      // queueDepth is decremented even if the thread is interrupted.
       recordExecution();
     }
   }
@@ -105,20 +120,30 @@ public class ImperativeTrafficShaper {
       Instant now = clock.instant();
       ThrottleSnapshot current = snapshotRef.get();
 
-      // Nutze die Core-Logik, um den nächsten Slot zu berechnen
       ThrottlePermission permission = TrafficShaperCore.schedule(current, config, now);
 
       if (!permission.admitted()) {
+        // Fix 4: Emit inside try-catch so a listener failure doesn't prevent the exception
         emitEvent(TrafficShaperEvent.rejected(
             config.name(), permission.waitDuration(), current.queueDepth(), now));
+        // Fix 5: Include instanceId in exception
         throw new TrafficShaperException(
-            config.name(), permission.waitDuration(), current.queueDepth());
+            config.name(), instanceId, permission.waitDuration(), current.queueDepth());
       }
 
       if (snapshotRef.compareAndSet(current, permission.snapshot())) {
         if (permission.requiresWait()) {
           emitEvent(TrafficShaperEvent.admittedDelayed(
               config.name(), permission.waitDuration(), permission.snapshot().queueDepth(), now));
+
+          // Fix 11: Check if the unbounded queue has grown dangerously
+          if (TrafficShaperCore.isUnboundedQueueWarning(permission.snapshot(), config, now)) {
+            emitEvent(TrafficShaperEvent.unboundedQueueWarning(
+                config.name(),
+                permission.snapshot().projectedTailWait(now),
+                permission.snapshot().queueDepth(),
+                now));
+          }
         } else {
           emitEvent(TrafficShaperEvent.admittedImmediate(
               config.name(), permission.snapshot().queueDepth(), now));
@@ -128,20 +153,35 @@ public class ImperativeTrafficShaper {
     }
   }
 
+  /**
+   * Fix 8: Properly handles interrupts with a dedicated exception type
+   * instead of wrapping in RuntimeException.
+   */
   private void parkUntil(Instant targetWakeup) {
-    // Fix 2B: while-Schleife schützt vor Spurious Wakeups
     while (true) {
       if (Thread.currentThread().isInterrupted()) {
-        // Fix 2A: Werfe bei Thread-Interrupt sofort eine Exception,
-        // um das Waiting abzubrechen (wird dann durch das `finally` im waitForSlot aufgeräumt).
-        throw new RuntimeException(new InterruptedException("Thread interrupted while waiting for traffic shaper slot"));
+        // The interrupt flag stays set. The finally block in waitForSlot
+        // will call recordExecution() to clean up the queue depth.
+        throw new TrafficShaperInterruptedException(
+            "Thread interrupted while waiting for traffic shaper '%s' slot"
+                .formatted(config.name()));
       }
 
       Duration remaining = Duration.between(clock.instant(), targetWakeup);
       if (remaining.isNegative() || remaining.isZero()) {
-        break; // Ziel-Zeitpunkt ist physisch erreicht
+        break;
       }
       LockSupport.parkNanos(remaining.toNanos());
+    }
+  }
+
+  /**
+   * Fix 8: Dedicated unchecked exception for interrupts during slot waiting.
+   * Distinguishable from other RuntimeExceptions and TrafficShaperExceptions.
+   */
+  static class TrafficShaperInterruptedException extends RuntimeException {
+    TrafficShaperInterruptedException(String message) {
+      super(message);
     }
   }
 
@@ -149,8 +189,7 @@ public class ImperativeTrafficShaper {
     while (true) {
       Instant now = clock.instant();
       ThrottleSnapshot current = snapshotRef.get();
-      // Verkleinert die queueDepth
-      ThrottleSnapshot dequeued = current.withRequestDequeued();
+      ThrottleSnapshot dequeued = TrafficShaperCore.recordExecution(current);
 
       if (snapshotRef.compareAndSet(current, dequeued)) {
         emitEvent(TrafficShaperEvent.executing(config.name(), dequeued.queueDepth(), now));
@@ -165,9 +204,20 @@ public class ImperativeTrafficShaper {
     eventListeners.add(Objects.requireNonNull(listener));
   }
 
+  /**
+   * Fix 4: Each listener is invoked in its own try-catch. A failing listener
+   * must not break the scheduling flow or cause queue depth leaks.
+   */
   private void emitEvent(TrafficShaperEvent event) {
     for (Consumer<TrafficShaperEvent> listener : eventListeners) {
-      listener.accept(event);
+      try {
+        listener.accept(event);
+      } catch (Exception e) {
+        LOG.log(Level.WARNING,
+            "Event listener threw exception for traffic shaper '%s' (event: %s): %s"
+                .formatted(config.name(), event.type(), e.getMessage()),
+            e);
+      }
     }
   }
 
@@ -189,10 +239,27 @@ public class ImperativeTrafficShaper {
     return config;
   }
 
+  /**
+   * Fix 5: Returns the unique instance identifier.
+   */
+  public String getInstanceId() {
+    return instanceId;
+  }
+
+  /**
+   * Fix 9: Reset uses CAS to avoid overwriting concurrent scheduling operations.
+   * Threads currently parked on old slots will dequeue on wakeup, which is harmless
+   * because queueDepth is clamped to 0 by Math.max in withRequestDequeued.
+   */
   public void reset() {
     Instant now = clock.instant();
-    ThrottleSnapshot fresh = TrafficShaperCore.reset(now);
-    snapshotRef.set(fresh);
-    emitEvent(TrafficShaperEvent.reset(config.name(), now));
+    while (true) {
+      ThrottleSnapshot current = snapshotRef.get();
+      ThrottleSnapshot fresh = TrafficShaperCore.reset(now);
+      if (snapshotRef.compareAndSet(current, fresh)) {
+        emitEvent(TrafficShaperEvent.reset(config.name(), now));
+        return;
+      }
+    }
   }
 }

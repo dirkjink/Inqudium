@@ -40,6 +40,19 @@ public record TrafficShaperEvent(
     return new TrafficShaperEvent(name, Type.RESET, Duration.ZERO, 0, now);
   }
 
+  /**
+   * Fix 11: Warning that the unbounded queue has grown beyond the configured threshold.
+   *
+   * @param name            the traffic shaper name
+   * @param projectedWait   the projected wait time for the tail of the queue
+   * @param queueDepth      the current queue depth
+   * @param now             when the warning was issued
+   */
+  public static TrafficShaperEvent unboundedQueueWarning(
+      String name, Duration projectedWait, int queueDepth, Instant now) {
+    return new TrafficShaperEvent(name, Type.UNBOUNDED_QUEUE_WARNING, projectedWait, queueDepth, now);
+  }
+
   @Override
   public String toString() {
     return "TrafficShaper '%s': %s — wait %s ms, queue %d at %s"
@@ -66,6 +79,11 @@ public record TrafficShaperEvent(
     /**
      * The traffic shaper was reset.
      */
-    RESET
+    RESET,
+    /**
+     * Fix 11: Warning that the unbounded queue has grown beyond the configured threshold.
+     * This is an advisory event — the request is still admitted.
+     */
+    UNBOUNDED_QUEUE_WARNING
   }
 }

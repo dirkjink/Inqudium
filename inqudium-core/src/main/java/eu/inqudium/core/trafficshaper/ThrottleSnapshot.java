@@ -40,13 +40,30 @@ public record ThrottleSnapshot(
   // --- Wither methods for immutable updates ---
 
   /**
-   * Schedules a request: advances the next free slot by the given interval
-   * and increments the queue depth.
+   * Schedules a delayed request: advances the next free slot by the given interval
+   * and increments the queue depth (the request will wait in the queue).
    */
   public ThrottleSnapshot withRequestScheduled(Duration interval) {
     return new ThrottleSnapshot(
         nextFreeSlot.plus(interval),
         queueDepth + 1,
+        totalAdmitted + 1,
+        totalRejected
+    );
+  }
+
+  /**
+   * Fix 1: Schedules an immediate request: advances the next free slot by the given
+   * interval but does NOT increment the queue depth, because the request proceeds
+   * immediately without entering the queue.
+   *
+   * <p>Previously, both immediate and delayed requests incremented queueDepth,
+   * which inflated the queue and caused premature rejections at low maxQueueDepth.
+   */
+  public ThrottleSnapshot withRequestScheduledImmediate(Duration interval) {
+    return new ThrottleSnapshot(
+        nextFreeSlot.plus(interval),
+        queueDepth,
         totalAdmitted + 1,
         totalRejected
     );
@@ -88,5 +105,16 @@ public record ThrottleSnapshot(
   public Duration waitDurationFor(Instant now) {
     Duration wait = Duration.between(now, nextFreeSlot);
     return wait.isNegative() ? Duration.ZERO : wait;
+  }
+
+  /**
+   * Fix 11: Returns the projected wait time for the last queued request.
+   * Useful for monitoring in SHAPE_UNBOUNDED mode to detect runaway queues.
+   */
+  public Duration projectedTailWait(Instant now) {
+    if (nextFreeSlot.isBefore(now) || nextFreeSlot.equals(now)) {
+      return Duration.ZERO;
+    }
+    return Duration.between(now, nextFreeSlot);
   }
 }
