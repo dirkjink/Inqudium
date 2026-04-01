@@ -39,41 +39,27 @@ public class ImperativeFallbackProvider<T> {
   }
 
   public T execute(Callable<T> callable) throws Exception {
-    // Fix 9: Fail fast on null callable instead of letting the NPE
-    // propagate through the fallback mechanism
     Objects.requireNonNull(callable, "callable must not be null");
 
     Instant now = clock.instant();
     FallbackSnapshot snapshot = FallbackCore.start(now);
     emitEvent(FallbackEvent.primaryStarted(config.name(), now));
 
-    // Fix 1: Separate the primary callable invocation from result-fallback handling.
-    // Previously, a result-fallback handler failure would fall into the catch block
-    // and be treated as a primary exception — causing an IllegalStateException because
-    // the snapshot was already in FALLING_BACK state.
     T result;
     try {
       result = callable.call();
     } catch (Throwable primary) {
-      // Fix 3: Preserve interrupt status before any processing
+      // Fix 2: Bypassing the fallback chain for InterruptedException
       if (primary instanceof InterruptedException) {
         Thread.currentThread().interrupt();
+        throw (InterruptedException) primary; // Throw directly, avoid FallbackException
       }
       return handlePrimaryFailure(snapshot, primary);
     }
 
-    // Result resolution happens safely outside the primary try-catch
     return handleResult(snapshot, result);
   }
 
-  /**
-   * Fix 8: Dedicated Runnable execution that bypasses result handler resolution.
-   *
-   * <p>The Runnable wrapper returns {@code null} internally, which is a technical
-   * artifact, not a meaningful result. Without this separation, a result handler
-   * registered with {@code onResult(Objects::isNull, ...)} would always trigger
-   * for Runnables, even though the null return has no semantic meaning.
-   */
   public void execute(Runnable runnable) {
     Objects.requireNonNull(runnable, "runnable must not be null");
     try {
@@ -88,10 +74,6 @@ public class ImperativeFallbackProvider<T> {
     }
   }
 
-  /**
-   * Fix 8: Internal execution path that skips result handler resolution.
-   * Used by the Runnable overload where the null return value is meaningless.
-   */
   private T executeWithoutResultCheck(Callable<T> callable) throws Exception {
     Instant now = clock.instant();
     FallbackSnapshot snapshot = FallbackCore.start(now);
@@ -107,41 +89,35 @@ public class ImperativeFallbackProvider<T> {
       return result;
 
     } catch (Throwable primary) {
+      // Fix 2: Bypassing the fallback chain for InterruptedException
       if (primary instanceof InterruptedException) {
         Thread.currentThread().interrupt();
+        throw (InterruptedException) primary;
       }
       return handlePrimaryFailure(snapshot, primary);
     }
   }
 
-  /**
-   * Fix 1: Handles the primary result and any result-based fallback invocation
-   * in a separate method, completely outside the primary try-catch scope.
-   */
   private T handleResult(FallbackSnapshot snapshot, T result) throws Exception {
     Instant resultTime = clock.instant();
 
-    // Fix 4: resolveResultHandler now always returns non-null
     FallbackCore.ResultResolution<T> resultResolution =
         FallbackCore.resolveResultHandler(snapshot, config, result, resultTime);
 
     if (!resultResolution.matched()) {
-      // Fix 4: Snapshot is already transitioned to SUCCEEDED inside the resolution
       snapshot = resultResolution.snapshot();
       emitEvent(FallbackEvent.primarySucceeded(
           config.name(), snapshot.elapsed(resultTime), resultTime));
       return result;
     }
 
-    // A result handler matched — invoke the fallback
     snapshot = resultResolution.snapshot();
     emitEvent(FallbackEvent.resultFallbackInvoked(
         config.name(), resultResolution.handler().name(), Duration.ZERO, resultTime));
 
-    // Fix 1: Now this try-catch correctly handles result-fallback failures
-    // instead of accidentally treating them as primary failures
     try {
-      T fallbackResult = FallbackCore.invokeResultHandler(resultResolution.handler());
+      // Fix 1: Provide the rejected original result to the handler
+      T fallbackResult = FallbackCore.invokeResultHandler(resultResolution.handler(), result);
       Instant recoveredTime = clock.instant();
       snapshot = FallbackCore.recordFallbackSuccess(snapshot, recoveredTime);
 
@@ -158,14 +134,14 @@ public class ImperativeFallbackProvider<T> {
           config.name(), resultResolution.handler().name(),
           snapshot.fallbackElapsed(fbFailedTime), fallbackEx, fbFailedTime));
 
-      // Fix 7: primaryFailure is null for result-based fallbacks — FallbackException handles this
-      throw new FallbackException(config.name(), null, fallbackEx);
+      // Fix 4: Propagate transparently instead of wrapping in FallbackException
+      // Allows active rejection like throwing IllegalStateException to remain clean
+      if (fallbackEx instanceof Exception e) throw e;
+      if (fallbackEx instanceof Error err) throw err;
+      throw new RuntimeException(fallbackEx);
     }
   }
 
-  /**
-   * Handles a primary failure by resolving and invoking the appropriate exception handler.
-   */
   private T handlePrimaryFailure(FallbackSnapshot snapshot, Throwable primary) throws Exception {
     Instant failedTime = clock.instant();
     emitEvent(FallbackEvent.primaryFailed(
@@ -179,7 +155,6 @@ public class ImperativeFallbackProvider<T> {
       emitEvent(FallbackEvent.noHandlerMatched(
           config.name(), snapshot.elapsed(failedTime), primary, failedTime));
 
-      // Transparent propagation
       if (primary instanceof Exception e) throw e;
       if (primary instanceof Error err) throw err;
       throw new RuntimeException(primary);
@@ -215,20 +190,15 @@ public class ImperativeFallbackProvider<T> {
     eventListeners.add(Objects.requireNonNull(listener));
   }
 
-  /**
-   * Fix 2: Each listener is invoked in its own try-catch to ensure that a failing listener
-   * does not prevent subsequent listeners from being notified, and does not corrupt
-   * the execution flow of the fallback provider itself.
-   */
   private void emitEvent(FallbackEvent event) {
     for (Consumer<FallbackEvent> listener : eventListeners) {
       try {
         listener.accept(event);
-      } catch (Exception e) {
+      } catch (Throwable t) { // Fix 3: Catch Throwable to prevent NoClassDefFoundError crashes
         LOG.log(Level.WARNING,
             "Event listener threw exception for fallback '%s' (event: %s): %s"
-                .formatted(config.name(), event.type(), e.getMessage()),
-            e);
+                .formatted(config.name(), event.type(), t.getMessage()),
+            t);
       }
     }
   }

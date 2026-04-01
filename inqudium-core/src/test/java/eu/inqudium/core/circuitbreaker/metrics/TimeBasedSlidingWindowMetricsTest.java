@@ -148,6 +148,33 @@ class TimeBasedSlidingWindowMetricsTest {
   }
 
   @Nested
+  @DisplayName("Trip Reason")
+  class TripReason {
+
+    @Test
+    @DisplayName("should provide a detailed reason including failure count and window size")
+    void should_provide_a_detailed_reason_including_failure_count_and_window_size() {
+      // Given
+      int windowSize = 10;
+      FailureMetrics metrics = TimeBasedSlidingWindowMetrics.initial(windowSize, START_TIME)
+          .recordFailure(START_TIME)
+          .recordFailure(START_TIME.plusSeconds(1));
+
+      CircuitBreakerConfig config = CircuitBreakerConfig.builder("test")
+          .failureThreshold(2)
+          .build();
+
+      // When
+      String reason = metrics.getTripReason(config, START_TIME.plusSeconds(1));
+
+      // Then
+      assertThat(reason).contains("Found 2 failures")
+          .contains("last 10 seconds")
+          .contains("Threshold: 2");
+    }
+  }
+
+  @Nested
   @DisplayName("Resetting State")
   class ResettingState {
 

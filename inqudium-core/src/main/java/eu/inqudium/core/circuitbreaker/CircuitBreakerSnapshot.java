@@ -1,6 +1,7 @@
 package eu.inqudium.core.circuitbreaker;
 
 import eu.inqudium.core.circuitbreaker.metrics.FailureMetrics;
+
 import java.time.Instant;
 
 /**

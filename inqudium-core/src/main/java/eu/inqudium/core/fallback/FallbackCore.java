@@ -112,8 +112,8 @@ public final class FallbackCore {
     };
   }
 
-  public static <T> T invokeResultHandler(FallbackResultHandler<T> handler) {
-    return handler.apply();
+  public static <T> T invokeResultHandler(FallbackResultHandler<T> handler, T result) {
+    return handler.apply(result);
   }
 
   private static void requireState(FallbackSnapshot snapshot, FallbackState required, String operation) {

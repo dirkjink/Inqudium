@@ -41,6 +41,10 @@ public record ContinuousTimeEwmaMetrics(
     );
   }
 
+  private static long toNanos(Instant instant) {
+    return instant.getEpochSecond() * 1_000_000_000L + instant.getNano();
+  }
+
   @Override
   public FailureMetrics recordSuccess(Instant now) {
     return recordOutcome(now, 0.0);
@@ -90,10 +94,6 @@ public record ContinuousTimeEwmaMetrics(
         0,
         toNanos(now)
     );
-  }
-
-  private static long toNanos(Instant instant) {
-    return instant.getEpochSecond() * 1_000_000_000L + instant.getNano();
   }
 
   @Override

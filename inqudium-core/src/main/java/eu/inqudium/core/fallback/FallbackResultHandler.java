@@ -1,8 +1,8 @@
 package eu.inqudium.core.fallback;
 
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 /**
  * A fallback handler entry that evaluates the result of a successful execution.
@@ -20,16 +20,16 @@ public sealed interface FallbackResultHandler<T> {
   boolean matches(T result);
 
   /**
-   * Applies the fallback function to produce a substitute value.
+   * Applies the fallback function to produce a substitute value based on the rejected result.
    */
-  T apply();
+  T apply(T result);
 
   // ======================== Implementations ========================
 
   record ForResult<T>(
       String name,
       Predicate<T> predicate,
-      Supplier<T> fallback
+      Function<T, T> fallback // Fix 1: Nutzt nun Function statt Supplier
   ) implements FallbackResultHandler<T> {
 
     public ForResult {
@@ -44,8 +44,8 @@ public sealed interface FallbackResultHandler<T> {
     }
 
     @Override
-    public T apply() {
-      return fallback.get();
+    public T apply(T result) {
+      return fallback.apply(result); // Fix 1: Übergibt das Original-Ergebnis
     }
   }
 }

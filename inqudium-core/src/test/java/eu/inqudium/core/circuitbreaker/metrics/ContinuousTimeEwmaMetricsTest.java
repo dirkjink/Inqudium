@@ -1,6 +1,5 @@
 package eu.inqudium.core.circuitbreaker.metrics;
 
-import eu.inqudium.core.algo.ContinuousTimeEwma;
 import eu.inqudium.core.circuitbreaker.CircuitBreakerConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

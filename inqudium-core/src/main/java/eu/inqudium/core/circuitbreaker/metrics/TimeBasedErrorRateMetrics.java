@@ -1,6 +1,7 @@
 package eu.inqudium.core.circuitbreaker.metrics;
 
 import eu.inqudium.core.circuitbreaker.CircuitBreakerConfig;
+
 import java.time.Instant;
 import java.util.Arrays;
 

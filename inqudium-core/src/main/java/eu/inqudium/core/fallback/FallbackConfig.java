@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 /**
  * Immutable configuration for a fallback provider instance.
@@ -110,13 +109,15 @@ public record FallbackConfig<T>(
       return this;
     }
 
-    public Builder<T> onResult(Predicate<T> predicate, Supplier<T> fallback) {
+    // Fix 1: Angepasst auf Function<T, T>
+    public Builder<T> onResult(Predicate<T> predicate, Function<T, T> fallback) {
       resultHandlers.add(new FallbackResultHandler.ForResult<>(
           "result-" + resultHandlers.size(), predicate, fallback));
       return this;
     }
 
-    public Builder<T> onResult(String handlerName, Predicate<T> predicate, Supplier<T> fallback) {
+    // Fix 1: Angepasst auf Function<T, T>
+    public Builder<T> onResult(String handlerName, Predicate<T> predicate, Function<T, T> fallback) {
       resultHandlers.add(new FallbackResultHandler.ForResult<>(handlerName, predicate, fallback));
       return this;
     }

@@ -28,7 +28,7 @@ class ImperativeFallbackProviderTest {
   class PrimarySuccess {
 
     @Test
-    @DisplayName("should return the primary result when the callable succeeds")
+    @DisplayName("Should return the primary result when the callable succeeds")
     void should_return_the_primary_result_when_the_callable_succeeds() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -42,7 +42,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should not invoke any fallback handler when the primary succeeds")
+    @DisplayName("Should not invoke any fallback handler when the primary succeeds")
     void should_not_invoke_any_fallback_handler_when_the_primary_succeeds() throws Exception {
       // Given
       AtomicInteger fallbackCounter = new AtomicInteger(0);
@@ -71,7 +71,7 @@ class ImperativeFallbackProviderTest {
   class ExceptionTypeRouting {
 
     @Test
-    @DisplayName("should route to the correct handler based on exception type")
+    @DisplayName("Should route to the correct handler based on exception type")
     void should_route_to_the_correct_handler_based_on_exception_type() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -81,7 +81,7 @@ class ImperativeFallbackProviderTest {
               .onAnyException(e -> "catch-all")
               .build());
 
-      // When — IOException
+      // When — IOException is thrown
       String ioResult = provider.execute(() -> {
         throw new IOException("conn refused");
       });
@@ -91,7 +91,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should route to the timeout handler for timeout exceptions")
+    @DisplayName("Should route to the timeout handler for timeout exceptions")
     void should_route_to_the_timeout_handler_for_timeout_exceptions() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -110,7 +110,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should route to the catch-all handler when no specific handler matches")
+    @DisplayName("Should route to the catch all handler when no specific handler matches")
     void should_route_to_the_catch_all_handler_when_no_specific_handler_matches() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -129,7 +129,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should provide the exception to the handler function")
+    @DisplayName("Should provide the exception to the handler function")
     void should_provide_the_exception_to_the_handler_function() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -147,7 +147,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should match subclasses of the registered exception type")
+    @DisplayName("Should match subclasses of the registered exception type")
     void should_match_subclasses_of_the_registered_exception_type() throws Exception {
       // Given — register for RuntimeException, throw IllegalArgumentException (subclass)
       var provider = new ImperativeFallbackProvider<>(
@@ -174,7 +174,7 @@ class ImperativeFallbackProviderTest {
   class PredicateBasedRouting {
 
     @Test
-    @DisplayName("should route to the handler when the exception matches the predicate")
+    @DisplayName("Should route to the handler when the exception matches the predicate")
     void should_route_to_the_handler_when_the_exception_matches_the_predicate() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -194,7 +194,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should not match when the predicate returns false")
+    @DisplayName("Should not match when the predicate returns false")
     void should_not_match_when_the_predicate_returns_false() {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -221,7 +221,7 @@ class ImperativeFallbackProviderTest {
   class ConstantValueFallback {
 
     @Test
-    @DisplayName("should return the constant value for any exception")
+    @DisplayName("Should return the constant value for any exception")
     void should_return_the_constant_value_for_any_exception() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -237,7 +237,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should return null as a constant value when configured")
+    @DisplayName("Should return null as a constant value when configured")
     void should_return_null_as_a_constant_value_when_configured() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -262,7 +262,7 @@ class ImperativeFallbackProviderTest {
   class UnhandledException {
 
     @Test
-    @DisplayName("should propagate the original exception when no handler matches")
+    @DisplayName("Should propagate the original exception when no handler matches")
     void should_propagate_the_original_exception_when_no_handler_matches() {
       // Given — only handles IOException
       var provider = new ImperativeFallbackProvider<>(
@@ -279,6 +279,37 @@ class ImperativeFallbackProviderTest {
   }
 
   // ================================================================
+  // Interruption Handling
+  // ================================================================
+
+  @Nested
+  @DisplayName("Interruption Handling")
+  class InterruptionHandling {
+
+    @Test
+    @DisplayName("Should bypass fallback chain and rethrow interrupted exception while restoring interrupt flag")
+    void should_bypass_fallback_chain_and_rethrow_interrupted_exception_while_restoring_interrupt_flag() {
+      // Given
+      var provider = new ImperativeFallbackProvider<>(
+          FallbackConfig.<String>builder("interrupt")
+              .onAnyException(e -> "catch-all-value") // Should not be invoked
+              .build());
+
+      // When / Then
+      assertThatThrownBy(() -> provider.execute(() -> {
+        throw new InterruptedException("thread interrupted");
+      })).isInstanceOf(InterruptedException.class)
+          .hasMessage("thread interrupted");
+
+      // Verify interrupt status was restored
+      assertThat(Thread.currentThread().isInterrupted()).isTrue();
+
+      // Clear the interrupt status so it doesn't leak into other tests
+      Thread.interrupted();
+    }
+  }
+
+  // ================================================================
   // Fallback Handler Failure
   // ================================================================
 
@@ -287,8 +318,8 @@ class ImperativeFallbackProviderTest {
   class FallbackHandlerFailure {
 
     @Test
-    @DisplayName("should throw FallbackException when the fallback handler itself throws")
-    void should_throw_fallback_exception_when_the_fallback_handler_itself_throws() {
+    @DisplayName("Should throw FallbackException when the exception fallback handler itself throws")
+    void should_throw_fallback_exception_when_the_exception_fallback_handler_itself_throws() {
       // Given
       var provider = new ImperativeFallbackProvider<>(
           FallbackConfig.<String>builder("failing-handler")
@@ -303,9 +334,26 @@ class ImperativeFallbackProviderTest {
       })).isInstanceOf(FallbackException.class)
           .satisfies(e -> {
             FallbackException fe = (FallbackException) e;
-            // Der Reason-Enum wurde entfernt, wir prüfen direkt die Cause
             assertThat(fe.getCause().getMessage()).isEqualTo("handler crashed");
           });
+    }
+
+    @Test
+    @DisplayName("Should propagate result fallback exception transparently without wrapping")
+    void should_propagate_result_fallback_exception_transparently_without_wrapping() {
+      // Given
+      var provider = new ImperativeFallbackProvider<>(
+          FallbackConfig.<String>builder("transparent-result-ex")
+              .onResult(result -> result == null, rejectedResult -> {
+                throw new IllegalStateException("result was explicitly rejected");
+              })
+              .onAnyException(e -> "catch-all")
+              .build());
+
+      // When / Then
+      assertThatThrownBy(() -> provider.execute(() -> null))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessage("result was explicitly rejected");
     }
   }
 
@@ -318,12 +366,12 @@ class ImperativeFallbackProviderTest {
   class ResultBasedFallback {
 
     @Test
-    @DisplayName("should replace a null result with the fallback value")
-    void should_replace_a_null_result_with_the_fallback_value() throws Exception {
+    @DisplayName("Should replace a null result with the fallback value using the function")
+    void should_replace_a_null_result_with_the_fallback_value_using_the_function() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
           FallbackConfig.<String>builder("null-check")
-              .onResult(result -> result == null, () -> "default-value")
+              .onResult(result -> result == null, rejectedResult -> "default-value")
               .onAnyException(e -> "error-fallback")
               .build());
 
@@ -335,30 +383,32 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should replace an empty string result with the fallback value")
-    void should_replace_an_empty_string_result_with_the_fallback_value() throws Exception {
+    @DisplayName("Should allow the result handler to inspect the rejected result")
+    void should_allow_the_result_handler_to_inspect_the_rejected_result() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
-          FallbackConfig.<String>builder("empty-check")
-              .onResult(result -> result != null && result.isEmpty(), () -> "non-empty-default")
-              .onAnyException(e -> "error-fallback")
+          FallbackConfig.<String>builder("inspect-result")
+              .onResult(
+                  result -> result.equals("bad-state"),
+                  rejectedResult -> rejectedResult + "-fixed"
+              )
               .build());
 
       // When
-      String result = provider.execute(() -> "");
+      String result = provider.execute(() -> "bad-state");
 
       // Then
-      assertThat(result).isEqualTo("non-empty-default");
+      assertThat(result).isEqualTo("bad-state-fixed");
     }
 
     @Test
-    @DisplayName("should not invoke the result handler when the result is acceptable")
+    @DisplayName("Should not invoke the result handler when the result is acceptable")
     void should_not_invoke_the_result_handler_when_the_result_is_acceptable() throws Exception {
       // Given
       AtomicInteger fallbackCounter = new AtomicInteger(0);
       var provider = new ImperativeFallbackProvider<>(
           FallbackConfig.<String>builder("acceptable")
-              .onResult(result -> result == null, () -> {
+              .onResult(result -> result == null, rejectedResult -> {
                 fallbackCounter.incrementAndGet();
                 return "default";
               })
@@ -383,7 +433,7 @@ class ImperativeFallbackProviderTest {
   class EventListeners {
 
     @Test
-    @DisplayName("should emit PRIMARY_STARTED and PRIMARY_SUCCEEDED for a successful execution")
+    @DisplayName("Should emit PRIMARY_STARTED and PRIMARY_SUCCEEDED for a successful execution")
     void should_emit_primary_started_and_primary_succeeded_for_a_successful_execution() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -402,7 +452,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should emit the full event sequence for an exception recovery")
+    @DisplayName("Should emit the full event sequence for an exception recovery")
     void should_emit_the_full_event_sequence_for_an_exception_recovery() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -428,7 +478,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should emit NO_HANDLER_MATCHED when no handler is found")
+    @DisplayName("Should emit NO_HANDLER_MATCHED when no handler is found")
     void should_emit_no_handler_matched_when_no_handler_is_found() {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -444,6 +494,7 @@ class ImperativeFallbackProviderTest {
           throw new IllegalStateException("no match");
         });
       } catch (Exception e) {
+        // Ignored for event verification
       }
 
       // Then
@@ -455,7 +506,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should emit FALLBACK_FAILED when the handler itself throws")
+    @DisplayName("Should emit FALLBACK_FAILED when the handler itself throws")
     void should_emit_fallback_failed_when_the_handler_itself_throws() {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -473,6 +524,7 @@ class ImperativeFallbackProviderTest {
           throw new RuntimeException("primary");
         });
       } catch (Exception e) {
+        // Ignored for event verification
       }
 
       // Then
@@ -485,12 +537,12 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should emit RESULT_FALLBACK_INVOKED and RESULT_FALLBACK_RECOVERED for result-based fallback")
+    @DisplayName("Should emit RESULT_FALLBACK_INVOKED and RESULT_FALLBACK_RECOVERED for result based fallback")
     void should_emit_result_events_for_result_based_fallback() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
           FallbackConfig.<String>builder("result-events")
-              .onResult(result -> result == null, () -> "default")
+              .onResult(result -> result == null, rejectedResult -> "default")
               .onAnyException(e -> "error")
               .build());
       List<FallbackEvent> events = new ArrayList<>();
@@ -506,6 +558,27 @@ class ImperativeFallbackProviderTest {
           FallbackEvent.Type.RESULT_FALLBACK_RECOVERED
       );
     }
+
+    @Test
+    @DisplayName("Should not crash execution when an event listener throws a fatal error")
+    void should_not_crash_execution_when_an_event_listener_throws_a_fatal_error() throws Exception {
+      // Given
+      var provider = new ImperativeFallbackProvider<>(
+          FallbackConfig.<String>builder("listener-crash")
+              .withDefault("fallback-value")
+              .build());
+
+      // Register a failing listener that throws an Error (e.g. NoClassDefFoundError simulation)
+      provider.onEvent(event -> {
+        throw new Error("listener unexpectedly crashed");
+      });
+
+      // When
+      String result = provider.execute(() -> "primary-value");
+
+      // Then — The provider completes successfully despite the listener crash
+      assertThat(result).isEqualTo("primary-value");
+    }
   }
 
   // ================================================================
@@ -517,7 +590,7 @@ class ImperativeFallbackProviderTest {
   class ConcurrencyWithVirtualThreads {
 
     @Test
-    @DisplayName("should handle many concurrent fallback executions using virtual threads")
+    @DisplayName("Should handle many concurrent fallback executions using virtual threads")
     void should_handle_many_concurrent_fallback_executions_using_virtual_threads() throws Exception {
       // Given
       var provider = new ImperativeFallbackProvider<>(
@@ -544,6 +617,7 @@ class ImperativeFallbackProviderTest {
                 recoveredCount.incrementAndGet();
               }
             } catch (Exception e) {
+              // Ignored
             } finally {
               latch.countDown();
             }
@@ -566,7 +640,7 @@ class ImperativeFallbackProviderTest {
   class Introspection {
 
     @Test
-    @DisplayName("should return the configuration")
+    @DisplayName("Should return the configuration")
     void should_return_the_configuration() {
       // Given
       var config = FallbackConfig.<String>builder("inspect").withDefault("fb").build();
@@ -578,7 +652,7 @@ class ImperativeFallbackProviderTest {
     }
 
     @Test
-    @DisplayName("should report the correct number of registered handlers")
+    @DisplayName("Should report the correct number of registered handlers")
     void should_report_the_correct_number_of_registered_handlers() {
       // Given
       var config = FallbackConfig.<String>builder("handlers")
@@ -588,7 +662,6 @@ class ImperativeFallbackProviderTest {
           .build();
 
       // Then
-      // Angepasst an die neuen getrennten Listen
       assertThat(config.exceptionHandlers()).hasSize(3);
       assertThat(config.resultHandlers()).isEmpty();
     }

@@ -561,6 +561,7 @@ class TrafficShaperCoreTest {
           .build())
           .isInstanceOf(IllegalArgumentException.class);
     }
+
     @Test
     @DisplayName("should accept minus one as unlimited queue depth")
     void should_accept_minus_one_as_unlimited_queue_depth() {

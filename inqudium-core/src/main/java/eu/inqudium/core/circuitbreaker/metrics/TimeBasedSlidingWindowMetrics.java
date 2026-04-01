@@ -1,6 +1,7 @@
 package eu.inqudium.core.circuitbreaker.metrics;
 
 import eu.inqudium.core.circuitbreaker.CircuitBreakerConfig;
+
 import java.time.Instant;
 import java.util.Arrays;
 
@@ -120,5 +121,14 @@ public record TimeBasedSlidingWindowMetrics(
     }
 
     return new TimeBasedSlidingWindowMetrics(windowSizeInSeconds, newBuckets, currentEpochSecond);
+  }
+
+  public String getTripReason(CircuitBreakerConfig config, Instant now) {
+    TimeBasedSlidingWindowMetrics evaluatedState = fastForward(now.getEpochSecond());
+
+    int totalFailuresInWindow = Arrays.stream(evaluatedState.failureBuckets()).sum();
+
+    return "Time-based sliding window threshold reached: Found %d failures in the last %d seconds (Threshold: %d)."
+        .formatted(totalFailuresInWindow, windowSizeInSeconds, config.failureThreshold());
   }
 }

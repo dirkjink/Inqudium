@@ -26,7 +26,7 @@ class FallbackCoreTest {
   class InitialState {
 
     @Test
-    @DisplayName("an idle snapshot should be in IDLE state with no failure information")
+    @DisplayName("An idle snapshot should be in IDLE state with no failure information")
     void an_idle_snapshot_should_be_in_idle_state_with_no_failure_information() {
       // Given / When
       FallbackSnapshot snapshot = FallbackSnapshot.idle();
@@ -49,7 +49,7 @@ class FallbackCoreTest {
   class StartTransition {
 
     @Test
-    @DisplayName("should transition to EXECUTING state with the start time")
+    @DisplayName("Should transition to EXECUTING state with the start time")
     void should_transition_to_executing_state_with_the_start_time() {
       // Given / When
       FallbackSnapshot snapshot = FallbackCore.start(NOW);
@@ -69,7 +69,7 @@ class FallbackCoreTest {
   class PrimarySuccess {
 
     @Test
-    @DisplayName("should transition to SUCCEEDED state with end time")
+    @DisplayName("Should transition to SUCCEEDED state with end time")
     void should_transition_to_succeeded_state_with_end_time() {
       // Given
       FallbackSnapshot executing = FallbackCore.start(NOW);
@@ -87,7 +87,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should report the correct elapsed duration")
+    @DisplayName("Should report the correct elapsed duration")
     void should_report_the_correct_elapsed_duration() {
       // Given
       FallbackSnapshot executing = FallbackCore.start(NOW);
@@ -100,7 +100,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should reject recording primary success on a non-EXECUTING snapshot")
+    @DisplayName("Should reject recording primary success on a non EXECUTING snapshot")
     void should_reject_recording_primary_success_on_a_non_executing_snapshot() {
       // Given
       FallbackSnapshot idle = FallbackSnapshot.idle();
@@ -121,7 +121,7 @@ class FallbackCoreTest {
   class ExceptionHandlerResolution {
 
     @Test
-    @DisplayName("should resolve the correct handler for a specific exception type")
+    @DisplayName("Should resolve the correct handler for a specific exception type")
     void should_resolve_the_correct_handler_for_a_specific_exception_type() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
@@ -143,7 +143,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should resolve the first matching handler when multiple could match")
+    @DisplayName("Should resolve the first matching handler when multiple could match")
     void should_resolve_the_first_matching_handler_when_multiple_could_match() {
       // Given — IOException extends Exception, both handlers could match
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
@@ -161,7 +161,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should fall through to the catch-all handler when no specific handler matches")
+    @DisplayName("Should fall through to the catch all handler when no specific handler matches")
     void should_fall_through_to_the_catch_all_handler_when_no_specific_handler_matches() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
@@ -180,7 +180,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should return unmatched when no handler matches the exception")
+    @DisplayName("Should return unmatched when no handler matches the exception")
     void should_return_unmatched_when_no_handler_matches_the_exception() {
       // Given — only handles IOException
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
@@ -199,7 +199,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should resolve a predicate-based handler when the predicate matches")
+    @DisplayName("Should resolve a predicate based handler when the predicate matches")
     void should_resolve_a_predicate_based_handler_when_the_predicate_matches() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
@@ -220,7 +220,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should resolve a constant value handler for any exception")
+    @DisplayName("Should resolve a constant value handler for any exception")
     void should_resolve_a_constant_value_handler_for_any_exception() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
@@ -248,11 +248,12 @@ class FallbackCoreTest {
   class ResultHandlerResolution {
 
     @Test
-    @DisplayName("should return unmatched resolution when the result is acceptable")
+    @DisplayName("Should return unmatched resolution when the result is acceptable")
     void should_return_unmatched_resolution_when_the_result_is_acceptable() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
-          .onResult(result -> result == null, () -> "default")
+          // Provide Function taking rejected result instead of Supplier
+          .onResult(result -> result == null, rejectedResult -> "default")
           .onAnyException(e -> "error-fallback")
           .build();
       FallbackSnapshot executing = FallbackCore.start(NOW);
@@ -269,11 +270,12 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should resolve the result handler when the result matches the predicate")
+    @DisplayName("Should resolve the result handler when the result matches the predicate")
     void should_resolve_the_result_handler_when_the_result_matches_the_predicate() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
-          .onResult("null-check", result -> result == null, () -> "default-value")
+          // Provide Function taking rejected result instead of Supplier
+          .onResult("null-check", result -> result == null, rejectedResult -> "default-value")
           .onAnyException(e -> "error-fallback")
           .build();
       FallbackSnapshot executing = FallbackCore.start(NOW);
@@ -289,7 +291,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should return unmatched resolution when no result handler is registered")
+    @DisplayName("Should return unmatched resolution when no result handler is registered")
     void should_return_unmatched_resolution_when_no_result_handler_is_registered() {
       // Given — only exception handlers
       FallbackConfig<String> config = FallbackConfig.<String>builder("test")
@@ -318,7 +320,7 @@ class FallbackCoreTest {
   class FallbackRecovery {
 
     @Test
-    @DisplayName("should transition to RECOVERED when the fallback handler succeeds")
+    @DisplayName("Should transition to RECOVERED when the fallback handler succeeds")
     void should_transition_to_recovered_when_the_fallback_handler_succeeds() {
       // Given
       FallbackSnapshot fallingBack = FallbackCore.start(NOW)
@@ -335,7 +337,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should reject recording fallback success on a non-FALLING_BACK snapshot")
+    @DisplayName("Should reject recording fallback success on a non FALLING_BACK snapshot")
     void should_reject_recording_fallback_success_on_a_non_falling_back_snapshot() {
       // Given
       FallbackSnapshot executing = FallbackCore.start(NOW);
@@ -355,7 +357,7 @@ class FallbackCoreTest {
   class FallbackFailure {
 
     @Test
-    @DisplayName("should transition to FALLBACK_FAILED when the handler throws")
+    @DisplayName("Should transition to FALLBACK_FAILED when the handler throws")
     void should_transition_to_fallback_failed_when_the_handler_throws() {
       // Given
       RuntimeException primary = new RuntimeException("primary");
@@ -385,7 +387,7 @@ class FallbackCoreTest {
   class HandlerInvocation {
 
     @Test
-    @DisplayName("should invoke a typed exception handler with the correct exception")
+    @DisplayName("Should invoke a typed exception handler with the correct exception")
     void should_invoke_a_typed_exception_handler_with_the_correct_exception() {
       // Given
       FallbackExceptionHandler<String> handler = new FallbackExceptionHandler.ForExceptionType<>(
@@ -400,7 +402,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should invoke a predicate-based handler with the exception")
+    @DisplayName("Should invoke a predicate based handler with the exception")
     void should_invoke_a_predicate_based_handler_with_the_exception() {
       // Given
       FallbackExceptionHandler<String> handler = new FallbackExceptionHandler.ForExceptionPredicate<>(
@@ -414,7 +416,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should invoke a catch-all handler with any exception")
+    @DisplayName("Should invoke a catch all handler with any exception")
     void should_invoke_a_catch_all_handler_with_any_exception() {
       // Given
       FallbackExceptionHandler<String> handler = new FallbackExceptionHandler.CatchAll<>("catch-all", e -> "caught");
@@ -427,7 +429,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should invoke a constant value handler regardless of exception")
+    @DisplayName("Should invoke a constant value handler regardless of exception")
     void should_invoke_a_constant_value_handler_regardless_of_exception() {
       // Given
       FallbackExceptionHandler<String> handler = new FallbackExceptionHandler.ConstantValue<>("const", "fixed-value");
@@ -440,14 +442,14 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should invoke a result handler and return the fallback value")
+    @DisplayName("Should invoke a result handler and return the fallback value")
     void should_invoke_a_result_handler_and_return_the_fallback_value() {
-      // Given
+      // Given — Function taking rejected result instead of Supplier
       FallbackResultHandler<String> handler = new FallbackResultHandler.ForResult<>(
-          "null-handler", result -> result == null, () -> "default");
+          "null-handler", result -> result == null, rejectedResult -> "default");
 
-      // When
-      String result = FallbackCore.invokeResultHandler(handler);
+      // When — Pass the rejected original result as second argument
+      String result = FallbackCore.invokeResultHandler(handler, null);
 
       // Then
       assertThat(result).isEqualTo("default");
@@ -463,7 +465,7 @@ class FallbackCoreTest {
   class FullLifecycle {
 
     @Test
-    @DisplayName("should complete a primary success lifecycle without invoking any fallback")
+    @DisplayName("Should complete a primary success lifecycle without invoking any fallback")
     void should_complete_a_primary_success_lifecycle_without_invoking_any_fallback() {
       // Given
       FallbackSnapshot snapshot = FallbackCore.start(NOW);
@@ -477,7 +479,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should complete a recovery lifecycle through handler resolution and fallback success")
+    @DisplayName("Should complete a recovery lifecycle through handler resolution and fallback success")
     void should_complete_a_recovery_lifecycle_through_handler_resolution_and_fallback_success() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("lifecycle")
@@ -500,7 +502,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should complete an unhandled lifecycle when no handler matches")
+    @DisplayName("Should complete an unhandled lifecycle when no handler matches")
     void should_complete_an_unhandled_lifecycle_when_no_handler_matches() {
       // Given
       FallbackConfig<String> config = FallbackConfig.<String>builder("unhandled")
@@ -528,7 +530,7 @@ class FallbackCoreTest {
   class StateProperties {
 
     @Test
-    @DisplayName("should identify non-terminal states correctly")
+    @DisplayName("Should identify non terminal states correctly")
     void should_identify_non_terminal_states_correctly() {
       assertThat(FallbackState.IDLE.isTerminal()).isFalse();
       assertThat(FallbackState.EXECUTING.isTerminal()).isFalse();
@@ -536,7 +538,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should identify terminal states correctly")
+    @DisplayName("Should identify terminal states correctly")
     void should_identify_terminal_states_correctly() {
       assertThat(FallbackState.SUCCEEDED.isTerminal()).isTrue();
       assertThat(FallbackState.RECOVERED.isTerminal()).isTrue();
@@ -545,7 +547,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should identify success states as both SUCCEEDED and RECOVERED")
+    @DisplayName("Should identify success states as both SUCCEEDED and RECOVERED")
     void should_identify_success_states_as_both_succeeded_and_recovered() {
       assertThat(FallbackState.SUCCEEDED.isSuccess()).isTrue();
       assertThat(FallbackState.RECOVERED.isSuccess()).isTrue();
@@ -563,7 +565,7 @@ class FallbackCoreTest {
   class SnapshotImmutability {
 
     @Test
-    @DisplayName("should not modify the original snapshot when recording primary success")
+    @DisplayName("Should not modify the original snapshot when recording primary success")
     void should_not_modify_the_original_snapshot_when_recording_primary_success() {
       // Given
       FallbackSnapshot executing = FallbackCore.start(NOW);
@@ -586,7 +588,7 @@ class FallbackCoreTest {
   class ConfigurationValidation {
 
     @Test
-    @DisplayName("should reject an empty handler list")
+    @DisplayName("Should reject an empty handler list")
     void should_reject_an_empty_handler_list() {
       assertThatThrownBy(() -> new FallbackConfig<String>("test", java.util.List.of(), java.util.List.of()))
           .isInstanceOf(IllegalArgumentException.class)
@@ -594,7 +596,7 @@ class FallbackCoreTest {
     }
 
     @Test
-    @DisplayName("should reject a null name")
+    @DisplayName("Should reject a null name")
     void should_reject_a_null_name() {
       assertThatThrownBy(() -> FallbackConfig.<String>builder(null))
           .isInstanceOf(NullPointerException.class);

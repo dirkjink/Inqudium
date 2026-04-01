@@ -1,6 +1,7 @@
 package eu.inqudium.core.circuitbreaker.metrics;
 
 import eu.inqudium.core.circuitbreaker.CircuitBreakerConfig;
+
 import java.time.Instant;
 
 /**
@@ -28,6 +29,10 @@ public record LeakyBucketMetrics(
         0.0,
         toNanos(now)
     );
+  }
+
+  private static long toNanos(Instant instant) {
+    return instant.getEpochSecond() * 1_000_000_000L + instant.getNano();
   }
 
   @Override
@@ -84,10 +89,6 @@ public record LeakyBucketMetrics(
         newLevel,
         newLastUpdateNanos
     );
-  }
-
-  private static long toNanos(Instant instant) {
-    return instant.getEpochSecond() * 1_000_000_000L + instant.getNano();
   }
 
   @Override

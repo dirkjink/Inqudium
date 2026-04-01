@@ -29,6 +29,7 @@ class CircuitBreakerCoreTest {
    * Helper method to create an initial snapshot with the default GradualDecayMetrics.
    */
   private static CircuitBreakerSnapshot initialSnapshot() {
+    // Initializing with the new metrics strategy
     return CircuitBreakerSnapshot.initial(NOW, GradualDecayMetrics.initial());
   }
 
@@ -36,6 +37,7 @@ class CircuitBreakerCoreTest {
    * Helper method to extract the failure count from the metrics strategy for assertions.
    */
   private static int getFailureCount(CircuitBreakerSnapshot snapshot) {
+    // Casting to the specific implementation to verify internal counts in tests
     return ((GradualDecayMetrics) snapshot.failureMetrics()).failureCount();
   }
 
@@ -175,7 +177,7 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should reset all counters when transitioning to open")
+    @DisplayName("should reset failure metrics when transitioning to open")
     void should_reset_all_counters_when_transitioning_to_open() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
@@ -208,13 +210,14 @@ class CircuitBreakerCoreTest {
       // Given
       CircuitBreakerConfig config = defaultConfig();
       CircuitBreakerSnapshot snapshot = initialSnapshot();
+      // Record 2 failures initially
       CircuitBreakerSnapshot withFailures = CircuitBreakerCore.recordFailure(
           CircuitBreakerCore.recordFailure(snapshot, config, NOW), config, NOW);
 
       // When
       CircuitBreakerSnapshot afterSuccess = CircuitBreakerCore.recordSuccess(withFailures, config, NOW);
 
-      // Then
+      // Then - Applying gradual decay logic via the metrics strategy
       assertThat(getFailureCount(afterSuccess)).isEqualTo(1);
       assertThat(afterSuccess.state()).isEqualTo(CircuitState.CLOSED);
     }
@@ -501,7 +504,8 @@ class CircuitBreakerCoreTest {
     void should_detect_a_transition_when_the_state_has_changed() {
       // Given
       CircuitBreakerSnapshot before = initialSnapshot();
-      CircuitBreakerSnapshot after = before.withState(CircuitState.OPEN, NOW);
+      CircuitBreakerSnapshot after =
+          before.withState(CircuitState.OPEN, NOW, "Manual intervention or threshold reached in test");
 
       // When
       Optional<StateTransition> transition = CircuitBreakerCore.detectTransition("test", before, after, NOW);
@@ -518,6 +522,7 @@ class CircuitBreakerCoreTest {
     void should_return_empty_optional_when_no_transition_occurred() {
       // Given
       CircuitBreakerSnapshot before = initialSnapshot();
+      // Verifying immutability and no-transition when only metrics are updated but state remains same
       CircuitBreakerSnapshot after = before.withUpdatedFailureMetrics(new GradualDecayMetrics(1));
 
       // When
@@ -542,7 +547,7 @@ class CircuitBreakerCoreTest {
       // Given
       CircuitBreakerConfig config = defaultConfig(); // 30s wait
       CircuitBreakerSnapshot snapshot = initialSnapshot()
-          .withState(CircuitState.OPEN, NOW);
+          .withState(CircuitState.OPEN, NOW, "Manual intervention or threshold reached in test");
 
       // When
       boolean expired = CircuitBreakerCore.isWaitDurationExpired(snapshot, config, NOW.plusSeconds(31));
@@ -557,7 +562,7 @@ class CircuitBreakerCoreTest {
       // Given
       CircuitBreakerConfig config = defaultConfig();
       CircuitBreakerSnapshot snapshot = initialSnapshot()
-          .withState(CircuitState.OPEN, NOW);
+          .withState(CircuitState.OPEN, NOW, "Manual intervention or threshold reached in test");
 
       // When
       boolean expired = CircuitBreakerCore.isWaitDurationExpired(snapshot, config, NOW.plusSeconds(10));
@@ -572,7 +577,7 @@ class CircuitBreakerCoreTest {
       // Given
       CircuitBreakerConfig config = defaultConfig();
       CircuitBreakerSnapshot snapshot = initialSnapshot()
-          .withState(CircuitState.OPEN, NOW);
+          .withState(CircuitState.OPEN, NOW, "Manual intervention or threshold reached in test");
 
       // When
       boolean expired = CircuitBreakerCore.isWaitDurationExpired(snapshot, config, NOW.plusSeconds(30));

@@ -292,6 +292,7 @@ public class ImperativeCircuitBreaker {
   /**
    * Registers a state transition listener.
    * * @param listener the listener to be notified on state transitions
+   *
    * @return a Runnable that, when executed, unregisters this listener to prevent memory leaks
    */
   public Runnable onStateTransition(Consumer<StateTransition> listener) {

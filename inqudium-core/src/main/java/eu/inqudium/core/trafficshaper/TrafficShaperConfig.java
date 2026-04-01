@@ -14,19 +14,19 @@ import java.util.Objects;
  *
  * <p>Use {@link #builder(String)} to construct.
  *
- * @param name              a human-readable identifier
- * @param ratePerSecond     the target throughput in requests per second
- * @param interval          the computed interval between successive slots
- *                          ({@code Duration.ofNanos(1_000_000_000 / ratePerSecond)})
- * @param maxQueueDepth     maximum number of requests that may be waiting
- *                          simultaneously; 0 = no queue (immediate or reject);
- *                          -1 = unlimited (only maxWaitDuration applies)
- * @param maxWaitDuration   maximum time a single request may wait before
- *                          being rejected (acts as a hard cap on queue depth)
- * @param throttleMode      how to handle overflow (reject vs. unbounded)
+ * @param name               a human-readable identifier
+ * @param ratePerSecond      the target throughput in requests per second
+ * @param interval           the computed interval between successive slots
+ *                           ({@code Duration.ofNanos(1_000_000_000 / ratePerSecond)})
+ * @param maxQueueDepth      maximum number of requests that may be waiting
+ *                           simultaneously; 0 = no queue (immediate or reject);
+ *                           -1 = unlimited (only maxWaitDuration applies)
+ * @param maxWaitDuration    maximum time a single request may wait before
+ *                           being rejected (acts as a hard cap on queue depth)
+ * @param throttleMode       how to handle overflow (reject vs. unbounded)
  * @param unboundedWarnAfter Fix 11: in SHAPE_UNBOUNDED mode, emit a warning event
- *                          when projected tail wait exceeds this duration.
- *                          {@code null} disables the warning.
+ *                           when projected tail wait exceeds this duration.
+ *                           {@code null} disables the warning.
  */
 public record TrafficShaperConfig(
     String name,
@@ -61,6 +61,10 @@ public record TrafficShaperConfig(
     }
   }
 
+  public static Builder builder(String name) {
+    return new Builder(name);
+  }
+
   /**
    * Fix 7: Returns whether queuing is allowed at all.
    * When maxQueueDepth is 0, requests are either immediate or rejected — never delayed.
@@ -75,10 +79,6 @@ public record TrafficShaperConfig(
    */
   public boolean hasQueueDepthLimit() {
     return maxQueueDepth > 0;
-  }
-
-  public static Builder builder(String name) {
-    return new Builder(name);
   }
 
   public static final class Builder {

@@ -175,16 +175,6 @@ public class ImperativeTrafficShaper {
     }
   }
 
-  /**
-   * Fix 8: Dedicated unchecked exception for interrupts during slot waiting.
-   * Distinguishable from other RuntimeExceptions and TrafficShaperExceptions.
-   */
-  static class TrafficShaperInterruptedException extends RuntimeException {
-    TrafficShaperInterruptedException(String message) {
-      super(message);
-    }
-  }
-
   private void recordExecution() {
     while (true) {
       Instant now = clock.instant();
@@ -198,11 +188,11 @@ public class ImperativeTrafficShaper {
     }
   }
 
-  // ======================== Listeners ========================
-
   public void onEvent(Consumer<TrafficShaperEvent> listener) {
     eventListeners.add(Objects.requireNonNull(listener));
   }
+
+  // ======================== Listeners ========================
 
   /**
    * Fix 4: Each listener is invoked in its own try-catch. A failing listener
@@ -221,11 +211,11 @@ public class ImperativeTrafficShaper {
     }
   }
 
-  // ======================== Introspection ========================
-
   public int getQueueDepth() {
     return snapshotRef.get().queueDepth();
   }
+
+  // ======================== Introspection ========================
 
   public Duration getEstimatedWait() {
     return TrafficShaperCore.estimateWait(snapshotRef.get(), clock.instant());
@@ -260,6 +250,16 @@ public class ImperativeTrafficShaper {
         emitEvent(TrafficShaperEvent.reset(config.name(), now));
         return;
       }
+    }
+  }
+
+  /**
+   * Fix 8: Dedicated unchecked exception for interrupts during slot waiting.
+   * Distinguishable from other RuntimeExceptions and TrafficShaperExceptions.
+   */
+  static class TrafficShaperInterruptedException extends RuntimeException {
+    TrafficShaperInterruptedException(String message) {
+      super(message);
     }
   }
 }

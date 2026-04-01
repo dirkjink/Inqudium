@@ -55,6 +55,11 @@ class CompositeFailureMetricsTest {
       // Returns a fresh state, dropping the counts to 0, but preserving the mock behavior
       return new StubMetrics(0, 0, shouldTrip);
     }
+
+    @Override
+    public String getTripReason(CircuitBreakerConfig config, Instant now) {
+      return "";
+    }
   }
 
   @Nested
