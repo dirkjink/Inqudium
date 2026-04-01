@@ -5,8 +5,10 @@ import eu.inqudium.core.InqClock;
 import eu.inqudium.core.InqConfig;
 import eu.inqudium.core.bulkhead.algo.InqLimitAlgorithm;
 import eu.inqudium.core.bulkhead.strategy.AdaptiveBulkheadStrategy;
+import eu.inqudium.core.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.bulkhead.strategy.CoDelBulkheadStrategy;
+import eu.inqudium.core.bulkhead.strategy.NonBlockingBulkheadStrategy;
 import eu.inqudium.core.bulkhead.strategy.SemaphoreBulkheadStrategy;
 import eu.inqudium.core.compatibility.InqCompatibility;
 import org.slf4j.Logger;
@@ -20,16 +22,16 @@ import java.util.function.LongSupplier;
  * Immutable configuration for the Bulkhead element.
  *
  * <p>Carries a pluggable {@link BulkheadStrategy} that defines how concurrent
- * access is controlled. The builder automatically selects the appropriate strategy
- * based on the configured options:
+ * access is controlled. The builder automatically selects the appropriate
+ * {@link BlockingBulkheadStrategy} based on the configured options:
  * <ul>
  *   <li>CoDel parameters → {@link CoDelBulkheadStrategy}</li>
  *   <li>Limit algorithm → {@link AdaptiveBulkheadStrategy}</li>
  *   <li>Neither → {@link SemaphoreBulkheadStrategy} (default)</li>
  * </ul>
  *
- * <p>Alternatively, a strategy can be set explicitly via
- * {@link Builder#strategy(BulkheadStrategy)}, which overrides the automatic selection.
+ * <p>A strategy can also be set explicitly via {@link Builder#strategy(BulkheadStrategy)},
+ * which accepts any {@link BulkheadStrategy} subtype (blocking or non-blocking).
  *
  * @since 0.3.0
  */
@@ -45,7 +47,7 @@ public final class BulkheadConfig implements InqConfig {
   private final LongSupplier nanoTimeSource;
   private final BulkheadStrategy strategy;
 
-  // Retained for introspection (what was configured, not what strategy was selected)
+  // Retained for introspection
   private final InqLimitAlgorithm limitAlgorithm;
   private final Duration codelTargetDelay;
   private final Duration codelInterval;
@@ -121,10 +123,42 @@ public final class BulkheadConfig implements InqConfig {
   }
 
   /**
-   * Returns the bulkhead strategy that was automatically selected or explicitly set.
+   * Returns the strategy resolved during {@link Builder#build()}.
+   *
+   * <p>For imperative usage, this is always a {@link BlockingBulkheadStrategy}
+   * (unless an explicit non-blocking strategy was set). Use
+   * {@link #getBlockingStrategy()} for a type-safe cast.
    */
   public BulkheadStrategy getStrategy() {
     return strategy;
+  }
+
+  /**
+   * Returns the strategy as a {@link BlockingBulkheadStrategy}.
+   *
+   * @throws IllegalStateException if the strategy is not a blocking strategy
+   */
+  public BlockingBulkheadStrategy getBlockingStrategy() {
+    if (strategy instanceof BlockingBulkheadStrategy blocking) {
+      return blocking;
+    }
+    throw new IllegalStateException(
+        "Expected a BlockingBulkheadStrategy but got " + strategy.getClass().getName()
+            + ". Use getStrategy() for non-blocking strategies or configure a blocking strategy.");
+  }
+
+  /**
+   * Returns the strategy as a {@link NonBlockingBulkheadStrategy}.
+   *
+   * @throws IllegalStateException if the strategy is not a non-blocking strategy
+   */
+  public NonBlockingBulkheadStrategy getNonBlockingStrategy() {
+    if (strategy instanceof NonBlockingBulkheadStrategy nonBlocking) {
+      return nonBlocking;
+    }
+    throw new IllegalStateException(
+        "Expected a NonBlockingBulkheadStrategy but got " + strategy.getClass().getName()
+            + ". Use getStrategy() for blocking strategies or configure a non-blocking strategy.");
   }
 
   @Override
@@ -162,18 +196,14 @@ public final class BulkheadConfig implements InqConfig {
     }
 
     public Builder maxConcurrentCalls(int max) {
-      if (max < 0) {
-        throw new IllegalArgumentException("maxConcurrentCalls must be >= 0, but was: " + max);
-      }
+      if (max < 0) throw new IllegalArgumentException("maxConcurrentCalls must be >= 0, but was: " + max);
       this.maxConcurrentCalls = max;
       return this;
     }
 
     public Builder maxWaitDuration(Duration duration) {
       Objects.requireNonNull(duration, "maxWaitDuration must not be null");
-      if (duration.isNegative()) {
-        throw new IllegalArgumentException("maxWaitDuration must not be negative, but was: " + duration);
-      }
+      if (duration.isNegative()) throw new IllegalArgumentException("maxWaitDuration must not be negative");
       try {
         duration.toNanos();
         this.maxWaitDuration = duration;
@@ -204,25 +234,23 @@ public final class BulkheadConfig implements InqConfig {
       return this;
     }
 
-    public Builder limitAlgorithm(InqLimitAlgorithm limitAlgorithm) {
-      this.limitAlgorithm = limitAlgorithm;
+    public Builder limitAlgorithm(InqLimitAlgorithm algo) {
+      this.limitAlgorithm = algo;
       return this;
     }
 
-    public Builder nanoTimeSource(LongSupplier nanoTimeSource) {
-      this.nanoTimeSource = Objects.requireNonNull(nanoTimeSource, "nanoTimeSource must not be null");
+    public Builder nanoTimeSource(LongSupplier s) {
+      this.nanoTimeSource = Objects.requireNonNull(s);
       return this;
     }
 
     public Builder codel(Duration targetDelay, Duration interval) {
       Objects.requireNonNull(targetDelay, "CoDel targetDelay must not be null");
       Objects.requireNonNull(interval, "CoDel interval must not be null");
-      if (targetDelay.isNegative() || targetDelay.isZero()) {
-        throw new IllegalArgumentException("CoDel targetDelay must be positive, but was: " + targetDelay);
-      }
-      if (interval.isNegative() || interval.isZero()) {
-        throw new IllegalArgumentException("CoDel interval must be positive, but was: " + interval);
-      }
+      if (targetDelay.isNegative() || targetDelay.isZero())
+        throw new IllegalArgumentException("CoDel targetDelay must be positive");
+      if (interval.isNegative() || interval.isZero())
+        throw new IllegalArgumentException("CoDel interval must be positive");
       this.codelTargetDelay = targetDelay;
       this.codelInterval = interval;
       return this;
@@ -230,54 +258,34 @@ public final class BulkheadConfig implements InqConfig {
 
     /**
      * Sets an explicit strategy, overriding the automatic selection.
-     *
-     * <p>When set, the builder ignores {@link #limitAlgorithm} and {@link #codel}
-     * for strategy selection (but they are still available via getters for introspection).
+     * Accepts any {@link BulkheadStrategy} subtype — blocking or non-blocking.
      */
     public Builder strategy(BulkheadStrategy strategy) {
-      this.explicitStrategy = Objects.requireNonNull(strategy, "strategy must not be null");
+      this.explicitStrategy = Objects.requireNonNull(strategy);
       return this;
     }
 
-    /**
-     * Builds the immutable configuration.
-     *
-     * <p>Strategy selection order:
-     * <ol>
-     *   <li>Explicit strategy (via {@link #strategy}) — used as-is</li>
-     *   <li>CoDel parameters → {@link CoDelBulkheadStrategy}</li>
-     *   <li>Limit algorithm → {@link AdaptiveBulkheadStrategy}</li>
-     *   <li>Default → {@link SemaphoreBulkheadStrategy}</li>
-     * </ol>
-     *
-     * @throws IllegalStateException if limitAlgorithm and CoDel are both set
-     *                               (without an explicit strategy to override)
-     */
     public BulkheadConfig build() {
-      BulkheadStrategy resolvedStrategy;
+      BulkheadStrategy resolved;
 
       if (explicitStrategy != null) {
-        resolvedStrategy = explicitStrategy;
+        resolved = explicitStrategy;
       } else {
-        // Validate mutual exclusivity
         if (limitAlgorithm != null && codelTargetDelay != null) {
           throw new IllegalStateException(
-              "Cannot combine a limitAlgorithm with CoDel configuration. "
-                  + "Use either limitAlgorithm() or codel(), but not both. "
-                  + "Or set an explicit strategy() to override.");
+              "Cannot combine limitAlgorithm with CoDel. Use one or set an explicit strategy().");
         }
-
         if (codelTargetDelay != null && codelInterval != null) {
-          resolvedStrategy = new CoDelBulkheadStrategy(
+          resolved = new CoDelBulkheadStrategy(
               maxConcurrentCalls, codelTargetDelay, codelInterval, nanoTimeSource);
         } else if (limitAlgorithm != null) {
-          resolvedStrategy = new AdaptiveBulkheadStrategy(limitAlgorithm);
+          resolved = new AdaptiveBulkheadStrategy(limitAlgorithm);
         } else {
-          resolvedStrategy = new SemaphoreBulkheadStrategy(maxConcurrentCalls);
+          resolved = new SemaphoreBulkheadStrategy(maxConcurrentCalls);
         }
       }
 
-      return new BulkheadConfig(this, resolvedStrategy);
+      return new BulkheadConfig(this, resolved);
     }
   }
 }

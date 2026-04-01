@@ -11,12 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>The simplest strategy — a fixed concurrency limit set once at construction.
  * Suitable for downstream services with known, stable capacity.
  *
- * <h2>Why Semaphore?</h2>
- * <p>{@link Semaphore} is purpose-built for controlling access to a finite number
- * of resources. Its {@code tryAcquire}/{@code release} API maps directly to the
- * bulkhead's permit model. The JVM heavily optimizes it via AQS — under low
- * contention, {@code tryAcquire()} is a single CAS operation.
- *
  * <h2>Over-release guard</h2>
  * <p>{@link Semaphore#release()} does NOT check whether the caller holds a permit —
  * it unconditionally increments the count. The {@link #acquiredPermits} counter
@@ -30,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @since 0.3.0
  */
-public final class SemaphoreBulkheadStrategy implements BulkheadStrategy {
+public final class SemaphoreBulkheadStrategy implements BlockingBulkheadStrategy {
 
   private final Semaphore semaphore;
   private final AtomicInteger acquiredPermits;
@@ -65,10 +59,6 @@ public final class SemaphoreBulkheadStrategy implements BulkheadStrategy {
     releaseInternal();
   }
 
-  /**
-   * Atomically decrements the counter if positive, then releases the semaphore
-   * only if a permit was actually held. This is the over-release guard.
-   */
   private void releaseInternal() {
     if (acquiredPermits.getAndUpdate(c -> c > 0 ? c - 1 : 0) > 0) {
       semaphore.release();

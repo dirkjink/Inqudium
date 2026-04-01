@@ -3,46 +3,29 @@ package eu.inqudium.core.bulkhead.strategy;
 import java.time.Duration;
 
 /**
- * Strategy interface for bulkhead permit management.
+ * Base interface for bulkhead permit management strategies.
  *
- * <p>Implementations define <em>how</em> concurrent access is controlled:
- * which concurrency primitive is used (Semaphore, ReentrantLock + Condition),
- * whether the limit is static or dynamic, and whether queue management
- * (e.g., CoDel) is applied.
+ * <p>Defines the shared lifecycle (release, rollback, feedback) and introspection
+ * methods that all strategies — blocking and non-blocking — must provide.
  *
- * <p><strong>Contract:</strong> Implementations handle only permit mechanics.
- * All telemetry (events, traces, rollback traces) is managed by the
- * {@link eu.inqudium.imperative.bulkhead.imperative.ImperativeBulkhead} facade.
- * This separation ensures that a crashing event publisher never corrupts
- * the permit state.
- *
- * <h2>Built-in strategies</h2>
- * <table>
- *   <tr><th>Strategy</th><th>Limit</th><th>Primitive</th><th>Use case</th></tr>
- *   <tr><td>{@link SemaphoreBulkheadStrategy}</td><td>Static</td><td>Semaphore (fair)</td>
- *       <td>Known, stable downstream capacity</td></tr>
- *   <tr><td>{@link AdaptiveBulkheadStrategy}</td><td>Dynamic</td><td>ReentrantLock + Condition</td>
- *       <td>Unknown/variable capacity (AIMD, Vegas)</td></tr>
- *   <tr><td>{@link CoDelBulkheadStrategy}</td><td>Static</td><td>ReentrantLock + Condition</td>
- *       <td>Queue depth is the bottleneck</td></tr>
- * </table>
+ * <p>The permit acquisition method is deliberately absent from this interface
+ * because its signature differs fundamentally between paradigms:
+ * <ul>
+ *   <li>{@link BlockingBulkheadStrategy#tryAcquire(Duration)} — may park the
+ *       calling thread for the given timeout; throws {@link InterruptedException}</li>
+ *   <li>{@link NonBlockingBulkheadStrategy#tryAcquire()} — immediate yes/no decision;
+ *       never blocks, never throws</li>
+ * </ul>
  *
  * <h2>Thread safety</h2>
- * <p>All implementations must be thread-safe. The facade calls {@link #tryAcquire}
- * and {@link #release} from arbitrary threads concurrently.
+ * <p>All implementations must be thread-safe. The facade calls {@link #release()}
+ * and {@link #onCallComplete} from arbitrary threads concurrently.
  *
+ * @see BlockingBulkheadStrategy
+ * @see NonBlockingBulkheadStrategy
  * @since 0.3.0
  */
 public interface BulkheadStrategy {
-
-  /**
-   * Attempts to acquire a permit, potentially blocking up to the timeout.
-   *
-   * @param timeout the maximum duration to wait; {@link Duration#ZERO} for non-blocking
-   * @return {@code true} if a permit was acquired, {@code false} if the bulkhead is full
-   * @throws InterruptedException if the thread is interrupted while waiting
-   */
-  boolean tryAcquire(Duration timeout) throws InterruptedException;
 
   /**
    * Releases a previously acquired permit.

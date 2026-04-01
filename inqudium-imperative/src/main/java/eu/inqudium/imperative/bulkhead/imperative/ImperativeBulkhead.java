@@ -3,7 +3,6 @@ package eu.inqudium.imperative.bulkhead.imperative;
 import eu.inqudium.core.InqCall;
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
-import eu.inqudium.core.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.bulkhead.InqBulkheadInterruptedException;
 import eu.inqudium.core.bulkhead.event.BulkheadOnAcquireEvent;
@@ -11,6 +10,9 @@ import eu.inqudium.core.bulkhead.event.BulkheadOnRejectEvent;
 import eu.inqudium.core.bulkhead.event.BulkheadOnReleaseEvent;
 import eu.inqudium.core.bulkhead.event.BulkheadRollbackTraceEvent;
 import eu.inqudium.core.bulkhead.event.BulkheadWaitTraceEvent;
+import eu.inqudium.core.bulkhead.strategy.BlockingBulkheadStrategy;
+import eu.inqudium.core.bulkhead.strategy.BulkheadStrategy;
+import eu.inqudium.core.bulkhead.strategy.NonBlockingBulkheadStrategy;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.imperative.bulkhead.Bulkhead;
 import org.slf4j.Logger;
@@ -23,30 +25,12 @@ import java.util.function.LongSupplier;
 /**
  * Composition-based imperative bulkhead facade.
  *
- * <p>Delegates all permit management to a pluggable {@link BulkheadStrategy}
- * and owns the entire telemetry lifecycle (events, traces, two-tier error handling).
- * This replaces the previous inheritance-based design where
- * {@code AbstractBulkheadStateMachine} mixed telemetry with permit logic.
+ * <p>Delegates permit management to a {@link BlockingBulkheadStrategy} and
+ * owns the entire telemetry lifecycle (events, traces, two-tier error handling).
  *
- * <h2>Separation of concerns</h2>
- * <table>
- *   <tr><th>Responsibility</th><th>Owner</th></tr>
- *   <tr><td>Permit acquire/release</td><td>{@link BulkheadStrategy}</td></tr>
- *   <tr><td>Adaptive feedback</td><td>{@link BulkheadStrategy#onCallComplete}</td></tr>
- *   <tr><td>Event publishing</td><td>This facade</td></tr>
- *   <tr><td>Two-tier error handling</td><td>This facade</td></tr>
- *   <tr><td>RTT measurement</td><td>This facade (via {@code nanoTimeSource})</td></tr>
- * </table>
- *
- * <h2>Exception propagation contract</h2>
- * <ul>
- *   <li><strong>Acquire event failure:</strong> The permit is rolled back and the
- *       exception is propagated. The business call has not started yet — clean abort.</li>
- *   <li><strong>Post-acquire telemetry failures:</strong> Logged and swallowed. Once the
- *       permit is irrevocably granted, telemetry must not disrupt the business call.</li>
- *   <li><strong>Release errors from the strategy:</strong> Always propagated (state machine
- *       defect). If a business error exists, the release error is added as suppressed.</li>
- * </ul>
+ * <p>Requires a {@link BlockingBulkheadStrategy} — non-blocking strategies
+ * are rejected at construction time. For reactive paradigms, use the reactive
+ * bulkhead facade (which accepts a {@link NonBlockingBulkheadStrategy}).
  *
  * @since 0.3.0
  */
@@ -56,7 +40,7 @@ public final class ImperativeBulkhead implements Bulkhead {
 
   private final String name;
   private final BulkheadConfig config;
-  private final BulkheadStrategy strategy;
+  private final BlockingBulkheadStrategy strategy;
   private final InqEventPublisher eventPublisher;
   private final Duration maxWaitDuration;
   private final LongSupplier nanoTimeSource;
@@ -68,15 +52,21 @@ public final class ImperativeBulkhead implements Bulkhead {
     if (name.isBlank()) {
       throw new IllegalArgumentException("Bulkhead name must not be blank");
     }
+    if (!(strategy instanceof BlockingBulkheadStrategy blocking)) {
+      throw new IllegalArgumentException(
+          "ImperativeBulkhead requires a BlockingBulkheadStrategy, but received: "
+              + strategy.getClass().getName()
+              + ". Use the reactive bulkhead facade for NonBlockingBulkheadStrategy.");
+    }
     this.name = name;
     this.config = config;
-    this.strategy = strategy;
+    this.strategy = blocking;
     this.maxWaitDuration = config.getMaxWaitDuration();
     this.nanoTimeSource = config.getNanoTimeSource();
     this.eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
   }
 
-  // ======================== Bulkhead facade interface ========================
+  // ======================== Bulkhead facade ========================
 
   @Override
   public String getName() {
@@ -97,7 +87,7 @@ public final class ImperativeBulkhead implements Bulkhead {
   public <T> InqCall<T> decorate(InqCall<T> call) {
     return call.withCallable(() -> {
 
-      // ── Duty 1: Acquire ──
+      // Duty 1: Acquire
       long startWait = nanoTimeSource.getAsLong();
       boolean acquired;
       try {
@@ -117,14 +107,10 @@ public final class ImperativeBulkhead implements Bulkhead {
             strategy.concurrentCalls(), strategy.maxConcurrentCalls());
       }
 
-      // ── Two-tier acquire telemetry ──
-      if (!handleAcquireSuccess(call.callId(), startWait)) {
-        // handleAcquireSuccess rolled back the permit and rethrew — unreachable,
-        // but the compiler needs this for the return type.
-        throw new IllegalStateException("unreachable");
-      }
+      // Two-tier acquire telemetry
+      handleAcquireSuccess(call.callId(), startWait);
 
-      // ── Duty 3 (start): RTT measurement ──
+      // Duty 3 (start): RTT measurement
       long startNanos = nanoTimeSource.getAsLong();
       Throwable businessError = null;
 
@@ -134,19 +120,21 @@ public final class ImperativeBulkhead implements Bulkhead {
         businessError = t;
         throw t;
       } finally {
-        // ── Duty 3 (end): Measurement ──
+        // Duty 3 (end): Measurement
         Duration rtt = Duration.ofNanos(nanoTimeSource.getAsLong() - startNanos);
 
-        // ── Duty 2: Guaranteed release ──
+        // Duty 2: Guaranteed release
         releaseAndReport(call.callId(), rtt, businessError);
       }
     });
   }
 
+  @Override
   public int getConcurrentCalls() {
     return strategy.concurrentCalls();
   }
 
+  @Override
   public int getAvailablePermits() {
     return strategy.availablePermits();
   }
@@ -155,35 +143,17 @@ public final class ImperativeBulkhead implements Bulkhead {
     return strategy.maxConcurrentCalls();
   }
 
-  /**
-   * Returns the underlying strategy for introspection or testing.
-   */
-  public BulkheadStrategy getStrategy() {
+  public BlockingBulkheadStrategy getStrategy() {
     return strategy;
   }
 
   // ======================== Telemetry — acquire ========================
 
-  /**
-   * Two-tier acquire telemetry.
-   *
-   * <p><strong>Tier 1 (critical):</strong> If the acquire event cannot be published,
-   * the permit is rolled back (via {@link BulkheadStrategy#rollback()}) and the
-   * exception is propagated. The business call has not started — clean abort.
-   *
-   * <p><strong>Tier 2 (best-effort):</strong> If the wait trace fails after the
-   * acquire event was published, the error is logged and swallowed. The permit is
-   * irrevocably granted.
-   *
-   * @return always {@code true} on success; on failure, throws after rollback
-   */
-  private boolean handleAcquireSuccess(String callId, long startWait) {
+  private void handleAcquireSuccess(String callId, long startWait) {
     // Tier 1: Acquire event — rollback on failure
     try {
       eventPublisher.publish(new BulkheadOnAcquireEvent(
-          callId, name,
-          strategy.concurrentCalls(),
-          config.getClock().instant()));
+          callId, name, strategy.concurrentCalls(), config.getClock().instant()));
     } catch (RuntimeException e) {
       strategy.rollback();
       try {
@@ -191,7 +161,7 @@ public final class ImperativeBulkhead implements Bulkhead {
             callId, name, e.getClass().getSimpleName(), config.getClock().instant()));
       } catch (RuntimeException traceError) {
         LOG.error("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
-            + "The permit has been rolled back.", name, callId, traceError);
+            + "Permit rolled back.", name, callId, traceError);
       }
       throw e;
     }
@@ -201,15 +171,10 @@ public final class ImperativeBulkhead implements Bulkhead {
       publishWaitTrace(callId, startWait, true);
     } catch (RuntimeException e) {
       LOG.error("Failed to publish wait trace for acquired call on bulkhead '{}', "
-          + "callId='{}'. Permit acquired; telemetry-only failure.", name, callId, e);
+          + "callId='{}'. Telemetry-only failure.", name, callId, e);
     }
-    return true;
   }
 
-  /**
-   * Publishes telemetry for a failed permit acquisition.
-   * Publisher errors are always logged and never propagated.
-   */
   private void handleAcquireFailure(String callId, long startWait) {
     try {
       publishWaitTrace(callId, startWait, false);
@@ -219,9 +184,7 @@ public final class ImperativeBulkhead implements Bulkhead {
     }
     try {
       eventPublisher.publish(new BulkheadOnRejectEvent(
-          callId, name,
-          strategy.concurrentCalls(),
-          config.getClock().instant()));
+          callId, name, strategy.concurrentCalls(), config.getClock().instant()));
     } catch (RuntimeException e) {
       LOG.error("Failed to publish reject event for bulkhead '{}', callId='{}'. "
           + "Telemetry-only failure.", name, callId, e);
@@ -230,27 +193,15 @@ public final class ImperativeBulkhead implements Bulkhead {
 
   // ======================== Telemetry — release ========================
 
-  /**
-   * Releases the permit and publishes release telemetry.
-   *
-   * <p>Follows the strict error hierarchy:
-   * <ul>
-   *   <li>Algorithm hook errors: logged, never thrown</li>
-   *   <li>Release errors: always propagated (state machine defect)</li>
-   *   <li>Publisher errors: logged, never thrown</li>
-   * </ul>
-   */
   private void releaseAndReport(String callId, Duration rtt, Throwable businessError) {
     RuntimeException releaseError = null;
 
-    // 0. Feed the adaptive hook (may throw)
     try {
       strategy.onCallComplete(rtt, businessError == null);
     } catch (RuntimeException algorithmError) {
       LOG.error("Adaptive algorithm hook failed for bulkhead '{}', callId='{}'. "
           + "Permit will still be released.", name, callId, algorithmError);
     } finally {
-      // 1. Release the permit — ALWAYS executes
       try {
         strategy.release();
       } catch (RuntimeException e) {
@@ -260,18 +211,14 @@ public final class ImperativeBulkhead implements Bulkhead {
       }
     }
 
-    // 2. Publish release event — best-effort
     try {
       eventPublisher.publish(new BulkheadOnReleaseEvent(
-          callId, name,
-          strategy.concurrentCalls(),
-          config.getClock().instant()));
+          callId, name, strategy.concurrentCalls(), config.getClock().instant()));
     } catch (RuntimeException publisherError) {
       LOG.error("Failed to publish release event for bulkhead '{}', callId='{}'. "
-          + "Permit released; telemetry-only failure.", name, callId, publisherError);
+          + "Telemetry-only failure.", name, callId, publisherError);
     }
 
-    // 3. Propagate release error (state machine defect)
     if (releaseError != null) {
       if (businessError != null) {
         businessError.addSuppressed(releaseError);
@@ -281,7 +228,7 @@ public final class ImperativeBulkhead implements Bulkhead {
     }
   }
 
-  // ======================== Internal — wait trace ========================
+  // ======================== Internal ========================
 
   private void publishWaitTrace(String callId, long startWait, boolean acquired) {
     if (eventPublisher.isTraceEnabled()) {

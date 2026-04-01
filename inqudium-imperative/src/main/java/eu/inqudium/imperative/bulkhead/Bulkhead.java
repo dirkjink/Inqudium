@@ -2,7 +2,7 @@ package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.core.InqElementType;
 import eu.inqudium.core.bulkhead.BulkheadConfig;
-import eu.inqudium.core.bulkhead.strategy.BulkheadStrategy;
+import eu.inqudium.core.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.imperative.bulkhead.imperative.ImperativeBulkhead;
 
@@ -31,12 +31,9 @@ import eu.inqudium.imperative.bulkhead.imperative.ImperativeBulkhead;
  * var result = bh.executeSupplier(() -> inventoryService.check(sku));
  * }</pre>
  *
- * <p>The permit is held for the duration of the call and released in a
- * {@code finally} block — no permit leakage.
- *
- * <p>The strategy is selected automatically by {@link BulkheadConfig.Builder#build()}
- * based on the configured options, or set explicitly via
- * {@link BulkheadConfig.Builder#strategy}.
+ * <p>The strategy is selected automatically by {@link BulkheadConfig.Builder#build()}.
+ * All auto-selected strategies are {@link BlockingBulkheadStrategy}
+ * instances. For custom non-blocking strategies, use the reactive bulkhead facade.
  *
  * @since 0.1.0
  */
@@ -45,12 +42,11 @@ public interface Bulkhead extends InqDecorator {
   /**
    * Creates a bulkhead with the given configuration.
    *
-   * <p>The {@link BulkheadStrategy} is obtained from
-   * {@link BulkheadConfig#getStrategy()}, which was resolved during
-   * {@link BulkheadConfig.Builder#build()}.
+   * <p>Uses {@link BulkheadConfig#getBlockingStrategy()} — throws if a
+   * non-blocking strategy was configured (imperative paradigm requires blocking).
    */
   static Bulkhead of(String name, BulkheadConfig config) {
-    return new ImperativeBulkhead(name, config, config.getStrategy());
+    return new ImperativeBulkhead(name, config, config.getBlockingStrategy());
   }
 
   static Bulkhead ofDefaults(String name) {
