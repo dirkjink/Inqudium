@@ -1,8 +1,12 @@
 package eu.inqudium.core.circuitbreaker;
 
+import eu.inqudium.core.circuitbreaker.metrics.FailureMetrics;
+import eu.inqudium.core.circuitbreaker.metrics.TimeBasedErrorRateMetrics;
+
 import java.time.Duration;
-import java.util.List;
+import java.time.Instant;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -15,13 +19,16 @@ public record CircuitBreakerConfig(
     int successThresholdInHalfOpen,
     int permittedCallsInHalfOpen,
     Duration waitDurationInOpenState,
-    Predicate<Throwable> recordFailurePredicate
+    Predicate<Throwable> recordFailurePredicate,
+    Function<Instant, FailureMetrics> metricsFactory // <--- Die neue Factory
 ) {
 
   public CircuitBreakerConfig {
     Objects.requireNonNull(name, "name must not be null");
     Objects.requireNonNull(waitDurationInOpenState, "waitDurationInOpenState must not be null");
     Objects.requireNonNull(recordFailurePredicate, "recordFailurePredicate must not be null");
+    Objects.requireNonNull(metricsFactory, "metricsFactory must not be null");
+
     if (failureThreshold < 1) {
       throw new IllegalArgumentException("failureThreshold must be >= 1, got " + failureThreshold);
     }
@@ -31,7 +38,6 @@ public record CircuitBreakerConfig(
     if (permittedCallsInHalfOpen < 1) {
       throw new IllegalArgumentException("permittedCallsInHalfOpen must be >= 1, got " + permittedCallsInHalfOpen);
     }
-    // Fix 1: Prevent impossible configuration where the circuit can never leave HALF_OPEN
     if (permittedCallsInHalfOpen < successThresholdInHalfOpen) {
       throw new IllegalArgumentException(
           "permittedCallsInHalfOpen (%d) must be >= successThresholdInHalfOpen (%d), otherwise the circuit can never transition from HALF_OPEN back to CLOSED"
@@ -46,24 +52,27 @@ public record CircuitBreakerConfig(
     return new Builder(name);
   }
 
-  /**
-   * Checks whether the given throwable should be recorded as a failure.
-   */
   public boolean shouldRecordAsFailure(Throwable throwable) {
     return recordFailurePredicate.test(throwable);
   }
 
   public static final class Builder {
     private final String name;
-    private int failureThreshold = 5;
+
+    // Standard-Werte sind nun auf die Time-Based Error Rate Metrik optimiert
+    private int failureThreshold = 50; // 50% Ausfallrate
     private int successThresholdInHalfOpen = 3;
     private int permittedCallsInHalfOpen = 3;
     private Duration waitDurationInOpenState = Duration.ofSeconds(30);
     private Predicate<Throwable> recordFailurePredicate = e -> true;
-
-    // Fix 8: Track whether predicate was set via recordExceptions/ignoreExceptions
-    // to prevent silent overwriting
     private boolean predicateSetViaConvenienceMethod = false;
+
+    // Spezifische Einstellungen für die Standard-Metrik
+    private int slidingWindowSeconds = 10;
+    private int minimumNumberOfCalls = 10;
+
+    // Erlaubt das Überschreiben der Metrik-Strategie
+    private Function<Instant, FailureMetrics> customMetricsFactory = null;
 
     private Builder(String name) {
       this.name = Objects.requireNonNull(name);
@@ -89,36 +98,48 @@ public record CircuitBreakerConfig(
       return this;
     }
 
+    /**
+     * Set the size of the time-based sliding window.
+     * Only applies if no custom metrics factory is provided.
+     */
+    public Builder slidingWindow(Duration windowSize) {
+      this.slidingWindowSeconds = (int) Math.max(1, windowSize.getSeconds());
+      return this;
+    }
+
+    /**
+     * Set the minimum number of calls required before the failure rate is evaluated.
+     * Only applies if no custom metrics factory is provided.
+     */
+    public Builder minimumNumberOfCalls(int minimumNumberOfCalls) {
+      this.minimumNumberOfCalls = minimumNumberOfCalls;
+      return this;
+    }
+
+    /**
+     * Provide a custom strategy for tracking failures.
+     * Overrides the default Time-Based Error Rate algorithm.
+     */
+    public Builder metricsStrategy(Function<Instant, FailureMetrics> factory) {
+      this.customMetricsFactory = Objects.requireNonNull(factory);
+      return this;
+    }
+
     public Builder recordFailurePredicate(Predicate<Throwable> recordFailurePredicate) {
-      // Fix 8: Direct predicate setting resets the convenience method flag
       this.recordFailurePredicate = recordFailurePredicate;
       this.predicateSetViaConvenienceMethod = false;
       return this;
     }
 
-    /**
-     * Convenience method: only record exceptions of the given types as failures.
-     *
-     * <p>Cannot be combined with {@link #ignoreExceptions} — an
-     * {@link IllegalStateException} is thrown if both are called on the same builder.
-     */
     @SafeVarargs
     public final Builder recordExceptions(Class<? extends Throwable>... exceptionTypes) {
+      // (Identisch zur vorherigen Implementierung)
       if (predicateSetViaConvenienceMethod) {
-        throw new IllegalStateException(
-            "recordExceptions() and ignoreExceptions() cannot both be used on the same builder. "
-                + "Use recordFailurePredicate() for complex filtering logic.");
+        throw new IllegalStateException("recordExceptions() and ignoreExceptions() cannot both be used on the same builder.");
       }
-
-      // Defensive copy to prevent array reference leaks from the caller.
-      // List.of creates an immutable copy of the varargs array.
-      List<Class<? extends Throwable>> types = List.of(exceptionTypes);
-
       this.recordFailurePredicate = throwable -> {
-        for (Class<? extends Throwable> type : types) {
-          if (type.isInstance(throwable)) {
-            return true;
-          }
+        for (Class<? extends Throwable> type : exceptionTypes) {
+          if (type.isInstance(throwable)) return true;
         }
         return false;
       };
@@ -126,28 +147,15 @@ public record CircuitBreakerConfig(
       return this;
     }
 
-    /**
-     * Convenience method: ignore (do not record) exceptions of the given types.
-     *
-     * <p>Cannot be combined with {@link #recordExceptions} — an
-     * {@link IllegalStateException} is thrown if both are called on the same builder.
-     */
     @SafeVarargs
     public final Builder ignoreExceptions(Class<? extends Throwable>... exceptionTypes) {
+      // (Identisch zur vorherigen Implementierung)
       if (predicateSetViaConvenienceMethod) {
-        throw new IllegalStateException(
-            "recordExceptions() and ignoreExceptions() cannot both be used on the same builder. "
-                + "Use recordFailurePredicate() for complex filtering logic.");
+        throw new IllegalStateException("recordExceptions() and ignoreExceptions() cannot both be used on the same builder.");
       }
-
-      // Defensive copy to prevent array reference leaks from the caller.
-      List<Class<? extends Throwable>> types = List.of(exceptionTypes);
-
       this.recordFailurePredicate = throwable -> {
-        for (Class<? extends Throwable> type : types) {
-          if (type.isInstance(throwable)) {
-            return false;
-          }
+        for (Class<? extends Throwable> type : exceptionTypes) {
+          if (type.isInstance(throwable)) return false;
         }
         return true;
       };
@@ -156,13 +164,19 @@ public record CircuitBreakerConfig(
     }
 
     public CircuitBreakerConfig build() {
+      // Wenn der Nutzer keine eigene Factory gesetzt hat, nutzen wir den Goldstandard
+      Function<Instant, FailureMetrics> factoryToUse = customMetricsFactory != null
+          ? customMetricsFactory
+          : now -> TimeBasedErrorRateMetrics.initial(slidingWindowSeconds, minimumNumberOfCalls, now);
+
       return new CircuitBreakerConfig(
           name,
           failureThreshold,
           successThresholdInHalfOpen,
           permittedCallsInHalfOpen,
           waitDurationInOpenState,
-          recordFailurePredicate
+          recordFailurePredicate,
+          factoryToUse
       );
     }
   }

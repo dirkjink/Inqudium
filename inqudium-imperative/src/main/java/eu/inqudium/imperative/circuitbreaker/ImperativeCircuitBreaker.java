@@ -7,6 +7,7 @@ import eu.inqudium.core.circuitbreaker.CircuitBreakerSnapshot;
 import eu.inqudium.core.circuitbreaker.CircuitState;
 import eu.inqudium.core.circuitbreaker.PermissionResult;
 import eu.inqudium.core.circuitbreaker.StateTransition;
+import eu.inqudium.core.circuitbreaker.metrics.FailureMetrics;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -47,7 +48,12 @@ public class ImperativeCircuitBreaker {
   public ImperativeCircuitBreaker(CircuitBreakerConfig config, Clock clock) {
     this.config = Objects.requireNonNull(config, "config must not be null");
     this.clock = Objects.requireNonNull(clock, "clock must not be null");
-    this.snapshotRef = new AtomicReference<>(CircuitBreakerSnapshot.initial(clock.instant()));
+
+    Instant now = clock.instant();
+    // Anpassung an den neuen Core: Erzeugen der initialen Metrik-Strategie über die Config-Factory
+    FailureMetrics initialMetrics = config.metricsFactory().apply(now);
+
+    this.snapshotRef = new AtomicReference<>(CircuitBreakerSnapshot.initial(now, initialMetrics));
     this.transitionListeners = new CopyOnWriteArrayList<>();
   }
 
@@ -152,6 +158,11 @@ public class ImperativeCircuitBreaker {
             throw new CircuitBreakerException(config.name(), current.state());
           }
 
+          // Optimierung: Bail out early if another thread already transitioned
+          if (result.snapshot().state() == current.state()) {
+            continue;
+          }
+
           if (snapshotRef.compareAndSet(current, result.snapshot())) {
             // Fix 3: Detect transition inside lock, but emit OUTSIDE
             transition = CircuitBreakerCore.detectTransition(
@@ -191,6 +202,12 @@ public class ImperativeCircuitBreaker {
           now = clock.instant();
           current = snapshotRef.get();
           updated = CircuitBreakerCore.recordSuccess(current, config, now);
+
+          // Optimierung: Bail out early if another thread already transitioned
+          if (updated.state() == current.state()) {
+            continue;
+          }
+
           if (snapshotRef.compareAndSet(current, updated)) {
             transition = CircuitBreakerCore.detectTransition(
                 config.name(), current, updated, now).orElse(null);
@@ -326,7 +343,10 @@ public class ImperativeCircuitBreaker {
     transitionLock.lock();
     try {
       Instant now = clock.instant();
-      CircuitBreakerSnapshot initial = CircuitBreakerSnapshot.initial(now);
+      // Anpassung an den neuen Core: Metrik-Strategie initialisieren
+      FailureMetrics initialMetrics = config.metricsFactory().apply(now);
+
+      CircuitBreakerSnapshot initial = CircuitBreakerSnapshot.initial(now, initialMetrics);
       CircuitBreakerSnapshot before = snapshotRef.getAndSet(initial);
       transition = CircuitBreakerCore.detectTransition(
           config.name(), before, initial, now).orElse(null);

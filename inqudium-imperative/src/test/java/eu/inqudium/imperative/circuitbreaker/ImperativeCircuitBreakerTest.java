@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("ImperativeCircuitBreaker")
 class ImperativeCircuitBreakerTest {
 
-  private static final Instant BASE_TIME = Instant.parse("2025-01-01T00:00:00Z");
+  private static final Instant BASE_TIME = Instant.parse("2026-01-01T00:00:00Z");
   private TestClock clock;
 
   @BeforeEach
@@ -37,7 +37,8 @@ class ImperativeCircuitBreakerTest {
 
   private CircuitBreakerConfig defaultConfig() {
     return CircuitBreakerConfig.builder("test-service")
-        .failureThreshold(3)
+        .failureThreshold(50) // 50% Error Rate
+        .minimumNumberOfCalls(3) // Evaluate after 3 calls
         .successThresholdInHalfOpen(2)
         .permittedCallsInHalfOpen(3)
         .waitDurationInOpenState(Duration.ofSeconds(30))
@@ -162,9 +163,9 @@ class ImperativeCircuitBreakerTest {
     @DisplayName("should transition to OPEN after reaching the failure threshold")
     void should_transition_to_open_after_reaching_the_failure_threshold() {
       // Given
-      ImperativeCircuitBreaker cb = createBreaker(); // threshold = 3
+      ImperativeCircuitBreaker cb = createBreaker(); // 50% threshold, min 3 calls
 
-      // When — record 3 failures
+      // When — record 3 failures (100% error rate, >= 3 calls)
       for (int i = 0; i < 3; i++) {
         assertThatThrownBy(() -> cb.execute(() -> {
           throw new RuntimeException("fail");
@@ -197,12 +198,16 @@ class ImperativeCircuitBreakerTest {
     }
 
     @Test
-    @DisplayName("should gradually decay failures so interleaved successes prevent tripping")
-    void should_gradually_decay_failures_so_interleaved_successes_prevent_tripping() throws Exception {
+    @DisplayName("should not trip if interleaved successes keep the error rate below the threshold")
+    void should_not_trip_if_interleaved_successes_keep_the_error_rate_below_the_threshold() throws Exception {
       // Given
-      ImperativeCircuitBreaker cb = createBreaker(); // threshold = 3
+      CircuitBreakerConfig config = CircuitBreakerConfig.builder("rate-test")
+          .failureThreshold(60) // 60% Error Rate
+          .minimumNumberOfCalls(4)
+          .build();
+      ImperativeCircuitBreaker cb = createBreaker(config);
 
-      // When — 2 failures, then 2 successes (fully heals), then 2 more failures
+      // When — 2 failures, then 2 successes
       for (int i = 0; i < 2; i++) {
         try {
           cb.execute(() -> {
@@ -212,29 +217,24 @@ class ImperativeCircuitBreakerTest {
         }
       }
       cb.execute(() -> "success");
-      cb.execute(() -> "success"); // second success needed to fully heal 2 failures
+      cb.execute(() -> "success");
 
-      for (int i = 0; i < 2; i++) {
-        try {
-          cb.execute(() -> {
-            throw new RuntimeException("fail");
-          });
-        } catch (Exception ignored) {
-        }
-      }
-
-      // Then — still closed: 2 failures - 2 successes + 2 failures = 2, below threshold of 3
+      // Then — Error rate is 50% (2 failures out of 4 calls). Threshold is 60%.
       assertThat(cb.getState()).isEqualTo(CircuitState.CLOSED);
     }
 
     @Test
-    @DisplayName("should trip when single success cannot heal enough failures")
-    void should_trip_when_single_success_cannot_heal_enough_failures() throws Exception {
+    @DisplayName("should trip if failure rate exceeds the threshold after minimum calls")
+    void should_trip_if_failure_rate_exceeds_the_threshold_after_minimum_calls() throws Exception {
       // Given
-      ImperativeCircuitBreaker cb = createBreaker(); // threshold = 3
+      CircuitBreakerConfig config = CircuitBreakerConfig.builder("rate-test")
+          .failureThreshold(60) // 60% Error Rate
+          .minimumNumberOfCalls(4)
+          .build();
+      ImperativeCircuitBreaker cb = createBreaker(config);
 
-      // When — 2 failures, only 1 success, then 2 more failures
-      for (int i = 0; i < 2; i++) {
+      // When — 3 failures, then 1 success
+      for (int i = 0; i < 3; i++) {
         try {
           cb.execute(() -> {
             throw new RuntimeException("fail");
@@ -242,18 +242,9 @@ class ImperativeCircuitBreakerTest {
         } catch (Exception ignored) {
         }
       }
-      cb.execute(() -> "success"); // heals only 1 failure → failureCount = 1
+      cb.execute(() -> "success");
 
-      for (int i = 0; i < 2; i++) {
-        try {
-          cb.execute(() -> {
-            throw new RuntimeException("fail");
-          });
-        } catch (Exception ignored) {
-        }
-      }
-
-      // Then — opens: 2 - 1 + 2 = 3 = threshold
+      // Then — Error rate is 75% (3 failures out of 4 calls). Exceeds 60% threshold.
       assertThat(cb.getState()).isEqualTo(CircuitState.OPEN);
     }
   }
@@ -358,14 +349,15 @@ class ImperativeCircuitBreakerTest {
     void should_transition_from_half_open_back_to_closed_after_sufficient_successes() throws Exception {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("half-open-test")
-          .failureThreshold(2)
+          .failureThreshold(50)
+          .minimumNumberOfCalls(2)
           .successThresholdInHalfOpen(2)
           .permittedCallsInHalfOpen(3)
           .waitDurationInOpenState(Duration.ofSeconds(10))
           .build();
       ImperativeCircuitBreaker cb = createBreaker(config);
 
-      // Open the circuit
+      // Open the circuit (2 fails reach the min calls and 100% rate)
       for (int i = 0; i < 2; i++) {
         try {
           cb.execute(() -> {
@@ -425,7 +417,8 @@ class ImperativeCircuitBreakerTest {
     void should_not_count_ignored_exceptions_as_failures() {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("filter-test")
-          .failureThreshold(2)
+          .failureThreshold(50)
+          .minimumNumberOfCalls(2)
           .waitDurationInOpenState(Duration.ofSeconds(10))
           .ignoreExceptions(IllegalArgumentException.class)
           .build();
@@ -441,7 +434,7 @@ class ImperativeCircuitBreakerTest {
         }
       }
 
-      // Then — should still be CLOSED
+      // Then — should still be CLOSED (ignored calls don't fill the error bucket)
       assertThat(cb.getState()).isEqualTo(CircuitState.CLOSED);
     }
 
@@ -450,7 +443,8 @@ class ImperativeCircuitBreakerTest {
     void should_only_count_configured_exception_types_as_failures() {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("record-test")
-          .failureThreshold(2)
+          .failureThreshold(50)
+          .minimumNumberOfCalls(2)
           .waitDurationInOpenState(Duration.ofSeconds(10))
           .recordExceptions(java.io.IOException.class)
           .build();
@@ -508,7 +502,8 @@ class ImperativeCircuitBreakerTest {
     void should_notify_listeners_on_each_state_transition_in_a_full_cycle() throws Exception {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("listener-cycle")
-          .failureThreshold(1)
+          .failureThreshold(50)
+          .minimumNumberOfCalls(1)
           .successThresholdInHalfOpen(1)
           .permittedCallsInHalfOpen(1)
           .waitDurationInOpenState(Duration.ofSeconds(5))
@@ -581,7 +576,8 @@ class ImperativeCircuitBreakerTest {
     void should_handle_concurrent_calls_safely_using_virtual_threads() throws Exception {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("concurrency-test")
-          .failureThreshold(100) // high threshold so circuit stays closed
+          .failureThreshold(100) // 100% threshold
+          .minimumNumberOfCalls(10)
           .waitDurationInOpenState(Duration.ofSeconds(30))
           .build();
       ImperativeCircuitBreaker cb = createBreaker(config);
@@ -617,7 +613,8 @@ class ImperativeCircuitBreakerTest {
     void should_correctly_transition_under_concurrent_failures_with_virtual_threads() throws Exception {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("concurrent-fail")
-          .failureThreshold(5)
+          .failureThreshold(50)
+          .minimumNumberOfCalls(10)
           .waitDurationInOpenState(Duration.ofSeconds(30))
           .build();
       ImperativeCircuitBreaker cb = createBreaker(config);
@@ -655,8 +652,8 @@ class ImperativeCircuitBreakerTest {
   class ConfigurationValidation {
 
     @Test
-    @DisplayName("should reject a failure threshold of zero")
-    void should_reject_a_failure_threshold_of_zero() {
+    @DisplayName("should reject a failure threshold below one")
+    void should_reject_a_failure_threshold_below_one() {
       // Given / When / Then
       assertThatThrownBy(() -> CircuitBreakerConfig.builder("bad")
           .failureThreshold(0)

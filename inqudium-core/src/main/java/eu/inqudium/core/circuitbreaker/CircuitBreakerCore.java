@@ -83,14 +83,12 @@ public final class CircuitBreakerCore {
    * Records a successful call and returns the updated snapshot.
    *
    * <p>In CLOSED state, the success recording is delegated to the configured
-   * {@link FailureMetrics} strategy (e.g., to heal a failure count or slide a window).
-   * In HALF_OPEN state the success counter is incremented; if it reaches the
+   * {@link FailureMetrics} strategy. It also evaluates the threshold, because
+   * in sliding window algorithms, adding a success might reach the
+   * 'minimumNumberOfCalls' limit, thereby activating a previously hidden
+   * high failure rate.
+   * * <p>In HALF_OPEN state the success counter is incremented; if it reaches the
    * configured threshold the circuit transitions back to CLOSED.
-   *
-   * @param snapshot the current state snapshot
-   * @param config   the circuit breaker configuration
-   * @param now      the current timestamp
-   * @return the updated snapshot
    */
   public static CircuitBreakerSnapshot recordSuccess(
       CircuitBreakerSnapshot snapshot,
@@ -101,6 +99,15 @@ public final class CircuitBreakerCore {
       case CLOSED -> {
         // Delegate success recording to the configured metrics strategy
         FailureMetrics updatedMetrics = snapshot.failureMetrics().recordSuccess(now);
+
+        // FIX: Evaluate threshold even on a successful call!
+        // A success might push the total calls over the minimum required calls,
+        // proving that the overall failure rate in the window is too high.
+        if (updatedMetrics.isThresholdReached(config, now)) {
+          // Transition CLOSED → OPEN
+          yield snapshot.withState(CircuitState.OPEN, now);
+        }
+
         yield snapshot.withUpdatedFailureMetrics(updatedMetrics);
       }
 
@@ -109,8 +116,9 @@ public final class CircuitBreakerCore {
         if (newSuccessCount >= config.successThresholdInHalfOpen()) {
           // Transition HALF_OPEN → CLOSED
           yield snapshot.withState(CircuitState.CLOSED, now);
+        } else {
+          yield snapshot.withIncrementedSuccessCount();
         }
-        yield snapshot.withIncrementedSuccessCount();
       }
 
       // Should not happen — calls are rejected in OPEN state
