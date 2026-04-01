@@ -1,5 +1,6 @@
 package eu.inqudium.core.circuitbreaker;
 
+import eu.inqudium.core.circuitbreaker.metrics.FailureMetrics;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -17,15 +18,15 @@ import java.util.Optional;
  *
  * <h2>State Machine</h2>
  * <pre>
- *              [failures >= threshold]
- *   CLOSED ──────────────────────────────► OPEN
- *     ▲                                     │
- *     │ [successes >= successThreshold]      │ [waitDuration expired]
- *     │                                     ▼
- *     └──────────────────────────────── HALF_OPEN
- *                                       │
- *                                       │ [any failure]
- *                                       └──► OPEN
+ * [failures >= threshold]
+ * CLOSED ──────────────────────────────► OPEN
+ * ▲                                     │
+ * │ [successes >= successThreshold]     │ [waitDuration expired]
+ * │                                     ▼
+ * └──────────────────────────────── HALF_OPEN
+ * │
+ * │ [any failure]
+ * └──► OPEN
  * </pre>
  */
 public final class CircuitBreakerCore {
@@ -81,8 +82,8 @@ public final class CircuitBreakerCore {
   /**
    * Records a successful call and returns the updated snapshot.
    *
-   * <p>In CLOSED state the failure counter is decremented by one (gradual decay),
-   * rather than fully reset, to prevent masking sustained failure patterns.
+   * <p>In CLOSED state, the success recording is delegated to the configured
+   * {@link FailureMetrics} strategy (e.g., to heal a failure count or slide a window).
    * In HALF_OPEN state the success counter is incremented; if it reaches the
    * configured threshold the circuit transitions back to CLOSED.
    *
@@ -97,9 +98,11 @@ public final class CircuitBreakerCore {
       Instant now) {
 
     return switch (snapshot.state()) {
-      // Fix 4: Gradual decay — one success heals one failure instead of resetting entirely.
-      // This prevents patterns like 4 failures → 1 success → 4 failures from never tripping.
-      case CLOSED -> snapshot.withDecrementedFailureCount();
+      case CLOSED -> {
+        // Delegate success recording to the configured metrics strategy
+        FailureMetrics updatedMetrics = snapshot.failureMetrics().recordSuccess();
+        yield snapshot.withUpdatedFailureMetrics(updatedMetrics);
+      }
 
       case HALF_OPEN -> {
         int newSuccessCount = snapshot.successCount() + 1;
@@ -118,8 +121,9 @@ public final class CircuitBreakerCore {
   /**
    * Records a failed call and returns the updated snapshot.
    *
-   * <p>In CLOSED state the failure counter is incremented; if it reaches the
-   * configured threshold the circuit transitions to OPEN.
+   * <p>In CLOSED state, the failure recording and threshold evaluation are
+   * delegated to the configured {@link FailureMetrics} strategy. If the threshold
+   * is reached, the circuit transitions to OPEN.
    * In HALF_OPEN state any failure immediately transitions back to OPEN.
    *
    * @param snapshot the current state snapshot
@@ -134,12 +138,16 @@ public final class CircuitBreakerCore {
 
     return switch (snapshot.state()) {
       case CLOSED -> {
-        int newFailureCount = snapshot.failureCount() + 1;
-        if (newFailureCount >= config.failureThreshold()) {
+        // Delegate failure recording to the configured metrics strategy
+        FailureMetrics updatedMetrics = snapshot.failureMetrics().recordFailure();
+
+        // Evaluate if the strategy signals that the threshold is reached
+        if (updatedMetrics.isThresholdReached(config)) {
           // Transition CLOSED → OPEN
           yield snapshot.withState(CircuitState.OPEN, now);
         }
-        yield snapshot.withIncrementedFailureCount();
+
+        yield snapshot.withUpdatedFailureMetrics(updatedMetrics);
       }
 
       // Any failure in HALF_OPEN immediately reopens the circuit
@@ -153,10 +161,9 @@ public final class CircuitBreakerCore {
   /**
    * Records that a call outcome was ignored (neither success nor failure).
    *
-   * <p>Fix 2: In HALF_OPEN state, an ignored exception must release the attempt slot
+   * <p>In HALF_OPEN state, an ignored exception must release the attempt slot
    * that was consumed during permission acquisition. Without this, ignored exceptions
-   * would permanently consume HALF_OPEN slots, potentially preventing the circuit
-   * from ever accumulating enough successes to transition back to CLOSED.
+   * would permanently consume HALF_OPEN slots.
    *
    * <p>In CLOSED and OPEN states, this is a no-op.
    *
@@ -193,8 +200,6 @@ public final class CircuitBreakerCore {
 
   /**
    * Detects whether a state transition occurred between two snapshots.
-   *
-   * <p>Fix 9: Returns {@link Optional} instead of nullable to align with modern Java idioms.
    *
    * @return an Optional containing the transition, or empty if no transition occurred
    */

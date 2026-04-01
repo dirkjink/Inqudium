@@ -1,5 +1,6 @@
 package eu.inqudium.core.circuitbreaker;
 
+import eu.inqudium.core.circuitbreaker.metrics.GradualDecayMetrics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,20 @@ class CircuitBreakerCoreTest {
         .build();
   }
 
+  /**
+   * Helper method to create an initial snapshot with the default GradualDecayMetrics.
+   */
+  private static CircuitBreakerSnapshot initialSnapshot() {
+    return CircuitBreakerSnapshot.initial(NOW, GradualDecayMetrics.initial());
+  }
+
+  /**
+   * Helper method to extract the failure count from the metrics strategy for assertions.
+   */
+  private static int getFailureCount(CircuitBreakerSnapshot snapshot) {
+    return ((GradualDecayMetrics) snapshot.failureMetrics()).failureCount();
+  }
+
   // ================================================================
   // Initial State
   // ================================================================
@@ -33,10 +48,10 @@ class CircuitBreakerCoreTest {
   class InitialState {
 
     @Test
-    @DisplayName("a freshly created snapshot should be in CLOSED state")
+    @DisplayName("a freshly created snapshot should be in closed state")
     void a_freshly_created_snapshot_should_be_in_closed_state() {
       // Given / When
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
       // Then
       assertThat(snapshot.state()).isEqualTo(CircuitState.CLOSED);
@@ -46,10 +61,10 @@ class CircuitBreakerCoreTest {
     @DisplayName("a freshly created snapshot should have all counters at zero")
     void a_freshly_created_snapshot_should_have_all_counters_at_zero() {
       // Given / When
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
       // Then
-      assertThat(snapshot.failureCount()).isZero();
+      assertThat(getFailureCount(snapshot)).isZero();
       assertThat(snapshot.successCount()).isZero();
       assertThat(snapshot.halfOpenAttempts()).isZero();
     }
@@ -58,7 +73,7 @@ class CircuitBreakerCoreTest {
     @DisplayName("a freshly created snapshot should record the creation timestamp")
     void a_freshly_created_snapshot_should_record_the_creation_timestamp() {
       // Given / When
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
       // Then
       assertThat(snapshot.stateChangedAt()).isEqualTo(NOW);
@@ -77,7 +92,7 @@ class CircuitBreakerCoreTest {
     @DisplayName("should always permit calls when the circuit is closed")
     void should_always_permit_calls_when_the_circuit_is_closed() {
       // Given
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerConfig config = defaultConfig();
 
       // When
@@ -92,7 +107,7 @@ class CircuitBreakerCoreTest {
     @DisplayName("should not modify the snapshot when permitting in closed state")
     void should_not_modify_the_snapshot_when_permitting_in_closed_state() {
       // Given
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerConfig config = defaultConfig();
 
       // When
@@ -115,14 +130,14 @@ class CircuitBreakerCoreTest {
     @DisplayName("should increment the failure counter on a single failure")
     void should_increment_the_failure_counter_on_a_single_failure() {
       // Given
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerConfig config = defaultConfig();
 
       // When
       CircuitBreakerSnapshot updated = CircuitBreakerCore.recordFailure(snapshot, config, NOW);
 
       // Then
-      assertThat(updated.failureCount()).isEqualTo(1);
+      assertThat(getFailureCount(updated)).isEqualTo(1);
       assertThat(updated.state()).isEqualTo(CircuitState.CLOSED);
     }
 
@@ -131,25 +146,25 @@ class CircuitBreakerCoreTest {
     void should_remain_closed_when_failures_are_below_the_threshold() {
       // Given
       CircuitBreakerConfig config = defaultConfig(); // threshold = 3
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
-      // When — record 2 failures (below threshold of 3)
+      // When - record 2 failures (below threshold of 3)
       CircuitBreakerSnapshot afterFirst = CircuitBreakerCore.recordFailure(snapshot, config, NOW);
       CircuitBreakerSnapshot afterSecond = CircuitBreakerCore.recordFailure(afterFirst, config, NOW);
 
       // Then
       assertThat(afterSecond.state()).isEqualTo(CircuitState.CLOSED);
-      assertThat(afterSecond.failureCount()).isEqualTo(2);
+      assertThat(getFailureCount(afterSecond)).isEqualTo(2);
     }
 
     @Test
-    @DisplayName("should transition to OPEN when the failure threshold is reached")
+    @DisplayName("should transition to open when the failure threshold is reached")
     void should_transition_to_open_when_the_failure_threshold_is_reached() {
       // Given
       CircuitBreakerConfig config = defaultConfig(); // threshold = 3
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
-      // When — record exactly 3 failures
+      // When - record exactly 3 failures
       CircuitBreakerSnapshot current = snapshot;
       for (int i = 0; i < 3; i++) {
         current = CircuitBreakerCore.recordFailure(current, config, NOW);
@@ -160,11 +175,11 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should reset all counters when transitioning to OPEN")
+    @DisplayName("should reset all counters when transitioning to open")
     void should_reset_all_counters_when_transitioning_to_open() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
       // When
       CircuitBreakerSnapshot current = snapshot;
@@ -173,7 +188,7 @@ class CircuitBreakerCoreTest {
       }
 
       // Then
-      assertThat(current.failureCount()).isZero();
+      assertThat(getFailureCount(current)).isZero();
       assertThat(current.successCount()).isZero();
       assertThat(current.halfOpenAttempts()).isZero();
     }
@@ -192,7 +207,7 @@ class CircuitBreakerCoreTest {
     void should_decrement_the_failure_counter_by_one_on_a_successful_call() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerSnapshot withFailures = CircuitBreakerCore.recordFailure(
           CircuitBreakerCore.recordFailure(snapshot, config, NOW), config, NOW);
 
@@ -200,15 +215,15 @@ class CircuitBreakerCoreTest {
       CircuitBreakerSnapshot afterSuccess = CircuitBreakerCore.recordSuccess(withFailures, config, NOW);
 
       // Then
-      assertThat(afterSuccess.failureCount()).isEqualTo(1);
+      assertThat(getFailureCount(afterSuccess)).isEqualTo(1);
       assertThat(afterSuccess.state()).isEqualTo(CircuitState.CLOSED);
     }
 
     @Test
-    @DisplayName("should remain in CLOSED state after a success")
+    @DisplayName("should remain in closed state after a success")
     void should_remain_in_closed_state_after_a_success() {
       // Given
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerConfig config = defaultConfig();
 
       // When
@@ -229,7 +244,7 @@ class CircuitBreakerCoreTest {
 
     private CircuitBreakerSnapshot openSnapshot() {
       CircuitBreakerConfig config = defaultConfig();
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerSnapshot current = snapshot;
       for (int i = 0; i < config.failureThreshold(); i++) {
         current = CircuitBreakerCore.recordFailure(current, config, NOW);
@@ -254,7 +269,7 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should transition to HALF_OPEN and permit when the timeout expires")
+    @DisplayName("should transition to half open and permit when the timeout expires")
     void should_transition_to_half_open_and_permit_when_the_timeout_expires() {
       // Given
       CircuitBreakerConfig config = defaultConfig(); // 30s timeout
@@ -270,7 +285,7 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should transition to HALF_OPEN exactly at the timeout boundary")
+    @DisplayName("should transition to half open exactly at the timeout boundary")
     void should_transition_to_half_open_exactly_at_the_timeout_boundary() {
       // Given
       CircuitBreakerConfig config = defaultConfig(); // 30s timeout
@@ -286,7 +301,7 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should count the first probe call as a half-open attempt upon transition")
+    @DisplayName("should count the first probe call as a half open attempt upon transition")
     void should_count_the_first_probe_call_as_a_half_open_attempt_upon_transition() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
@@ -310,7 +325,7 @@ class CircuitBreakerCoreTest {
   class PermissionInHalfOpenState {
 
     private CircuitBreakerSnapshot halfOpenSnapshot(CircuitBreakerConfig config) {
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerSnapshot current = snapshot;
       for (int i = 0; i < config.failureThreshold(); i++) {
         current = CircuitBreakerCore.recordFailure(current, config, NOW);
@@ -323,11 +338,11 @@ class CircuitBreakerCoreTest {
     @Test
     @DisplayName("should permit calls up to the configured probe limit")
     void should_permit_calls_up_to_the_configured_probe_limit() {
-      // Given — permittedCallsInHalfOpen = 3, first attempt already consumed during transition
+      // Given - permittedCallsInHalfOpen = 3, first attempt already consumed during transition
       CircuitBreakerConfig config = defaultConfig();
       CircuitBreakerSnapshot snapshot = halfOpenSnapshot(config);
 
-      // When — request 2 more (total 3 including transition probe)
+      // When - request 2 more (total 3 including transition probe)
       PermissionResult second = CircuitBreakerCore.tryAcquirePermission(snapshot, config, NOW.plusSeconds(31));
       PermissionResult third = CircuitBreakerCore.tryAcquirePermission(second.snapshot(), config, NOW.plusSeconds(31));
 
@@ -343,7 +358,7 @@ class CircuitBreakerCoreTest {
       CircuitBreakerConfig config = defaultConfig(); // permittedCallsInHalfOpen = 3
       CircuitBreakerSnapshot snapshot = halfOpenSnapshot(config);
 
-      // When — exhaust remaining 2 slots (1 already used in transition)
+      // When - exhaust remaining 2 slots (1 already used in transition)
       CircuitBreakerSnapshot current = snapshot;
       for (int i = 0; i < 2; i++) {
         PermissionResult perm = CircuitBreakerCore.tryAcquirePermission(current, config, NOW.plusSeconds(31));
@@ -365,7 +380,7 @@ class CircuitBreakerCoreTest {
   class SuccessRecordingInHalfOpenState {
 
     private CircuitBreakerSnapshot halfOpenSnapshot(CircuitBreakerConfig config) {
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerSnapshot current = snapshot;
       for (int i = 0; i < config.failureThreshold(); i++) {
         current = CircuitBreakerCore.recordFailure(current, config, NOW);
@@ -390,13 +405,13 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should transition to CLOSED when the success threshold is met")
+    @DisplayName("should transition to closed when the success threshold is met")
     void should_transition_to_closed_when_the_success_threshold_is_met() {
       // Given
       CircuitBreakerConfig config = defaultConfig(); // successThresholdInHalfOpen = 2
       CircuitBreakerSnapshot snapshot = halfOpenSnapshot(config);
 
-      // When — record 2 successes
+      // When - record 2 successes
       Instant later = NOW.plusSeconds(32);
       CircuitBreakerSnapshot first = CircuitBreakerCore.recordSuccess(snapshot, config, later);
       CircuitBreakerSnapshot second = CircuitBreakerCore.recordSuccess(first, config, later);
@@ -406,7 +421,7 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should reset all counters when transitioning back to CLOSED")
+    @DisplayName("should reset all counters when transitioning back to closed")
     void should_reset_all_counters_when_transitioning_back_to_closed() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
@@ -418,7 +433,7 @@ class CircuitBreakerCoreTest {
       CircuitBreakerSnapshot closed = CircuitBreakerCore.recordSuccess(first, config, later);
 
       // Then
-      assertThat(closed.failureCount()).isZero();
+      assertThat(getFailureCount(closed)).isZero();
       assertThat(closed.successCount()).isZero();
       assertThat(closed.halfOpenAttempts()).isZero();
     }
@@ -433,7 +448,7 @@ class CircuitBreakerCoreTest {
   class FailureRecordingInHalfOpenState {
 
     private CircuitBreakerSnapshot halfOpenSnapshot(CircuitBreakerConfig config) {
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
       CircuitBreakerSnapshot current = snapshot;
       for (int i = 0; i < config.failureThreshold(); i++) {
         current = CircuitBreakerCore.recordFailure(current, config, NOW);
@@ -443,7 +458,7 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should immediately transition back to OPEN on any failure")
+    @DisplayName("should immediately transition back to open on any failure")
     void should_immediately_transition_back_to_open_on_any_failure() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
@@ -457,9 +472,9 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should transition to OPEN even after prior successes in half open")
+    @DisplayName("should transition to open even after prior successes in half open")
     void should_transition_to_open_even_after_prior_successes_in_half_open() {
-      // Given — one success recorded, then a failure
+      // Given - one success recorded, then a failure
       CircuitBreakerConfig config = defaultConfig();
       CircuitBreakerSnapshot snapshot = halfOpenSnapshot(config);
       Instant later = NOW.plusSeconds(31);
@@ -485,7 +500,7 @@ class CircuitBreakerCoreTest {
     @DisplayName("should detect a transition when the state has changed")
     void should_detect_a_transition_when_the_state_has_changed() {
       // Given
-      CircuitBreakerSnapshot before = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot before = initialSnapshot();
       CircuitBreakerSnapshot after = before.withState(CircuitState.OPEN, NOW);
 
       // When
@@ -499,11 +514,11 @@ class CircuitBreakerCoreTest {
     }
 
     @Test
-    @DisplayName("should return null when no transition occurred")
-    void should_return_null_when_no_transition_occurred() {
+    @DisplayName("should return empty optional when no transition occurred")
+    void should_return_empty_optional_when_no_transition_occurred() {
       // Given
-      CircuitBreakerSnapshot before = CircuitBreakerSnapshot.initial(NOW);
-      CircuitBreakerSnapshot after = before.withIncrementedFailureCount();
+      CircuitBreakerSnapshot before = initialSnapshot();
+      CircuitBreakerSnapshot after = before.withUpdatedFailureMetrics(new GradualDecayMetrics(1));
 
       // When
       Optional<StateTransition> transition = CircuitBreakerCore.detectTransition("test", before, after, NOW);
@@ -526,7 +541,7 @@ class CircuitBreakerCoreTest {
     void should_report_expired_when_elapsed_time_exceeds_wait_duration() {
       // Given
       CircuitBreakerConfig config = defaultConfig(); // 30s wait
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW)
+      CircuitBreakerSnapshot snapshot = initialSnapshot()
           .withState(CircuitState.OPEN, NOW);
 
       // When
@@ -541,7 +556,7 @@ class CircuitBreakerCoreTest {
     void should_report_not_expired_when_elapsed_time_is_less_than_wait_duration() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW)
+      CircuitBreakerSnapshot snapshot = initialSnapshot()
           .withState(CircuitState.OPEN, NOW);
 
       // When
@@ -556,7 +571,7 @@ class CircuitBreakerCoreTest {
     void should_report_expired_exactly_at_the_boundary() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW)
+      CircuitBreakerSnapshot snapshot = initialSnapshot()
           .withState(CircuitState.OPEN, NOW);
 
       // When
@@ -576,7 +591,7 @@ class CircuitBreakerCoreTest {
   class FullLifecycle {
 
     @Test
-    @DisplayName("should complete a full cycle from CLOSED through OPEN and HALF_OPEN back to CLOSED")
+    @DisplayName("should complete a full cycle from closed through open and half open back to closed")
     void should_complete_a_full_cycle_from_closed_through_open_and_half_open_back_to_closed() {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("lifecycle")
@@ -585,30 +600,30 @@ class CircuitBreakerCoreTest {
           .permittedCallsInHalfOpen(1)
           .waitDurationInOpenState(Duration.ofSeconds(10))
           .build();
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
-      // When — CLOSED: accumulate failures to reach threshold
+      // When - CLOSED: accumulate failures to reach threshold
       CircuitBreakerSnapshot step1 = CircuitBreakerCore.recordFailure(snapshot, config, NOW);
       assertThat(step1.state()).isEqualTo(CircuitState.CLOSED);
 
       CircuitBreakerSnapshot step2 = CircuitBreakerCore.recordFailure(step1, config, NOW);
       assertThat(step2.state()).isEqualTo(CircuitState.OPEN);
 
-      // When — OPEN: wait for timeout to expire, then acquire permission
+      // When - OPEN: wait for timeout to expire, then acquire permission
       PermissionResult step3 = CircuitBreakerCore.tryAcquirePermission(step2, config, NOW.plusSeconds(11));
       assertThat(step3.permitted()).isTrue();
       assertThat(step3.snapshot().state()).isEqualTo(CircuitState.HALF_OPEN);
 
-      // When — HALF_OPEN: record a success to close the circuit
+      // When - HALF_OPEN: record a success to close the circuit
       CircuitBreakerSnapshot step4 = CircuitBreakerCore.recordSuccess(step3.snapshot(), config, NOW.plusSeconds(12));
 
       // Then
       assertThat(step4.state()).isEqualTo(CircuitState.CLOSED);
-      assertThat(step4.failureCount()).isZero();
+      assertThat(getFailureCount(step4)).isZero();
     }
 
     @Test
-    @DisplayName("should cycle back to OPEN when a probe call fails in HALF_OPEN")
+    @DisplayName("should cycle back to open when a probe call fails in half open")
     void should_cycle_back_to_open_when_a_probe_call_fails_in_half_open() {
       // Given
       CircuitBreakerConfig config = CircuitBreakerConfig.builder("retry-lifecycle")
@@ -617,20 +632,20 @@ class CircuitBreakerCoreTest {
           .permittedCallsInHalfOpen(1)
           .waitDurationInOpenState(Duration.ofSeconds(5))
           .build();
-      CircuitBreakerSnapshot snapshot = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot snapshot = initialSnapshot();
 
-      // When — open the circuit
+      // When - open the circuit
       CircuitBreakerSnapshot open = CircuitBreakerCore.recordFailure(snapshot, config, NOW);
       assertThat(open.state()).isEqualTo(CircuitState.OPEN);
 
-      // When — transition to HALF_OPEN
+      // When - transition to HALF_OPEN
       PermissionResult halfOpen = CircuitBreakerCore.tryAcquirePermission(open, config, NOW.plusSeconds(6));
       assertThat(halfOpen.snapshot().state()).isEqualTo(CircuitState.HALF_OPEN);
 
-      // When — probe fails
+      // When - probe fails
       CircuitBreakerSnapshot reopened = CircuitBreakerCore.recordFailure(halfOpen.snapshot(), config, NOW.plusSeconds(7));
 
-      // Then — back to OPEN
+      // Then - back to OPEN
       assertThat(reopened.state()).isEqualTo(CircuitState.OPEN);
     }
   }
@@ -648,13 +663,13 @@ class CircuitBreakerCoreTest {
     void should_not_modify_the_original_snapshot_when_recording_a_failure() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
-      CircuitBreakerSnapshot original = CircuitBreakerSnapshot.initial(NOW);
+      CircuitBreakerSnapshot original = initialSnapshot();
 
       // When
       CircuitBreakerCore.recordFailure(original, config, NOW);
 
-      // Then — original is unchanged
-      assertThat(original.failureCount()).isZero();
+      // Then - original is unchanged
+      assertThat(getFailureCount(original)).isZero();
       assertThat(original.state()).isEqualTo(CircuitState.CLOSED);
     }
 
@@ -663,14 +678,14 @@ class CircuitBreakerCoreTest {
     void should_not_modify_the_original_snapshot_when_recording_a_success() {
       // Given
       CircuitBreakerConfig config = defaultConfig();
-      CircuitBreakerSnapshot original = CircuitBreakerSnapshot.initial(NOW)
-          .withIncrementedFailureCount().withIncrementedFailureCount();
+      CircuitBreakerSnapshot original = initialSnapshot()
+          .withUpdatedFailureMetrics(new GradualDecayMetrics(2));
 
       // When
       CircuitBreakerCore.recordSuccess(original, config, NOW);
 
-      // Then — original is unchanged
-      assertThat(original.failureCount()).isEqualTo(2);
+      // Then - original is unchanged
+      assertThat(getFailureCount(original)).isEqualTo(2);
     }
   }
 }
