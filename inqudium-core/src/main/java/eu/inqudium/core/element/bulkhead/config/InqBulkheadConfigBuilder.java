@@ -62,6 +62,9 @@ public abstract class InqBulkheadConfigBuilder
   }
 
   protected InqBulkheadConfig common() {
+    if (eventPublisher == null) {
+      eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
+    }
     return new InqBulkheadConfig(
         this.generalConfig,
         name,
