@@ -13,6 +13,7 @@ import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.log.LoggerFactory;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
+import eu.inqudium.imperative.bulkhead.config.CoDelBulkheadStrategyConfig;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import java.time.Duration;
 
 import static eu.inqudium.core.element.bulkhead.config.AimdLimitAlgorithmConfigBuilder.aimdLimitAlgorithm;
 import static eu.inqudium.core.element.bulkhead.config.VegasLimitAlgorithmConfigBuilder.vegasLimitAlgorithm;
+import static eu.inqudium.imperative.bulkhead.config.CoDelBulkheadStrategyConfigBuilder.coDelBulkheadStrategy;
 import static eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfigBuilder.bulkhead;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -62,7 +64,51 @@ class InqBulkheadConfigTest {
   class BulkheadConfigurationTests {
 
     @Test
-    void configuration_builder_should_successfully_register_and_build_bulkhead_defaults() {
+    void configuration_builder_should_successfully_register_and_build_bulkhead_with_codel_defaults() {
+      // Given the required parameters and custom dummy implementations for a bulkhead
+      String expectedName = "test-bulkhead";
+      int expectedMaxConcurrentCalls = 10;
+      Duration expectedWaitDuration = Duration.ofMillis(500);
+
+      // Assuming strategy could be an Enum, we pass null to test the setter without needing mockito.
+      BulkheadStrategy customStrategy = null;
+      InqLimitAlgorithm customLimitAlgorithm = VegasLimitAlgorithm.balanced();
+      InqEventPublisher customEventPublisher = InqEventPublisher.create("name", InqElementType.BULKHEAD);
+
+      // When appending a bulkhead extension to the configuration
+      InqConfig config = InqConfig.configure()
+          .general()
+          .with(bulkhead(), c -> c
+              .name(expectedName)
+              .maxConcurrentCalls(expectedMaxConcurrentCalls)
+              .maxWaitDuration(expectedWaitDuration)
+              .strategy(customStrategy)
+              .limitAlgorithm(customLimitAlgorithm)
+              .eventPublisher(customEventPublisher))
+          .with(coDelBulkheadStrategy().balanced())
+          .build();
+
+      // Then the configuration should contain the correctly configured bulkhead extension
+      assertThat(config.of(InqImperativeBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
+        assertThat(bulkheadConfig.name()).isEqualTo(expectedName);
+        assertThat(bulkheadConfig.elementType()).isEqualTo(InqElementType.BULKHEAD);
+        assertThat(bulkheadConfig.maxConcurrentCalls()).isEqualTo(expectedMaxConcurrentCalls);
+        assertThat(bulkheadConfig.maxWaitDuration()).isEqualTo(expectedWaitDuration);
+        assertThat(bulkheadConfig.strategy()).isNull();
+        assertThat(bulkheadConfig.limitAlgorithm()).isSameAs(customLimitAlgorithm);
+        assertThat(bulkheadConfig.eventPublisher()).isSameAs(customEventPublisher);
+        assertThat(bulkheadConfig.general()).isEqualTo(config.general());
+      });
+
+      // Then the configuration should contain the correctly configured VegasLimitAlgorithm extension
+      assertThat(config.of(CoDelBulkheadStrategyConfig.class)).isPresent().get().satisfies(codel -> {
+        assertThat(codel.interval()).isEqualTo(Duration.ofSeconds(1));
+        assertThat(codel.targetDelay()).isEqualTo(Duration.ofMillis(100));
+      });
+    }
+
+    @Test
+    void configuration_builder_should_successfully_register_and_build_bulkhead_with_vegas_defaults() {
       // Given the required parameters and custom dummy implementations for a bulkhead
       String expectedName = "test-bulkhead";
       int expectedMaxConcurrentCalls = 10;

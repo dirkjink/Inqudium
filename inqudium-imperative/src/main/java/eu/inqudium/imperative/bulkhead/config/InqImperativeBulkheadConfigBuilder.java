@@ -1,6 +1,9 @@
 package eu.inqudium.imperative.bulkhead.config;
 
 import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfigBuilder;
+import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
+
+import java.time.Duration;
 
 public class InqImperativeBulkheadConfigBuilder extends InqBulkheadConfigBuilder<InqImperativeBulkheadConfigBuilder, InqImperativeBulkheadConfig> {
 
@@ -8,7 +11,15 @@ public class InqImperativeBulkheadConfigBuilder extends InqBulkheadConfigBuilder
   }
 
   public static InqImperativeBulkheadConfigBuilder bulkhead() {
-    return new InqImperativeBulkheadConfigBuilder();
+    return standard();
+  }
+
+  public static InqImperativeBulkheadConfigBuilder standard() {
+    int maxConcurrentCalls = 25;
+    return new InqImperativeBulkheadConfigBuilder()
+        .maxConcurrentCalls(maxConcurrentCalls)
+        .maxWaitDuration(Duration.ZERO)
+        .strategy(new SemaphoreBulkheadStrategy(maxConcurrentCalls));
   }
 
   @Override

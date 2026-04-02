@@ -15,20 +15,17 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
   private double minUtilizationThreshold;
 
 
-  public static VegasLimitAlgorithmConfigBuilder vegasLimitAlgorithm() {
-    return new VegasLimitAlgorithmConfigBuilder();
+  VegasLimitAlgorithmConfigBuilder() {
   }
 
-  VegasLimitAlgorithmConfigBuilder() {}
-
   VegasLimitAlgorithmConfigBuilder(int initialLimit,
-                                          int minLimit,
-                                          int maxLimit,
-                                          Duration smoothingTimeConstant,
-                                          Duration baselineDriftTimeConstant,
-                                          Duration errorRateSmoothingTimeConstant,
-                                          double errorRateThreshold,
-                                          double minUtilizationThreshold) {
+                                   int minLimit,
+                                   int maxLimit,
+                                   Duration smoothingTimeConstant,
+                                   Duration baselineDriftTimeConstant,
+                                   Duration errorRateSmoothingTimeConstant,
+                                   double errorRateThreshold,
+                                   double minUtilizationThreshold) {
     this.initialLimit = initialLimit;
     this.minLimit = minLimit;
     this.maxLimit = maxLimit;
@@ -37,6 +34,10 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     this.errorRateSmoothingTimeConstant = errorRateSmoothingTimeConstant;
     this.errorRateThreshold = errorRateThreshold;
     this.minUtilizationThreshold = minUtilizationThreshold;
+  }
+
+  public static VegasLimitAlgorithmConfigBuilder vegasLimitAlgorithm() {
+    return new VegasLimitAlgorithmConfigBuilder().balanced();
   }
 
   /**

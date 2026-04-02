@@ -1,6 +1,5 @@
 package eu.inqudium.core.element.bulkhead;
 
-import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 

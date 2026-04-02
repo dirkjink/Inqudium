@@ -10,9 +10,20 @@ record Slf4jWarnAction(org.slf4j.Logger slf4j) implements LogAction {
     return slf4j.isWarnEnabled();
   }
 
-  @Override public void log(String message) { slf4j.warn(message); }
-  @Override public void log(String message, Object arg) { slf4j.warn(message, arg); }
-  @Override public void log(String message, Object arg1, Object arg2) { slf4j.warn(message, arg1, arg2); }
+  @Override
+  public void log(String message) {
+    slf4j.warn(message);
+  }
+
+  @Override
+  public void log(String message, Object arg) {
+    slf4j.warn(message, arg);
+  }
+
+  @Override
+  public void log(String message, Object arg1, Object arg2) {
+    slf4j.warn(message, arg1, arg2);
+  }
 
   @Override
   public void log(String message, Object arg1, Object arg2, Object arg3) {
@@ -27,5 +38,8 @@ record Slf4jWarnAction(org.slf4j.Logger slf4j) implements LogAction {
     }
   }
 
-  @Override public void log(String message, Object... args) { slf4j.warn(message, args); }
+  @Override
+  public void log(String message, Object... args) {
+    slf4j.warn(message, args);
+  }
 }

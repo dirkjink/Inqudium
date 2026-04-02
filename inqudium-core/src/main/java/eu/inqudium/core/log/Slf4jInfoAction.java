@@ -10,9 +10,20 @@ record Slf4jInfoAction(org.slf4j.Logger slf4j) implements LogAction {
     return slf4j.isInfoEnabled();
   }
 
-  @Override public void log(String message) { slf4j.info(message); }
-  @Override public void log(String message, Object arg) { slf4j.info(message, arg); }
-  @Override public void log(String message, Object arg1, Object arg2) { slf4j.info(message, arg1, arg2); }
+  @Override
+  public void log(String message) {
+    slf4j.info(message);
+  }
+
+  @Override
+  public void log(String message, Object arg) {
+    slf4j.info(message, arg);
+  }
+
+  @Override
+  public void log(String message, Object arg1, Object arg2) {
+    slf4j.info(message, arg1, arg2);
+  }
 
   @Override
   public void log(String message, Object arg1, Object arg2, Object arg3) {
@@ -27,5 +38,8 @@ record Slf4jInfoAction(org.slf4j.Logger slf4j) implements LogAction {
     }
   }
 
-  @Override public void log(String message, Object... args) { slf4j.info(message, args); }
+  @Override
+  public void log(String message, Object... args) {
+    slf4j.info(message, args);
+  }
 }

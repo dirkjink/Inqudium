@@ -24,6 +24,57 @@ class SchedulingStrategyTest {
     now = Instant.parse("2026-04-02T10:00:00Z");
   }
 
+  private record TestState(
+      long epoch,
+      int queueDepth,
+      long totalAdmitted,
+      long totalRejected,
+      Duration tailWait
+  ) implements SchedulingState {
+
+    @Override
+    public Duration projectedTailWait(Instant now) {
+      return tailWait;
+    }
+  }
+
+  private static class TestStrategy implements SchedulingStrategy<TestState> {
+    @Override
+    public TestState initial(TrafficShaperConfig<TestState> config, Instant now) {
+      return null;
+    }
+
+    @Override
+    public ThrottlePermission<TestState> schedule(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
+      return null;
+    }
+
+    @Override
+    public TestState recordExecution(TestState state) {
+      return null;
+    }
+
+    @Override
+    public TestState reset(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
+      return null;
+    }
+
+    @Override
+    public Duration estimateWait(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
+      return Duration.ZERO;
+    }
+
+    @Override
+    public int queueDepth(TestState state) {
+      return state.queueDepth();
+    }
+
+    @Override
+    public boolean isUnboundedQueueWarning(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
+      return checkUnboundedWarning(state, config, now);
+    }
+  }
+
   @Nested
   @DisplayName("Default Feedback Methods")
   class FeedbackMethodsTests {
@@ -54,6 +105,8 @@ class SchedulingStrategyTest {
       assertThat(result).isSameAs(state);
     }
   }
+
+  // --- Dummy Implementations for testing the Interface default methods ---
 
   @Nested
   @DisplayName("Overflow Rejection Checks")
@@ -175,59 +228,6 @@ class SchedulingStrategyTest {
 
       // Then
       assertThat(warn).isFalse();
-    }
-  }
-
-  // --- Dummy Implementations for testing the Interface default methods ---
-
-  private record TestState(
-      long epoch,
-      int queueDepth,
-      long totalAdmitted,
-      long totalRejected,
-      Duration tailWait
-  ) implements SchedulingState {
-
-    @Override
-    public Duration projectedTailWait(Instant now) {
-      return tailWait;
-    }
-  }
-
-  private static class TestStrategy implements SchedulingStrategy<TestState> {
-    @Override
-    public TestState initial(TrafficShaperConfig<TestState> config, Instant now) {
-      return null;
-    }
-
-    @Override
-    public ThrottlePermission<TestState> schedule(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
-      return null;
-    }
-
-    @Override
-    public TestState recordExecution(TestState state) {
-      return null;
-    }
-
-    @Override
-    public TestState reset(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
-      return null;
-    }
-
-    @Override
-    public Duration estimateWait(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
-      return Duration.ZERO;
-    }
-
-    @Override
-    public int queueDepth(TestState state) {
-      return state.queueDepth();
-    }
-
-    @Override
-    public boolean isUnboundedQueueWarning(TestState state, TrafficShaperConfig<TestState> config, Instant now) {
-      return checkUnboundedWarning(state, config, now);
     }
   }
 }

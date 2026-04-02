@@ -1,7 +1,6 @@
 package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.core.InqRegistry;
-import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 
 import java.util.Map;

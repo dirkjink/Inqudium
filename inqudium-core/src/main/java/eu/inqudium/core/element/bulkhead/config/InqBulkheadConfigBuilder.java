@@ -21,13 +21,14 @@ public abstract class InqBulkheadConfigBuilder
   private Duration maxWaitDuration;
   private InqLimitAlgorithm limitAlgorithm;
 
-  protected InqBulkheadConfigBuilder() {}
-  
+  protected InqBulkheadConfigBuilder() {
+  }
+
   @Override
   protected void general(GeneralConfig generalConfig) {
     this.generalConfig = generalConfig;
   }
-  
+
   protected abstract B self();
 
   public B name(String name) {

@@ -34,7 +34,8 @@ public record InqConfig(
     default <B extends ExtensionBuilder<? extends ConfigExtension>> TopicHub with(
         B builderInstance
     ) {
-      return with(builderInstance, c->{});
+      return with(builderInstance, c -> {
+      });
     }
 
     <B extends ExtensionBuilder<? extends ConfigExtension>> TopicHub with(

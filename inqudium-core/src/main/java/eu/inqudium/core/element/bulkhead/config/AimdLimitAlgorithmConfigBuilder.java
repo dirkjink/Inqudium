@@ -37,7 +37,7 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
   }
 
   public static AimdLimitAlgorithmConfigBuilder aimdLimitAlgorithm() {
-    return new AimdLimitAlgorithmConfigBuilder();
+    return new AimdLimitAlgorithmConfigBuilder().balanced();
   }
 
   /**

@@ -12,12 +12,29 @@ public record Logger(LogAction debug, LogAction info, LogAction warn, LogAction 
       return false; // Crucial for performance: signals that logging is off
     }
 
-    @Override public void log(String message) {}
-    @Override public void log(String message, Object arg) {}
-    @Override public void log(String message, Object arg1, Object arg2) {}
-    @Override public void log(String message, Object arg1, Object arg2, Object arg3) {}
-    @Override public void log(String message, Supplier<?> argSupplier) {}
-    @Override public void log(String message, Object... args) {}
+    @Override
+    public void log(String message) {
+    }
+
+    @Override
+    public void log(String message, Object arg) {
+    }
+
+    @Override
+    public void log(String message, Object arg1, Object arg2) {
+    }
+
+    @Override
+    public void log(String message, Object arg1, Object arg2, Object arg3) {
+    }
+
+    @Override
+    public void log(String message, Supplier<?> argSupplier) {
+    }
+
+    @Override
+    public void log(String message, Object... args) {
+    }
   };
 
   public static final Logger NO_OP_LOGGER = new Logger(

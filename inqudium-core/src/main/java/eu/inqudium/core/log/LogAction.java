@@ -9,8 +9,11 @@ public interface LogAction {
 
   // Optimization for exact arguments to prevent Object[] array creation
   void log(String message);
+
   void log(String message, Object arg);
+
   void log(String message, Object arg1, Object arg2);
+
   void log(String message, Object arg1, Object arg2, Object arg3);
 
   // Lazy evaluation: The supplier is only executed if the log level is enabled.

@@ -1,6 +1,5 @@
 package eu.inqudium.core.element.bulkhead.config;
 
-import eu.inqudium.core.config.ConfigExtension;
 import eu.inqudium.core.config.GeneralConfig;
 import eu.inqudium.core.element.InqElementConfig;
 import eu.inqudium.core.element.InqElementType;

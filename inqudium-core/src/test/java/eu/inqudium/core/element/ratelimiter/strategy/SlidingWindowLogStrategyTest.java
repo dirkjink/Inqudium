@@ -3,8 +3,6 @@ package eu.inqudium.core.element.ratelimiter.strategy;
 import eu.inqudium.core.element.ratelimiter.RateLimitPermission;
 import eu.inqudium.core.element.ratelimiter.RateLimiterConfig;
 import eu.inqudium.core.element.ratelimiter.ReservationResult;
-import eu.inqudium.core.element.ratelimiter.strategy.SlidingWindowLogState;
-import eu.inqudium.core.element.ratelimiter.strategy.SlidingWindowLogStrategy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
