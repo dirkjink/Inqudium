@@ -6,12 +6,22 @@ import eu.inqudium.core.log.LoggerFactory;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
 
+import java.util.Map;
+import java.util.Optional;
+
 public record GeneralConfig(
     InqClock clock,
     InqNanoTimeSource nanoTimesource,
     InqCompatibility compatibility,
     InqCallIdGenerator callIdGenerator,
-    LoggerFactory loggerFactory
+    LoggerFactory loggerFactory,
+    Map<Class<? extends ConfigExtension>, ConfigExtension> extensions
 ) {
+
+  public <T extends ConfigExtension> Optional<T> of(Class<T> type) {
+    ConfigExtension extension = extensions.get(type);
+    return Optional.ofNullable(type.cast(extension));
+  }
+
 }
 

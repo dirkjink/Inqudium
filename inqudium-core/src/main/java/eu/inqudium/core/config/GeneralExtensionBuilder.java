@@ -7,6 +7,8 @@ import eu.inqudium.core.time.CachedInqClock;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
 
+import java.util.Map;
+
 /**
  * Builder for the core configuration. No parent reference needed.
  */
@@ -42,13 +44,14 @@ public class GeneralExtensionBuilder {
     return this;
   }
 
-  GeneralConfig build() {
+  GeneralConfig build(Map<Class<? extends ConfigExtension>, ConfigExtension> extensions) {
     return new GeneralConfig(
         clock,
         nanoTimeSource,
         compatibility,
         callIdGenerator,
-        loggerFactory
+        loggerFactory,
+        extensions
     );
   }
 }

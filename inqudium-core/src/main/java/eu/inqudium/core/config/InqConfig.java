@@ -1,5 +1,6 @@
 package eu.inqudium.core.config;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -56,7 +57,7 @@ public record InqConfig(
       Objects.requireNonNull(customizer, "Core customizer must not be null");
 
       customizer.accept(builderInstance);
-      this.general = builderInstance.build();
+      this.general = builderInstance.build(Collections.unmodifiableMap(extensions));
       return this;
     }
 
@@ -79,7 +80,7 @@ public record InqConfig(
     @Override
     public InqConfig build() {
       Objects.requireNonNull(general, "Core configuration is mandatory");
-      return new InqConfig(general, Map.copyOf(extensions));
+      return new InqConfig(general, Collections.unmodifiableMap(extensions));
     }
   }
 }
