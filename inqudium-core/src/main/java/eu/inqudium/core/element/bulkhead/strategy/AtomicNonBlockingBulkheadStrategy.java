@@ -75,6 +75,12 @@ public final class AtomicNonBlockingBulkheadStrategy implements NonBlockingBulkh
   /**
    * Creates a non-blocking strategy with a fixed concurrency limit.
    *
+   * <p><b>Warning:</b> A value of 0 creates a permanently closed bulkhead where
+   * {@link #tryAcquire()} always returns {@code false}. This is a valid configuration
+   * for circuit-breaker-style "kill switch" scenarios, but is almost always a
+   * misconfiguration if set accidentally. Consider validating the limit at the
+   * call site before constructing this strategy.
+   *
    * @param maxConcurrentCalls the maximum number of concurrent permits;
    *                           0 creates a "closed" bulkhead that rejects everything
    * @throws IllegalArgumentException if maxConcurrentCalls is negative
@@ -83,6 +89,13 @@ public final class AtomicNonBlockingBulkheadStrategy implements NonBlockingBulkh
     if (maxConcurrentCalls < 0) {
       throw new IllegalArgumentException(
           "maxConcurrentCalls must be >= 0, got " + maxConcurrentCalls);
+    }
+    if (maxConcurrentCalls == 0) {
+      System.getLogger(AtomicNonBlockingBulkheadStrategy.class.getName())
+          .log(System.Logger.Level.WARNING,
+              "AtomicNonBlockingBulkheadStrategy created with maxConcurrentCalls=0 — "
+                  + "all tryAcquire() calls will be rejected. "
+                  + "If this is unintentional, check your configuration.");
     }
     this.maxConcurrent = maxConcurrentCalls;
   }

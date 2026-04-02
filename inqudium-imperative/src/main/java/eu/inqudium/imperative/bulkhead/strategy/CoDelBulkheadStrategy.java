@@ -88,8 +88,24 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
             // Start congestion stopwatch — request proceeds normally
             firstAboveTargetNanos = now;
           } else if (now - firstAboveTargetNanos > intervalNanos) {
-            // Sustained congestion — reject (CoDel drop)
-            permitAvailable.signal(); // chain-drain: wake next waiter
+            // Sustained congestion — reject (CoDel drop).
+            //
+            // Reset the congestion stopwatch after each drop. Without this reset,
+            // every subsequent waiter would also be immediately dropped (chain-drain
+            // cascade), because their sojourn time is even higher and the interval
+            // has already been exceeded. Resetting to 0 gives the next waiter a
+            // fresh interval window — if congestion persists, it will be dropped
+            // after another full interval, producing a controlled one-drop-per-interval
+            // cadence instead of a catastrophic queue flush.
+            //
+            // This also fixes a liveness issue: without the reset, the system could
+            // never recover from sustained overload because all new arrivals would be
+            // dropped indefinitely (the fair lock ensures they always queue behind
+            // older waiters with longer sojourn times). With the reset, successful
+            // grants can occur between drops, allowing the system to detect when
+            // downstream has recovered (sojourn times drop below target → full reset).
+            firstAboveTargetNanos = 0L;
+            permitAvailable.signal(); // wake next waiter for fresh evaluation
             logger.debug().log("CoDel drop: sojourn={}ns target={}ns interval={}ns",
                 sojournNanos, targetDelayNanos, intervalNanos);
             return false;

@@ -35,12 +35,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  *     long start = System.nanoTime();
  *     return upstream
  *         .doOnSuccess(v -> {
- *             strategy.onCallComplete(Duration.ofNanos(System.nanoTime() - start), true);
- *             strategy.release();
+ *             strategy.completeAndRelease(Duration.ofNanos(System.nanoTime() - start), true);
  *         })
  *         .doOnError(e -> {
- *             strategy.onCallComplete(Duration.ofNanos(System.nanoTime() - start), false);
- *             strategy.release();
+ *             strategy.completeAndRelease(Duration.ofNanos(System.nanoTime() - start), false);
  *         })
  *         .doOnCancel(() -> strategy.release());
  * });
@@ -126,10 +124,42 @@ public final class AdaptiveNonBlockingBulkheadStrategy implements NonBlockingBul
    * <p>The algorithm's {@link InqLimitAlgorithm#update(Duration, boolean, int)} is
    * CAS-based internally — no lock needed. The updated limit is visible to
    * concurrent {@link #tryAcquire()} calls on the next CAS iteration.
+   *
+   * <p><b>Important:</b> This method must be called <em>before</em> {@link #release()},
+   * so the in-flight count passed to the algorithm includes this call. Prefer
+   * {@link #completeAndRelease(Duration, boolean)} which guarantees the correct
+   * ordering.
    */
   @Override
   public void onCallComplete(Duration rtt, boolean isSuccess) {
     limitAlgorithm.update(rtt, isSuccess, activeCalls.get());
+  }
+
+  /**
+   * Combined feedback and release in the correct order.
+   *
+   * <p>This is the recommended way to complete a call. It guarantees that:
+   * <ol>
+   *   <li>The algorithm receives feedback <em>before</em> the permit is released,
+   *       ensuring the in-flight count passed to the algorithm includes this call.</li>
+   *   <li>The permit is always released, even if the algorithm update throws.</li>
+   * </ol>
+   *
+   * <p>Using {@link #onCallComplete(Duration, boolean)} and {@link #release()} separately
+   * is error-prone: if the caller reverses the order, the algorithm sees an artificially
+   * low in-flight count, which can suppress limit increases when
+   * {@code minUtilizationThreshold > 0}. If the caller forgets {@code onCallComplete}
+   * entirely, the strategy silently degrades to a static limiter.
+   *
+   * @param rtt       the round-trip time of the completed call
+   * @param isSuccess {@code true} if the call succeeded
+   */
+  public void completeAndRelease(Duration rtt, boolean isSuccess) {
+    try {
+      onCallComplete(rtt, isSuccess);
+    } finally {
+      release();
+    }
   }
 
   @Override

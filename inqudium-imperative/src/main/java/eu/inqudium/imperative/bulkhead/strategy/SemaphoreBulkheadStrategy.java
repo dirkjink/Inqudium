@@ -42,6 +42,17 @@ public final class SemaphoreBulkheadStrategy implements BlockingBulkheadStrategy
     this.acquiredPermits = new AtomicInteger(0);
   }
 
+  /**
+   * Attempts to acquire a permit, waiting up to the specified timeout.
+   *
+   * <p><b>Fairness note for {@code Duration.ZERO}:</b> Unlike
+   * {@link NonBlockingBulkheadStrategy#tryAcquire()}, which succeeds whenever capacity
+   * is available, this method respects the fair semaphore's FIFO queue even for zero-timeout
+   * attempts. If other threads are already queued, a zero-timeout call may return
+   * {@code false} despite available permits. This prevents starvation of waiting threads
+   * but means {@code tryAcquire(Duration.ZERO)} is not semantically identical to a
+   * non-blocking strategy's {@code tryAcquire()}.
+   */
   @Override
   public boolean tryAcquire(Duration timeout) throws InterruptedException {
     boolean acquired = semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);

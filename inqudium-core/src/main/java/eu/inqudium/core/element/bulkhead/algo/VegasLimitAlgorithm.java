@@ -98,7 +98,8 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
 
   /**
    * The stateless calculator used to compute the continuous-time EWMA of the error rate.
-   * Ensures the reactive fallback is independent of the request rate (RPS).
+   * Uses a separate time constant from RTT smoothing, because error rates should be
+   * smoothed over a longer period to avoid overreacting to isolated failures.
    */
   private final ContinuousTimeEwma errorRateEwma;
 
@@ -107,6 +108,14 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
    * reactive multiplicative decrease (fallback) is triggered.
    */
   private final double errorRateThreshold;
+
+  /**
+   * The minimum utilization percentage (0.0 to 1.0) required to allow limit growth.
+   * Prevents limit inflation when the system is under low load — without this check,
+   * the gradient would indicate "no congestion" simply because few requests are active,
+   * causing the limit to drift toward maxLimit without ever testing real capacity.
+   */
+  private final double minUtilizationThreshold;
 
   /**
    * The injectable nano-time source for all timing measurements related to the EWMA decay.
@@ -126,6 +135,11 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
   /**
    * Creates a new Vegas limit algorithm with the default baseline drift.
    *
+   * <p>Backward-compatible constructor. Uses a 10-second baseline drift time constant,
+   * the same error rate smoothing time constant as RTT smoothing, and no utilization
+   * threshold (0.0). For production deployments, prefer the 9-parameter constructor
+   * which allows independent tuning of error rate smoothing and utilization thresholds.
+   *
    * @param initialLimit          The starting concurrency limit before any RTT feedback is
    * received. Clamped to [{@code minLimit}, {@code maxLimit}].
    * @param minLimit              The absolute minimum concurrency. Clamped to at least 1.
@@ -142,7 +156,6 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
                              Duration smoothingTimeConstant,
                              double errorRateThreshold,
                              LongSupplier nanoTimeSource) {
-    // Uses a default slow drift (e.g., 10 seconds time constant) for the baseline
     this(initialLimit,
         minLimit,
         maxLimit,
@@ -155,16 +168,23 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
   /**
    * Creates a new Vegas limit algorithm with full control over baseline decay behavior.
    *
+   * <p>Backward-compatible constructor. Uses the same time constant for error rate
+   * smoothing as for RTT smoothing (original behavior). For production deployments that
+   * need a slower, more stable error rate, use the 9-parameter constructor with a
+   * separate {@code errorRateSmoothingTimeConstant}.
+   *
    * <p><b>Recommended production configuration:</b>
    * <pre>{@code
    * new VegasLimitAlgorithm(
    * 50,    // initialLimit: conservative starting point
    * 5,     // minLimit: always allow probe requests
    * 200,   // maxLimit: prevent resource exhaustion
-   * Duration.ofMillis(500), // smoothingTimeConstant: filters jitter well
-   * Duration.ofSeconds(10), // baselineDriftTimeConstant: slow but safe recovery
-   * 0.05,                   // errorRateThreshold: 5% error rate triggers fallback
-   * System::nanoTime        // nanoTimeSource
+   * Duration.ofMillis(500),  // smoothingTimeConstant: filters jitter well
+   * Duration.ofSeconds(10),  // baselineDriftTimeConstant: slow but safe recovery
+   * Duration.ofSeconds(5),   // errorRateSmoothingTimeConstant: absorb isolated errors
+   * 0.05,                    // errorRateThreshold: 5% error rate triggers fallback
+   * 0.6,                     // minUtilizationThreshold: 60% utilization needed to grow
+   * System::nanoTime         // nanoTimeSource
    * );
    * }</pre>
    *
@@ -187,13 +207,52 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
                              Duration baselineDriftTimeConstant,
                              double errorRateThreshold,
                              LongSupplier nanoTimeSource) {
+    // Backward compatibility: error rate uses the same time constant as RTT smoothing.
+    // This preserves the original behavior where both EWMAs shared the same Tau.
+    // Default utilization threshold: 0.0 (disabled) for backward compatibility.
+    this(initialLimit, minLimit, maxLimit, smoothingTimeConstant,
+        baselineDriftTimeConstant,
+        smoothingTimeConstant,
+        errorRateThreshold, 0.0, nanoTimeSource);
+  }
+
+  /**
+   * Creates a new Vegas limit algorithm with full control over all behavioral parameters.
+   *
+   * @param initialLimit                    The starting concurrency limit. Clamped to
+   * [{@code minLimit}, {@code maxLimit}].
+   * @param minLimit                        The absolute minimum concurrency. Clamped to at least 1.
+   * @param maxLimit                        The absolute maximum concurrency. Clamped to at least
+   * {@code minLimit}.
+   * @param smoothingTimeConstant           The time constant (Tau) for continuous-time RTT smoothing.
+   * @param baselineDriftTimeConstant       The time constant (Tau) at which the no-load baseline
+   * drifts toward the smoothed RTT. A null or zero duration
+   * disables decay entirely.
+   * @param errorRateSmoothingTimeConstant  The time constant (Tau) for smoothing the error rate.
+   * Should typically be larger than {@code smoothingTimeConstant}
+   * to avoid overreacting to isolated failures.
+   * @param errorRateThreshold              Threshold (0.0-1.0) for the smoothed error rate fallback.
+   * @param minUtilizationThreshold         The minimum utilization percentage (0.0 to 1.0) required
+   * to allow limit growth. Prevents limit inflation under low load.
+   * @param nanoTimeSource                  The time source used for calculating elapsed time.
+   */
+  public VegasLimitAlgorithm(int initialLimit,
+                             int minLimit,
+                             int maxLimit,
+                             Duration smoothingTimeConstant,
+                             Duration baselineDriftTimeConstant,
+                             Duration errorRateSmoothingTimeConstant,
+                             double errorRateThreshold,
+                             double minUtilizationThreshold,
+                             LongSupplier nanoTimeSource) {
 
     this.minLimit = Math.max(1, minLimit);
     this.maxLimit = Math.max(this.minLimit, maxLimit);
 
     this.rttSmoothingEwma = new ContinuousTimeEwma(smoothingTimeConstant);
-    this.errorRateEwma = new ContinuousTimeEwma(smoothingTimeConstant);
+    this.errorRateEwma = new ContinuousTimeEwma(errorRateSmoothingTimeConstant);
     this.errorRateThreshold = Math.max(0.0, Math.min(1.0, errorRateThreshold));
+    this.minUtilizationThreshold = Math.max(0.0, Math.min(1.0, minUtilizationThreshold));
 
     if (baselineDriftTimeConstant != null && baselineDriftTimeConstant.toNanos() > 0) {
       this.baselineDriftEwma = new ContinuousTimeEwma(baselineDriftTimeConstant);
@@ -308,9 +367,28 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
 
         // ── Step 4: Calculate the New Concurrency Limit ──
         // ── Proactive Gradient-Based Adjustment ──
+        //
+        // Only allow the limit to grow if the system is sufficiently utilized.
+        // Without this check, low-load scenarios (e.g., 2 active calls at limit 100)
+        // would inflate the limit toward maxLimit because latency appears fine —
+        // but the real downstream capacity was never tested.
+        boolean isFullyUtilized = inFlightCalls >= (current.currentLimit() * minUtilizationThreshold);
+
         int visibleLimit = (int) (current.currentLimit() + 1e-9);
         double probingFactor = 1.0 / Math.max(1, visibleLimit);
-        newLimit = current.currentLimit() * gradient + probingFactor;
+
+        if (isFullyUtilized) {
+          newLimit = current.currentLimit() * gradient + probingFactor;
+        } else {
+          // Low load: allow gradient-based decrease but suppress growth.
+          // If gradient < 1.0, the downstream is congested even at low load — respect that.
+          // If gradient >= 1.0, hold steady instead of inflating.
+          if (gradient < 1.0) {
+            newLimit = current.currentLimit() * gradient + probingFactor;
+          } else {
+            newLimit = current.currentLimit();
+          }
+        }
       } else {
         // ── Reactive Failure Fallback ──
         //

@@ -149,6 +149,12 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
   /**
    * Creates a new AIMD algorithm in <b>classic mode</b> (backward-compatible).
    *
+   * <p><b>Caution:</b> Classic mode triggers a multiplicative decrease on <em>every single
+   * failure</em> — there is no error rate smoothing. At high throughput (e.g., 10,000 RPS),
+   * a single transient timeout will halve the limit immediately. For production use,
+   * prefer the stabilized mode (9-parameter constructor) or {@link #classicSmoothed} which
+   * adds minimal EWMA smoothing while preserving the classic {@code +1} increase.
+   *
    * @param initialLimit The starting concurrency limit before any feedback is received.
    * @param minLimit     The absolute minimum limit.
    * @param maxLimit     The absolute upper bound to prevent infinite scaling.
@@ -166,6 +172,38 @@ public final class AimdLimitAlgorithm implements InqLimitAlgorithm {
         0.0,
         false,
         0.0, // 0.0 disables the utilization threshold for classic backward compatibility
+        System::nanoTime);
+  }
+
+  /**
+   * Creates a classic AIMD algorithm with minimal error rate smoothing.
+   *
+   * <p>Behaves like the classic 4-parameter constructor (fixed {@code +1} increase,
+   * no utilization threshold) but adds a 1-second EWMA window with a 10% error rate
+   * threshold. This absorbs isolated transient failures without triggering a decrease,
+   * while still reacting quickly to sustained error bursts.
+   *
+   * <p>This is the recommended replacement for the raw classic constructor in
+   * production environments.
+   *
+   * @param initialLimit The starting concurrency limit.
+   * @param minLimit     The absolute minimum limit.
+   * @param maxLimit     The absolute upper bound.
+   * @param backoffRatio The decrease multiplier (e.g., 0.5 for halving).
+   * @return a new AIMD algorithm with smoothed error detection
+   */
+  public static AimdLimitAlgorithm classicSmoothed(int initialLimit,
+                                                   int minLimit,
+                                                   int maxLimit,
+                                                   double backoffRatio) {
+    return new AimdLimitAlgorithm(initialLimit,
+        minLimit,
+        maxLimit,
+        backoffRatio,
+        Duration.ofSeconds(1),
+        0.1,
+        false,
+        0.0,
         System::nanoTime);
   }
 

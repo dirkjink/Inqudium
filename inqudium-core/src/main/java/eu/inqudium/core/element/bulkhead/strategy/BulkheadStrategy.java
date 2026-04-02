@@ -46,10 +46,23 @@ public interface BulkheadStrategy {
   /**
    * Hook for adaptive strategies to receive execution feedback.
    *
-   * <p>Called after the business call completes, before {@link #release()}.
-   * Static strategies ignore this (no-op default).
+   * <p>Called after the business call completes, <em>before</em> {@link #release()}.
+   * The ordering matters for adaptive strategies: calling {@code release()} first would
+   * cause the algorithm to see an artificially low in-flight count. Prefer the
+   * {@code completeAndRelease(Duration, boolean)} method on concrete adaptive strategies
+   * (where available) to guarantee correct ordering.
    *
-   * @param rtt       the round-trip time of the business call
+   * <p>Static strategies ignore this (no-op default).
+   *
+   * <p><b>Zero/negative RTT:</b> If {@code rtt} is zero or negative (e.g., because
+   * {@link System#nanoTime()} returned the same value for start and end), the adaptive
+   * algorithm will silently discard the sample. The call is not counted toward any
+   * limit adjustment. Callers should be aware that on some platforms,
+   * {@code System.nanoTime()} has microsecond granularity, making zero-duration
+   * measurements possible for very fast calls.
+   *
+   * @param rtt       the round-trip time of the business call; must be positive for
+   *                  the sample to be processed by adaptive algorithms
    * @param isSuccess {@code true} if the call succeeded
    */
   default void onCallComplete(Duration rtt, boolean isSuccess) {

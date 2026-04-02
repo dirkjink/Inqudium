@@ -28,8 +28,19 @@ public final class AdaptiveBulkheadStrategy implements BlockingBulkheadStrategy 
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition notFull = lock.newCondition();
 
+  /**
+   * Number of calls currently holding a permit. Volatile because it is read
+   * outside the lock in {@link #onCallComplete} to provide a snapshot to the
+   * algorithm. All writes happen under the lock.
+   */
   private volatile int activeCalls = 0;
-  private volatile int oldLimit;
+
+  /**
+   * The algorithm's limit as of the last {@link #onCallComplete} invocation.
+   * Used to detect limit changes and signal waiting threads. Only accessed
+   * under the lock — no volatile needed.
+   */
+  private int oldLimit;
 
   public AdaptiveBulkheadStrategy(InqLimitAlgorithm limitAlgorithm) {
     this.limitAlgorithm = Objects.requireNonNull(limitAlgorithm, "limitAlgorithm must not be null");
@@ -77,6 +88,24 @@ public final class AdaptiveBulkheadStrategy implements BlockingBulkheadStrategy 
   @Override
   public void rollback() {
     release();
+  }
+
+  /**
+   * Combined feedback and release in the correct order.
+   *
+   * <p>Guarantees that the algorithm receives the in-flight count <em>before</em>
+   * the permit is released, and that the permit is always released even if the
+   * algorithm update throws.
+   *
+   * @param rtt       the round-trip time of the completed call
+   * @param isSuccess {@code true} if the call succeeded
+   */
+  public void completeAndRelease(Duration rtt, boolean isSuccess) {
+    try {
+      onCallComplete(rtt, isSuccess);
+    } finally {
+      release();
+    }
   }
 
   @Override
