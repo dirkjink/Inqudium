@@ -2,14 +2,22 @@ package eu.inqudium.imperative.bulkhead.config;
 
 import eu.inqudium.core.config.ConfigExtension;
 import eu.inqudium.core.config.GeneralConfig;
+import eu.inqudium.core.config.InqElementCommonConfig;
 import eu.inqudium.core.config.InqElementConfig;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.algo.InqLimitAlgorithm;
+import eu.inqudium.core.element.bulkhead.algo.VegasLimitAlgorithm;
+import eu.inqudium.core.element.bulkhead.config.AimdLimitAlgorithmConfig;
 import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
+import eu.inqudium.core.element.bulkhead.config.VegasLimitAlgorithmConfig;
+import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.event.InqEventPublisher;
+import eu.inqudium.imperative.bulkhead.strategy.AdaptiveBulkheadStrategy;
+import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
 
 import java.time.Duration;
+import java.util.Optional;
 
 public record InqImperativeBulkheadConfig(
     GeneralConfig general,
@@ -44,6 +52,35 @@ public record InqImperativeBulkheadConfig(
   @Override
   public InqEventPublisher eventPublisher() {
     return common.eventPublisher();
+  }
+
+  @Override
+  public InqImperativeBulkheadConfig inference() {
+    BulkheadStrategy strategy = strategy();
+    if (strategy() == null) {
+      Optional<VegasLimitAlgorithmConfig> vegas = general.of(VegasLimitAlgorithmConfig.class);
+      Optional<AimdLimitAlgorithmConfig> aimd = general.of(AimdLimitAlgorithmConfig.class);
+
+      if (vegas.filter(v -> aimd.isEmpty())
+          .map(ConfigExtension.class::cast)
+          .or(() ->
+              aimd.filter(a -> vegas.isEmpty())
+                  .map(ConfigExtension.class::cast)
+          ).isEmpty()) {
+        strategy = new SemaphoreBulkheadStrategy(maxConcurrentCalls());
+      }
+    }
+    return new InqImperativeBulkheadConfig(
+        this.general,
+        new InqBulkheadConfig(
+            this.general,
+            this.common.common(),
+            this.common.maxConcurrentCalls(),
+            strategy,
+            this.common.maxWaitDuration(),
+            this.common.limitAlgorithm()
+        )
+    );
   }
 
   @Override

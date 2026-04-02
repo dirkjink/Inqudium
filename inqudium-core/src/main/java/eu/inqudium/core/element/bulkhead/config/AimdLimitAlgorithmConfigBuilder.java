@@ -119,6 +119,13 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
   // Individual Setters — each guards its own value immediately
   // ──────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Sets the starting concurrency limit before any adjustments are made.
+   *
+   * @param initialLimit the initial concurrency limit, must be positive
+   * @return this builder
+   * @throws IllegalArgumentException if {@code initialLimit} is not positive
+   */
   public AimdLimitAlgorithmConfigBuilder initialLimit(int initialLimit) {
     if (initialLimit <= 0) {
       throw new IllegalArgumentException(
@@ -129,6 +136,14 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
     return this;
   }
 
+  /**
+   * Sets the lower bound for the concurrency limit. The algorithm will never
+   * reduce the limit below this value, even under sustained failures.
+   *
+   * @param minLimit the minimum concurrency limit, must be positive
+   * @return this builder
+   * @throws IllegalArgumentException if {@code minLimit} is not positive
+   */
   public AimdLimitAlgorithmConfigBuilder minLimit(int minLimit) {
     if (minLimit <= 0) {
       throw new IllegalArgumentException(
@@ -139,6 +154,14 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
     return this;
   }
 
+  /**
+   * Sets the upper bound for the concurrency limit. The algorithm will never
+   * increase the limit above this value, regardless of observed throughput.
+   *
+   * @param maxLimit the maximum concurrency limit, must be positive
+   * @return this builder
+   * @throws IllegalArgumentException if {@code maxLimit} is not positive
+   */
   public AimdLimitAlgorithmConfigBuilder maxLimit(int maxLimit) {
     if (maxLimit <= 0) {
       throw new IllegalArgumentException(
@@ -149,6 +172,14 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
     return this;
   }
 
+  /**
+   * Sets the multiplicative decrease factor applied to the limit when sustained
+   * failures are detected. A value of 0.5 halves the limit; 0.9 retains 90%.
+   *
+   * @param backoffRatio the backoff ratio, must be in the open interval (0.0, 1.0)
+   * @return this builder
+   * @throws IllegalArgumentException if {@code backoffRatio} is not in (0.0, 1.0)
+   */
   public AimdLimitAlgorithmConfigBuilder backoffRatio(double backoffRatio) {
     if (backoffRatio <= 0.0 || backoffRatio >= 1.0) {
       throw new IllegalArgumentException(
@@ -159,6 +190,15 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
     return this;
   }
 
+  /**
+   * Sets the EWMA time constant for smoothing the observed error rate.
+   * Larger values produce heavier smoothing, filtering out transient spikes.
+   *
+   * @param smoothingTimeConstant the smoothing time constant, must be positive and non-null
+   * @return this builder
+   * @throws NullPointerException     if {@code smoothingTimeConstant} is null
+   * @throws IllegalArgumentException if {@code smoothingTimeConstant} is zero or negative
+   */
   public AimdLimitAlgorithmConfigBuilder smoothingTimeConstant(Duration smoothingTimeConstant) {
     Objects.requireNonNull(smoothingTimeConstant,
         "smoothingTimeConstant must not be null");
@@ -171,6 +211,14 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
     return this;
   }
 
+  /**
+   * Sets the smoothed error rate above which the algorithm triggers a
+   * multiplicative decrease of the concurrency limit.
+   *
+   * @param errorRateThreshold the error rate threshold, must be in the open interval (0.0, 1.0)
+   * @return this builder
+   * @throws IllegalArgumentException if {@code errorRateThreshold} is not in (0.0, 1.0)
+   */
   public AimdLimitAlgorithmConfigBuilder errorRateThreshold(double errorRateThreshold) {
     if (errorRateThreshold <= 0.0 || errorRateThreshold >= 1.0) {
       throw new IllegalArgumentException(
@@ -181,12 +229,28 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
     return this;
   }
 
+  /**
+   * Controls whether the additive increase is windowed ({@code +1} per congestion
+   * window, independent of RPS) or fixed ({@code +1} per successful request).
+   * Windowed increase produces slower, more predictable growth.
+   *
+   * @param windowedIncrease {@code true} for windowed increase, {@code false} for per-request
+   * @return this builder
+   */
   public AimdLimitAlgorithmConfigBuilder windowedIncrease(boolean windowedIncrease) {
     this.windowedIncrease = windowedIncrease;
     this.customized = true;
     return this;
   }
 
+  /**
+   * Sets the minimum utilization ratio required before the algorithm is allowed
+   * to increase the concurrency limit. Prevents limit inflation during idle periods.
+   *
+   * @param minUtilizationThreshold the utilization threshold, must be in the closed interval [0.0, 1.0]
+   * @return this builder
+   * @throws IllegalArgumentException if {@code minUtilizationThreshold} is not in [0.0, 1.0]
+   */
   public AimdLimitAlgorithmConfigBuilder minUtilizationThreshold(double minUtilizationThreshold) {
     if (minUtilizationThreshold < 0.0 || minUtilizationThreshold > 1.0) {
       throw new IllegalArgumentException(

@@ -85,6 +85,16 @@ public class CoDelBulkheadStrategyConfigBuilder extends ExtensionBuilder<CoDelBu
   // Individual Setters — each guards its own value immediately
   // ──────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Sets the sojourn time threshold below which a request is considered
+   * "on target". Requests waiting longer than this for a permit start the
+   * CoDel congestion stopwatch.
+   *
+   * @param targetDelay the target delay threshold, must be positive and non-null
+   * @return this builder
+   * @throws NullPointerException     if {@code targetDelay} is null
+   * @throws IllegalArgumentException if {@code targetDelay} is zero or negative
+   */
   public CoDelBulkheadStrategyConfigBuilder targetDelay(Duration targetDelay) {
     Objects.requireNonNull(targetDelay, "targetDelay must not be null");
     if (targetDelay.isNegative() || targetDelay.isZero()) {
@@ -96,6 +106,16 @@ public class CoDelBulkheadStrategyConfigBuilder extends ExtensionBuilder<CoDelBu
     return this;
   }
 
+  /**
+   * Sets the minimum sustained congestion duration before the first drop occurs.
+   * If sojourn times remain above {@code targetDelay} for this entire interval,
+   * CoDel begins shedding load.
+   *
+   * @param interval the congestion interval, must be positive and non-null
+   * @return this builder
+   * @throws NullPointerException     if {@code interval} is null
+   * @throws IllegalArgumentException if {@code interval} is zero or negative
+   */
   public CoDelBulkheadStrategyConfigBuilder interval(Duration interval) {
     Objects.requireNonNull(interval, "interval must not be null");
     if (interval.isNegative() || interval.isZero()) {

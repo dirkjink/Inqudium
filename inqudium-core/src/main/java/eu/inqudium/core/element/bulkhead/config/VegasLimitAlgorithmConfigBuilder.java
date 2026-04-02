@@ -108,6 +108,13 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
   // Individual Setters — each guards its own value immediately
   // ──────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Sets the starting concurrency limit before any gradient-based adjustments.
+   *
+   * @param initialLimit the initial concurrency limit, must be positive
+   * @return this builder
+   * @throws IllegalArgumentException if {@code initialLimit} is not positive
+   */
   public VegasLimitAlgorithmConfigBuilder initialLimit(int initialLimit) {
     if (initialLimit <= 0) {
       throw new IllegalArgumentException(
@@ -118,6 +125,14 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     return this;
   }
 
+  /**
+   * Sets the lower bound for the concurrency limit. The algorithm will never
+   * reduce the limit below this value, even under sustained congestion.
+   *
+   * @param minLimit the minimum concurrency limit, must be positive
+   * @return this builder
+   * @throws IllegalArgumentException if {@code minLimit} is not positive
+   */
   public VegasLimitAlgorithmConfigBuilder minLimit(int minLimit) {
     if (minLimit <= 0) {
       throw new IllegalArgumentException(
@@ -128,6 +143,14 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     return this;
   }
 
+  /**
+   * Sets the upper bound for the concurrency limit. The algorithm will never
+   * increase the limit above this value, regardless of observed latency gradient.
+   *
+   * @param maxLimit the maximum concurrency limit, must be positive
+   * @return this builder
+   * @throws IllegalArgumentException if {@code maxLimit} is not positive
+   */
   public VegasLimitAlgorithmConfigBuilder maxLimit(int maxLimit) {
     if (maxLimit <= 0) {
       throw new IllegalArgumentException(
@@ -138,6 +161,16 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     return this;
   }
 
+  /**
+   * Sets the EWMA time constant for smoothing observed round-trip times.
+   * Larger values produce heavier smoothing, making the gradient less
+   * sensitive to individual request latency spikes.
+   *
+   * @param smoothingTimeConstant the RTT smoothing time constant, must be positive and non-null
+   * @return this builder
+   * @throws NullPointerException     if {@code smoothingTimeConstant} is null
+   * @throws IllegalArgumentException if {@code smoothingTimeConstant} is zero or negative
+   */
   public VegasLimitAlgorithmConfigBuilder smoothingTimeConstant(Duration smoothingTimeConstant) {
     Objects.requireNonNull(smoothingTimeConstant,
         "smoothingTimeConstant must not be null");
@@ -150,6 +183,16 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     return this;
   }
 
+  /**
+   * Sets the EWMA time constant that controls how quickly the no-load baseline
+   * RTT drifts towards the currently observed minimum. Larger values make the
+   * baseline more resistant to transient latency shifts.
+   *
+   * @param baselineDriftTimeConstant the baseline drift time constant, must be positive and non-null
+   * @return this builder
+   * @throws NullPointerException     if {@code baselineDriftTimeConstant} is null
+   * @throws IllegalArgumentException if {@code baselineDriftTimeConstant} is zero or negative
+   */
   public VegasLimitAlgorithmConfigBuilder baselineDriftTimeConstant(Duration baselineDriftTimeConstant) {
     Objects.requireNonNull(baselineDriftTimeConstant,
         "baselineDriftTimeConstant must not be null");
@@ -162,6 +205,16 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     return this;
   }
 
+  /**
+   * Sets the EWMA time constant for smoothing the observed error rate used by
+   * the reactive fallback mechanism. Larger values absorb transient error bursts
+   * without triggering unnecessary limit reductions.
+   *
+   * @param errorRateSmoothingTimeConstant the error rate smoothing time constant, must be positive and non-null
+   * @return this builder
+   * @throws NullPointerException     if {@code errorRateSmoothingTimeConstant} is null
+   * @throws IllegalArgumentException if {@code errorRateSmoothingTimeConstant} is zero or negative
+   */
   public VegasLimitAlgorithmConfigBuilder errorRateSmoothingTimeConstant(Duration errorRateSmoothingTimeConstant) {
     Objects.requireNonNull(errorRateSmoothingTimeConstant,
         "errorRateSmoothingTimeConstant must not be null");
@@ -175,6 +228,14 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     return this;
   }
 
+  /**
+   * Sets the smoothed error rate above which the reactive fallback triggers
+   * a multiplicative decrease (0.8×) of the concurrency limit.
+   *
+   * @param errorRateThreshold the error rate threshold, must be in the open interval (0.0, 1.0)
+   * @return this builder
+   * @throws IllegalArgumentException if {@code errorRateThreshold} is not in (0.0, 1.0)
+   */
   public VegasLimitAlgorithmConfigBuilder errorRateThreshold(double errorRateThreshold) {
     if (errorRateThreshold <= 0.0 || errorRateThreshold >= 1.0) {
       throw new IllegalArgumentException(
@@ -185,6 +246,14 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
     return this;
   }
 
+  /**
+   * Sets the minimum utilization ratio required before the algorithm is allowed
+   * to increase the concurrency limit. Prevents limit inflation during idle periods.
+   *
+   * @param minUtilizationThreshold the utilization threshold, must be in the closed interval [0.0, 1.0]
+   * @return this builder
+   * @throws IllegalArgumentException if {@code minUtilizationThreshold} is not in [0.0, 1.0]
+   */
   public VegasLimitAlgorithmConfigBuilder minUtilizationThreshold(double minUtilizationThreshold) {
     if (minUtilizationThreshold < 0.0 || minUtilizationThreshold > 1.0) {
       throw new IllegalArgumentException(

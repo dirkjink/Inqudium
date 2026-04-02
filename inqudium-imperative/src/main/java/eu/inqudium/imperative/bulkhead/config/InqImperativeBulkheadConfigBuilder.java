@@ -36,4 +36,14 @@ public class InqImperativeBulkheadConfigBuilder
   protected InqImperativeBulkheadConfigBuilder self() {
     return this;
   }
+
+
+
+  /**
+   * Validates cross-field constraints on the fully inferred configuration record.
+   * Individual field constraints are already enforced by each setter.
+   */
+  private void validate(InqImperativeBulkheadConfig config) {
+  }
+
 }

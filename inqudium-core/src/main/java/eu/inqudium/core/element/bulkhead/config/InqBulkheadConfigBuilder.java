@@ -53,6 +53,15 @@ public abstract class InqBulkheadConfigBuilder
   // Individual Setters — each guards its own value immediately
   // ──────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Sets the name of this bulkhead element, used for identification in
+   * logging, metrics, and event publishing.
+   *
+   * @param name the bulkhead name, must not be null or blank
+   * @return this builder
+   * @throws NullPointerException     if {@code name} is null
+   * @throws IllegalArgumentException if {@code name} is blank
+   */
   public B name(String name) {
     Objects.requireNonNull(name, "name must not be null");
     if (name.isBlank()) {
@@ -99,6 +108,16 @@ public abstract class InqBulkheadConfigBuilder
     return self();
   }
 
+  /**
+   * Sets the maximum duration a thread will wait for a bulkhead permit before
+   * being rejected. Use {@link Duration#ZERO} for immediate rejection when no
+   * permit is available.
+   *
+   * @param maxWaitDuration the maximum wait duration, must not be null or negative
+   * @return this builder
+   * @throws NullPointerException     if {@code maxWaitDuration} is null
+   * @throws IllegalArgumentException if {@code maxWaitDuration} is negative
+   */
   public B maxWaitDuration(Duration maxWaitDuration) {
     Objects.requireNonNull(maxWaitDuration, "maxWaitDuration must not be null");
     if (maxWaitDuration.isNegative()) {
@@ -109,6 +128,15 @@ public abstract class InqBulkheadConfigBuilder
     return self();
   }
 
+  /**
+   * Sets the maximum number of calls that may execute concurrently through
+   * this bulkhead. Additional calls will either wait or be rejected depending
+   * on the configured {@link #maxWaitDuration(Duration)}.
+   *
+   * @param maxConcurrentCalls the maximum concurrent calls, must be positive
+   * @return this builder
+   * @throws IllegalArgumentException if {@code maxConcurrentCalls} is not positive
+   */
   public B maxConcurrentCalls(int maxConcurrentCalls) {
     if (maxConcurrentCalls <= 0) {
       throw new IllegalArgumentException(
@@ -118,11 +146,26 @@ public abstract class InqBulkheadConfigBuilder
     return self();
   }
 
+  /**
+   * Sets an optional adaptive limit algorithm that dynamically adjusts the
+   * concurrency limit at runtime based on observed throughput and error rates.
+   * When set, this overrides the static {@link #maxConcurrentCalls(int)} ceiling.
+   *
+   * @param limitAlgorithm the limit algorithm, or {@code null} to disable adaptive limiting
+   * @return this builder
+   */
   public B limitAlgorithm(InqLimitAlgorithm limitAlgorithm) {
     this.limitAlgorithm = limitAlgorithm;
     return self();
   }
 
+  /**
+   * Sets a custom event publisher for this bulkhead. If not set, a default
+   * publisher is derived from the element name and type during inference.
+   *
+   * @param eventPublisher the event publisher, or {@code null} for automatic derivation
+   * @return this builder
+   */
   public B eventPublisher(InqEventPublisher eventPublisher) {
     this.eventPublisher = eventPublisher;
     return self();
@@ -173,8 +216,7 @@ public abstract class InqBulkheadConfigBuilder
 
     if (config.strategy() == null) {
       throw new IllegalStateException(
-          "Either strategy(...) or strategyFactory(...) must be set "
-              + "before building the bulkhead.");
+          "strategy(...) must be set before building the bulkhead.");
     }
   }
 }
