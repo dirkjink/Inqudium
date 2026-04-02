@@ -225,6 +225,6 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
         errorRateThreshold,
         windowedIncrease,
         minUtilizationThreshold
-    );
+    ).inference();
   }
 }

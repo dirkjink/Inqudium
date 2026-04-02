@@ -2,7 +2,7 @@ package eu.inqudium.imperative.bulkhead.config;
 
 import eu.inqudium.core.config.ConfigExtension;
 import eu.inqudium.core.config.GeneralConfig;
-import eu.inqudium.core.element.InqElementConfig;
+import eu.inqudium.core.config.InqElementConfig;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.algo.InqLimitAlgorithm;
 import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
@@ -14,7 +14,7 @@ import java.time.Duration;
 public record InqImperativeBulkheadConfig(
     GeneralConfig general,
     InqBulkheadConfig common
-) implements ConfigExtension, InqElementConfig {
+) implements ConfigExtension<InqImperativeBulkheadConfig>, InqElementConfig {
   @Override
   public String name() {
     return common.name();
@@ -44,6 +44,11 @@ public record InqImperativeBulkheadConfig(
   @Override
   public InqEventPublisher eventPublisher() {
     return common.eventPublisher();
+  }
+
+  @Override
+  public InqImperativeBulkheadConfig self() {
+    return this;
   }
 }
 

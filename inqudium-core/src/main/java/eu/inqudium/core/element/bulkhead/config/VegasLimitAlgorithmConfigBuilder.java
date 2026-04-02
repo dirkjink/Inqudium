@@ -227,6 +227,6 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
         baselineDriftTimeConstant,
         errorRateSmoothingTimeConstant,
         errorRateThreshold,
-        minUtilizationThreshold);
+        minUtilizationThreshold).inference();
   }
 }

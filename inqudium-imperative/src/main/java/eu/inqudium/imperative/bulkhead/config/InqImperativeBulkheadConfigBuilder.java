@@ -5,7 +5,9 @@ import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
 
 import java.time.Duration;
 
-public class InqImperativeBulkheadConfigBuilder extends InqBulkheadConfigBuilder<InqImperativeBulkheadConfigBuilder, InqImperativeBulkheadConfig> {
+public class InqImperativeBulkheadConfigBuilder
+    extends InqBulkheadConfigBuilder<InqImperativeBulkheadConfigBuilder,
+    InqImperativeBulkheadConfig> {
 
   InqImperativeBulkheadConfigBuilder() {
   }
@@ -24,7 +26,7 @@ public class InqImperativeBulkheadConfigBuilder extends InqBulkheadConfigBuilder
 
   @Override
   public InqImperativeBulkheadConfig build() {
-    return new InqImperativeBulkheadConfig(generalConfig, common());
+    return new InqImperativeBulkheadConfig(generalConfig, common()).inference();
   }
 
   @Override

@@ -1,5 +1,6 @@
-package eu.inqudium.core.element;
+package eu.inqudium.core.config;
 
+import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.event.InqEventPublisher;
 
 public interface InqElementConfig {

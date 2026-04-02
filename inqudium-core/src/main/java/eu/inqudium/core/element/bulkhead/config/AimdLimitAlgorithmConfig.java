@@ -13,5 +13,9 @@ public record AimdLimitAlgorithmConfig(
     double errorRateThreshold,
     boolean windowedIncrease,
     double minUtilizationThreshold
-) implements ConfigExtension {
+) implements ConfigExtension<AimdLimitAlgorithmConfig> {
+  @Override
+  public AimdLimitAlgorithmConfig self() {
+    return this;
+  }
 }

@@ -1,7 +1,9 @@
 package eu.inqudium.core.element.bulkhead.config;
 
+import eu.inqudium.core.config.ConfigExtension;
 import eu.inqudium.core.config.GeneralConfig;
-import eu.inqudium.core.element.InqElementConfig;
+import eu.inqudium.core.config.InqElementCommonConfig;
+import eu.inqudium.core.config.InqElementConfig;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.algo.InqLimitAlgorithm;
 import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
@@ -11,13 +13,30 @@ import java.time.Duration;
 
 public record InqBulkheadConfig(
     GeneralConfig general,
-    String name,
-    InqElementType elementType,
-    InqEventPublisher eventPublisher,
+    InqElementCommonConfig common,
     int maxConcurrentCalls,
     BulkheadStrategy strategy,
     Duration maxWaitDuration,
     InqLimitAlgorithm limitAlgorithm
-) implements InqElementConfig {
+) implements InqElementConfig, ConfigExtension<InqBulkheadConfig> {
+  @Override
+  public String name() {
+    return common.name();
+  }
+
+  @Override
+  public InqElementType elementType() {
+    return common.elementType();
+  }
+
+  @Override
+  public InqEventPublisher eventPublisher() {
+    return common.eventPublisher();
+  }
+
+  @Override
+  public InqBulkheadConfig self() {
+    return this;
+  }
 }
 

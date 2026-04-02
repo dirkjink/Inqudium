@@ -150,6 +150,6 @@ public class CoDelBulkheadStrategyConfigBuilder extends ExtensionBuilder<CoDelBu
     return new CoDelBulkheadStrategyConfig(
         targetDelay,
         interval
-    );
+    ).inference();
   }
 }
