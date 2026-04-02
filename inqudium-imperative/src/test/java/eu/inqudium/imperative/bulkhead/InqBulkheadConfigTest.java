@@ -1,4 +1,4 @@
-package eu.inqudium.core.element.bulkhead;
+package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.config.InqConfig;
@@ -7,24 +7,21 @@ import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.algo.InqLimitAlgorithm;
 import eu.inqudium.core.element.bulkhead.algo.VegasLimitAlgorithm;
 import eu.inqudium.core.element.bulkhead.config.AimdLimitAlgorithmConfig;
-import eu.inqudium.core.element.bulkhead.config.AimdLimitAlgorithmConfigBuilder;
-import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
-import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfigBuilder;
 import eu.inqudium.core.element.bulkhead.config.VegasLimitAlgorithmConfig;
-import eu.inqudium.core.element.bulkhead.config.VegasLimitAlgorithmConfigBuilder;
 import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.log.LoggerFactory;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
+import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
 import static eu.inqudium.core.element.bulkhead.config.AimdLimitAlgorithmConfigBuilder.aimdLimitAlgorithm;
-import static eu.inqudium.core.element.bulkhead.config.InqBulkheadConfigBuilder.bulkhead;
 import static eu.inqudium.core.element.bulkhead.config.VegasLimitAlgorithmConfigBuilder.vegasLimitAlgorithm;
+import static eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfigBuilder.bulkhead;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class InqBulkheadConfigTest {
@@ -99,7 +96,7 @@ class InqBulkheadConfigTest {
           .build();
 
       // Then the configuration should contain the correctly configured bulkhead extension
-      assertThat(config.of(InqBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
+      assertThat(config.of(InqImperativeBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
         assertThat(bulkheadConfig.name()).isEqualTo(expectedName);
         assertThat(bulkheadConfig.elementType()).isEqualTo(InqElementType.BULKHEAD);
         assertThat(bulkheadConfig.maxConcurrentCalls()).isEqualTo(expectedMaxConcurrentCalls);
@@ -149,7 +146,7 @@ class InqBulkheadConfigTest {
           .build();
 
       // Then the configuration should contain the correctly configured bulkhead extension
-      assertThat(config.of(InqBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
+      assertThat(config.of(InqImperativeBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
         assertThat(bulkheadConfig.name()).isEqualTo(expectedName);
         assertThat(bulkheadConfig.elementType()).isEqualTo(InqElementType.BULKHEAD);
         assertThat(bulkheadConfig.maxConcurrentCalls()).isEqualTo(expectedMaxConcurrentCalls);
@@ -169,11 +166,12 @@ class InqBulkheadConfigTest {
       // When building the minimal bulkhead configuration
       InqConfig config = InqConfig.configure()
           .general()
-          .with(bulkhead(), bulkhead -> bulkhead.name(expectedName))
-          .build();
+          .with(bulkhead(), bulkhead -> bulkhead
+              .name(expectedName)
+          ).build();
 
       // Then the default values should be correctly instantiated
-      assertThat(config.of(InqBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
+      assertThat(config.of(InqImperativeBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
         assertThat(bulkheadConfig.maxWaitDuration()).isEqualTo(Duration.ZERO);
         assertThat(bulkheadConfig.eventPublisher()).isNotNull();
       });

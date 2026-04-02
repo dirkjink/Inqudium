@@ -19,6 +19,6 @@ public record InqBulkheadConfig(
     BulkheadStrategy strategy,
     Duration maxWaitDuration,
     InqLimitAlgorithm limitAlgorithm
-) implements ConfigExtension, InqElementConfig {
+) implements InqElementConfig {
 }
 

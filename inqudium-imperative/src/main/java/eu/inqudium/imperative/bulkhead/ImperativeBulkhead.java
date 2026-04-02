@@ -17,6 +17,7 @@ import eu.inqudium.core.invoke.InqCall;
 import eu.inqudium.core.log.Logger;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
+import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -37,14 +38,14 @@ public final class ImperativeBulkhead implements Bulkhead {
 
   private final Logger logger;
   private final String name;
-  private final InqBulkheadConfig config;
+  private final InqImperativeBulkheadConfig config;
   private final BlockingBulkheadStrategy strategy;
   private final InqEventPublisher eventPublisher;
   private final Duration maxWaitDuration;
   private final InqNanoTimeSource nanoTimeSource;
   private final InqClock clock;
 
-  public ImperativeBulkhead(InqBulkheadConfig config, BulkheadStrategy strategy) {
+  public ImperativeBulkhead(InqImperativeBulkheadConfig config, BulkheadStrategy strategy) {
     Objects.requireNonNull(config, "config must not be null");
     Objects.requireNonNull(strategy, "strategy must not be null");
     if (!(strategy instanceof BlockingBulkheadStrategy blocking)) {
@@ -76,7 +77,7 @@ public final class ImperativeBulkhead implements Bulkhead {
   }
 
   @Override
-  public InqBulkheadConfig getConfig() {
+  public InqImperativeBulkheadConfig getConfig() {
     return config;
   }
 

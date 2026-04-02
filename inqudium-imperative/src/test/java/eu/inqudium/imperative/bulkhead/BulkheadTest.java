@@ -2,7 +2,6 @@ package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
-import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfigBuilder;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnAcquireEvent;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnRejectEvent;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnReleaseEvent;
@@ -18,6 +17,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfigBuilder.bulkhead;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -33,7 +33,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(5)
           ).build();
@@ -49,7 +49,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(1)
           ).build();
@@ -68,7 +68,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(1)
           ).build();
@@ -97,7 +97,7 @@ class BulkheadTest {
       // Given — 1 permit, held by a blocking call
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(1)
           ).build();
@@ -142,7 +142,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(10)
           ).build();
@@ -158,7 +158,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(5)
           ).build();
@@ -181,7 +181,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(5)
           ).build();
@@ -203,7 +203,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(1)
           ).build();
@@ -249,7 +249,7 @@ class BulkheadTest {
       // Given
       var config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), c -> c
+          .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(5)
           ).build();

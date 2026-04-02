@@ -1,5 +1,6 @@
 package eu.inqudium.core.element.bulkhead.config;
 
+import eu.inqudium.core.config.ConfigExtension;
 import eu.inqudium.core.config.ExtensionBuilder;
 import eu.inqudium.core.config.GeneralConfig;
 import eu.inqudium.core.element.InqElementType;
@@ -9,8 +10,10 @@ import eu.inqudium.core.event.InqEventPublisher;
 
 import java.time.Duration;
 
-public class InqBulkheadConfigBuilder extends ExtensionBuilder<InqBulkheadConfig> {
-  private GeneralConfig generalConfig;
+public abstract class InqBulkheadConfigBuilder
+    <B extends InqBulkheadConfigBuilder<B, E>, E extends ConfigExtension>
+    extends ExtensionBuilder<E> {
+  protected GeneralConfig generalConfig;
   private String name;
   private InqEventPublisher eventPublisher;
   private BulkheadStrategy strategy;
@@ -23,50 +26,39 @@ public class InqBulkheadConfigBuilder extends ExtensionBuilder<InqBulkheadConfig
     this.generalConfig = generalConfig;
   }
 
-  public static InqBulkheadConfigBuilder bulkhead() {
-    return new InqBulkheadConfigBuilder();
-  }
+  protected InqBulkheadConfigBuilder() {}
 
-  InqBulkheadConfigBuilder() {}
-
-  public InqBulkheadConfigBuilder name(String name) {
+  public B name(String name) {
     this.name = name;
-    return this;
+    return (B) this;
   }
 
-  public InqBulkheadConfigBuilder strategy(BulkheadStrategy strategy) {
+  public B strategy(BulkheadStrategy strategy) {
     this.strategy = strategy;
-    return this;
+    return (B) this;
   }
 
-  public InqBulkheadConfigBuilder maxWaitDuration(Duration maxWaitDuration) {
+  public B maxWaitDuration(Duration maxWaitDuration) {
     this.maxWaitDuration = maxWaitDuration;
-    return this;
+    return (B) this;
   }
 
-  public InqBulkheadConfigBuilder maxConcurrentCalls(int maxConcurrentCalls) {
+  public B maxConcurrentCalls(int maxConcurrentCalls) {
     this.maxConcurrentCalls = maxConcurrentCalls;
-    return this;
+    return (B) this;
   }
 
-  public InqBulkheadConfigBuilder limitAlgorithm(InqLimitAlgorithm limitAlgorithm) {
+  public B limitAlgorithm(InqLimitAlgorithm limitAlgorithm) {
     this.limitAlgorithm = limitAlgorithm;
-    return this;
+    return (B) this;
   }
 
-  public InqBulkheadConfigBuilder eventPublisher(InqEventPublisher eventPublisher) {
+  public B eventPublisher(InqEventPublisher eventPublisher) {
     this.eventPublisher = eventPublisher;
-    return this;
+    return (B) this;
   }
 
-  @Override
-  public InqBulkheadConfig build() {
-    if (eventPublisher == null) {
-      eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
-    }
-    if (maxWaitDuration == null) {
-      maxWaitDuration = Duration.ZERO;
-    }
+  protected InqBulkheadConfig common() {
     return new InqBulkheadConfig(
         this.generalConfig,
         name,

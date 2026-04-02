@@ -6,6 +6,7 @@ import eu.inqudium.core.element.bulkhead.BulkheadConfig;
 import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.pipeline.InqDecorator;
+import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
 
 /**
@@ -42,7 +43,7 @@ import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
 public interface Bulkhead extends InqDecorator {
 
   static Bulkhead of(InqConfig config) {
-    return of(config.of(InqBulkheadConfig.class).orElseThrow());
+    return of(config.of(InqImperativeBulkheadConfig.class).orElseThrow());
   }
 
   /**
@@ -51,11 +52,11 @@ public interface Bulkhead extends InqDecorator {
    * <p>Uses {@link BulkheadConfig#getBlockingStrategy()} — throws if a
    * non-blocking strategy was configured (imperative paradigm requires blocking).
    */
-  static Bulkhead of(InqBulkheadConfig config) {
+  static Bulkhead of(InqImperativeBulkheadConfig config) {
     return new ImperativeBulkhead(config, new SemaphoreBulkheadStrategy(config.maxConcurrentCalls()));
   }
 
-  InqBulkheadConfig getConfig();
+  InqImperativeBulkheadConfig getConfig();
 
   int getConcurrentCalls();
 
