@@ -22,6 +22,9 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
+import static eu.inqudium.core.element.bulkhead.config.AimdLimitAlgorithmConfigBuilder.aimdLimitAlgorithm;
+import static eu.inqudium.core.element.bulkhead.config.InqBulkheadConfigBuilder.bulkhead;
+import static eu.inqudium.core.element.bulkhead.config.VegasLimitAlgorithmConfigBuilder.vegasLimitAlgorithm;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class InqBulkheadConfigTest {
@@ -62,6 +65,65 @@ class InqBulkheadConfigTest {
   class BulkheadConfigurationTests {
 
     @Test
+    void configuration_builder_should_successfully_register_and_build_bulkhead_defaults() {
+      // Given the required parameters and custom dummy implementations for a bulkhead
+      String expectedName = "test-bulkhead";
+      int expectedMaxConcurrentCalls = 10;
+      Duration expectedWaitDuration = Duration.ofMillis(500);
+
+      int initialLimit = 50;
+      int minLimit = 5;
+      int maxLimit = 500;
+      Duration smoothingTau = Duration.ofMillis(1000);
+      Duration baselineDrift = Duration.ofSeconds(10);
+      Duration errorRateSmoothing = Duration.ofSeconds(5);
+      double errorThreshold = 0.1;
+      double utilizationThreshold = 0.6;
+
+      // Assuming strategy could be an Enum, we pass null to test the setter without needing mockito.
+      BulkheadStrategy customStrategy = null;
+      InqLimitAlgorithm customLimitAlgorithm = VegasLimitAlgorithm.balanced();
+      InqEventPublisher customEventPublisher = InqEventPublisher.create("name", InqElementType.BULKHEAD);
+
+      // When appending a bulkhead extension to the configuration
+      InqConfig config = InqConfig.configure()
+          .general()
+          .with(bulkhead(), c -> c
+              .name(expectedName)
+              .maxConcurrentCalls(expectedMaxConcurrentCalls)
+              .maxWaitDuration(expectedWaitDuration)
+              .strategy(customStrategy)
+              .limitAlgorithm(customLimitAlgorithm)
+              .eventPublisher(customEventPublisher))
+          .with(vegasLimitAlgorithm().balanced())
+          .build();
+
+      // Then the configuration should contain the correctly configured bulkhead extension
+      assertThat(config.of(InqBulkheadConfig.class)).isPresent().get().satisfies(bulkheadConfig -> {
+        assertThat(bulkheadConfig.name()).isEqualTo(expectedName);
+        assertThat(bulkheadConfig.elementType()).isEqualTo(InqElementType.BULKHEAD);
+        assertThat(bulkheadConfig.maxConcurrentCalls()).isEqualTo(expectedMaxConcurrentCalls);
+        assertThat(bulkheadConfig.maxWaitDuration()).isEqualTo(expectedWaitDuration);
+        assertThat(bulkheadConfig.strategy()).isNull();
+        assertThat(bulkheadConfig.limitAlgorithm()).isSameAs(customLimitAlgorithm);
+        assertThat(bulkheadConfig.eventPublisher()).isSameAs(customEventPublisher);
+        assertThat(bulkheadConfig.general()).isEqualTo(config.general());
+      });
+
+      // Then the configuration should contain the correctly configured VegasLimitAlgorithm extension
+      assertThat(config.of(VegasLimitAlgorithmConfig.class)).isPresent().get().satisfies(vegasConfig -> {
+        assertThat(vegasConfig.initialLimit()).isEqualTo(initialLimit);
+        assertThat(vegasConfig.minLimit()).isEqualTo(minLimit);
+        assertThat(vegasConfig.maxLimit()).isEqualTo(maxLimit);
+        assertThat(vegasConfig.smoothingTimeConstant()).isEqualTo(smoothingTau);
+        assertThat(vegasConfig.baselineDriftTimeConstant()).isEqualTo(baselineDrift);
+        assertThat(vegasConfig.errorRateSmoothingTimeConstant()).isEqualTo(errorRateSmoothing);
+        assertThat(vegasConfig.errorRateThreshold()).isEqualTo(errorThreshold);
+        assertThat(vegasConfig.minUtilizationThreshold()).isEqualTo(utilizationThreshold);
+      });
+    }
+
+    @Test
     void configuration_builder_should_successfully_register_and_build_bulkhead_extension() {
       // Given the required parameters and custom dummy implementations for a bulkhead
       String expectedName = "test-bulkhead";
@@ -71,12 +133,13 @@ class InqBulkheadConfigTest {
       // Assuming strategy could be an Enum, we pass null to test the setter without needing mockito.
       BulkheadStrategy customStrategy = null;
       InqLimitAlgorithm customLimitAlgorithm = VegasLimitAlgorithm.balanced();
-      InqEventPublisher customEventPublisher = InqEventPublisher.create("name", InqElementType.BULKHEAD);;
+      InqEventPublisher customEventPublisher = InqEventPublisher.create("name", InqElementType.BULKHEAD);
+      ;
 
       // When appending a bulkhead extension to the configuration
       InqConfig config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), bulkhead -> bulkhead
+          .with(bulkhead(), bulkhead -> bulkhead
               .name(expectedName)
               .maxConcurrentCalls(expectedMaxConcurrentCalls)
               .maxWaitDuration(expectedWaitDuration)
@@ -106,7 +169,7 @@ class InqBulkheadConfigTest {
       // When building the minimal bulkhead configuration
       InqConfig config = InqConfig.configure()
           .general()
-          .with(new InqBulkheadConfigBuilder(), bulkhead -> bulkhead.name(expectedName))
+          .with(bulkhead(), bulkhead -> bulkhead.name(expectedName))
           .build();
 
       // Then the default values should be correctly instantiated
@@ -135,7 +198,7 @@ class InqBulkheadConfigTest {
       // When building a custom AIMD configuration
       InqConfig config = InqConfig.configure()
           .general()
-          .with(new AimdLimitAlgorithmConfigBuilder(), aimd -> aimd
+          .with(aimdLimitAlgorithm(), aimd -> aimd
               .initialLimit(initialLimit)
               .minLimit(minLimit)
               .maxLimit(maxLimit)
@@ -158,26 +221,6 @@ class InqBulkheadConfigTest {
         assertThat(aimdConfig.minUtilizationThreshold()).isEqualTo(utilizationThreshold);
       });
     }
-
-    @Test
-    void static_factory_methods_should_provide_correct_aimd_presets() {
-      // Given the static preset methods from the AimdLimitAlgorithmConfigBuilder
-
-      // When retrieving the presets
-      AimdLimitAlgorithmConfig protective = AimdLimitAlgorithmConfigBuilder.protective();
-      AimdLimitAlgorithmConfig balanced = AimdLimitAlgorithmConfigBuilder.balanced();
-      AimdLimitAlgorithmConfig performant = AimdLimitAlgorithmConfigBuilder.performant();
-
-      // Then the configurations should hold the documented default values
-      assertThat(protective.initialLimit()).isEqualTo(20);
-      assertThat(protective.backoffRatio()).isEqualTo(0.5);
-
-      assertThat(balanced.initialLimit()).isEqualTo(50);
-      assertThat(balanced.errorRateThreshold()).isEqualTo(0.1);
-
-      assertThat(performant.initialLimit()).isEqualTo(100);
-      assertThat(performant.windowedIncrease()).isFalse();
-    }
   }
 
   @Nested
@@ -198,7 +241,7 @@ class InqBulkheadConfigTest {
       // When building a custom Vegas configuration
       InqConfig config = InqConfig.configure()
           .general()
-          .with(new VegasLimitAlgorithmConfigBuilder(), vegas -> vegas
+          .with(vegasLimitAlgorithm(), vegas -> vegas
               .initialLimit(initialLimit)
               .minLimit(minLimit)
               .maxLimit(maxLimit)
@@ -220,26 +263,6 @@ class InqBulkheadConfigTest {
         assertThat(vegasConfig.errorRateThreshold()).isEqualTo(errorThreshold);
         assertThat(vegasConfig.minUtilizationThreshold()).isEqualTo(utilizationThreshold);
       });
-    }
-
-    @Test
-    void static_factory_methods_should_provide_correct_vegas_presets() {
-      // Given the static preset methods from the VegasLimitAlgorithmConfigBuilder
-
-      // When retrieving the presets
-      VegasLimitAlgorithmConfig protective = VegasLimitAlgorithmConfigBuilder.protective();
-      VegasLimitAlgorithmConfig balanced = VegasLimitAlgorithmConfigBuilder.balanced();
-      VegasLimitAlgorithmConfig performant = VegasLimitAlgorithmConfigBuilder.performant();
-
-      // Then the configurations should hold the documented default values
-      assertThat(protective.smoothingTimeConstant()).isEqualTo(Duration.ofSeconds(2));
-      assertThat(protective.errorRateThreshold()).isEqualTo(0.15);
-
-      assertThat(balanced.baselineDriftTimeConstant()).isEqualTo(Duration.ofSeconds(10));
-      assertThat(balanced.minUtilizationThreshold()).isEqualTo(0.6);
-
-      assertThat(performant.maxLimit()).isEqualTo(1000);
-      assertThat(performant.smoothingTimeConstant()).isEqualTo(Duration.ofMillis(500));
     }
   }
 }

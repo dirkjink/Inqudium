@@ -14,6 +14,32 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
   private boolean windowedIncrease;
   private double minUtilizationThreshold;
 
+
+  AimdLimitAlgorithmConfigBuilder() {
+  }
+
+  AimdLimitAlgorithmConfigBuilder(int initialLimit,
+                                  int minLimit,
+                                  int maxLimit,
+                                  double backoffRatio,
+                                  Duration smoothingTimeConstant,
+                                  double errorRateThreshold,
+                                  boolean windowedIncrease,
+                                  double minUtilizationThreshold) {
+    this.initialLimit = initialLimit;
+    this.minLimit = minLimit;
+    this.maxLimit = maxLimit;
+    this.backoffRatio = backoffRatio;
+    this.smoothingTimeConstant = smoothingTimeConstant;
+    this.errorRateThreshold = errorRateThreshold;
+    this.windowedIncrease = windowedIncrease;
+    this.minUtilizationThreshold = minUtilizationThreshold;
+  }
+
+  public static AimdLimitAlgorithmConfigBuilder aimdLimitAlgorithm() {
+    return new AimdLimitAlgorithmConfigBuilder();
+  }
+
   /**
    * <b>Protective</b> preset — prioritizes stability over throughput.
    *
@@ -45,8 +71,8 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
    *
    * @return a protectively tuned AIMD algorithm
    */
-  public static AimdLimitAlgorithmConfig protective() {
-    return new AimdLimitAlgorithmConfig(
+  public AimdLimitAlgorithmConfigBuilder protective() {
+    return new AimdLimitAlgorithmConfigBuilder(
         20,                       // initialLimit: conservative starting point
         1,                        // minLimit: always allow at least one probe
         200,                      // maxLimit: hard ceiling prevents runaway scaling
@@ -90,8 +116,8 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
    *
    * @return a balanced AIMD algorithm suitable for general production use
    */
-  public static AimdLimitAlgorithmConfig balanced() {
-    return new AimdLimitAlgorithmConfig(
+  public AimdLimitAlgorithmConfigBuilder balanced() {
+    return new AimdLimitAlgorithmConfigBuilder(
         50,                       // initialLimit: moderate starting point
         5,                        // minLimit: keeps a small probe window open
         500,                      // maxLimit: allows significant scaling headroom
@@ -135,8 +161,8 @@ public class AimdLimitAlgorithmConfigBuilder extends ExtensionBuilder<AimdLimitA
    *
    * @return a throughput-optimized AIMD algorithm
    */
-  public static AimdLimitAlgorithmConfig performant() {
-    return new AimdLimitAlgorithmConfig(
+  public AimdLimitAlgorithmConfigBuilder performant() {
+    return new AimdLimitAlgorithmConfigBuilder(
         100,                      // initialLimit: high starting point
         10,                       // minLimit: substantial floor for elastic backends
         1000,                     // maxLimit: generous ceiling

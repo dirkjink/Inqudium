@@ -23,6 +23,12 @@ public class InqBulkheadConfigBuilder extends ExtensionBuilder<InqBulkheadConfig
     this.generalConfig = generalConfig;
   }
 
+  public static InqBulkheadConfigBuilder bulkhead() {
+    return new InqBulkheadConfigBuilder();
+  }
+
+  InqBulkheadConfigBuilder() {}
+
   public InqBulkheadConfigBuilder name(String name) {
     this.name = name;
     return this;

@@ -31,6 +31,12 @@ public record InqConfig(
   }
 
   public interface TopicHub extends Buildable {
+    default <B extends ExtensionBuilder<? extends ConfigExtension>> TopicHub with(
+        B builderInstance
+    ) {
+      return with(builderInstance, c->{});
+    }
+
     <B extends ExtensionBuilder<? extends ConfigExtension>> TopicHub with(
         B builderInstance,
         Consumer<B> customizer

@@ -14,6 +14,31 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
   private double errorRateThreshold;
   private double minUtilizationThreshold;
 
+
+  public static VegasLimitAlgorithmConfigBuilder vegasLimitAlgorithm() {
+    return new VegasLimitAlgorithmConfigBuilder();
+  }
+
+  VegasLimitAlgorithmConfigBuilder() {}
+
+  VegasLimitAlgorithmConfigBuilder(int initialLimit,
+                                          int minLimit,
+                                          int maxLimit,
+                                          Duration smoothingTimeConstant,
+                                          Duration baselineDriftTimeConstant,
+                                          Duration errorRateSmoothingTimeConstant,
+                                          double errorRateThreshold,
+                                          double minUtilizationThreshold) {
+    this.initialLimit = initialLimit;
+    this.minLimit = minLimit;
+    this.maxLimit = maxLimit;
+    this.smoothingTimeConstant = smoothingTimeConstant;
+    this.baselineDriftTimeConstant = baselineDriftTimeConstant;
+    this.errorRateSmoothingTimeConstant = errorRateSmoothingTimeConstant;
+    this.errorRateThreshold = errorRateThreshold;
+    this.minUtilizationThreshold = minUtilizationThreshold;
+  }
+
   /**
    * <b>Protective</b> preset — prioritizes stability over throughput.
    *
@@ -48,8 +73,8 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
    *
    * @return a protectively tuned Vegas algorithm
    */
-  public static VegasLimitAlgorithmConfig protective() {
-    return new VegasLimitAlgorithmConfig(
+  public VegasLimitAlgorithmConfigBuilder protective() {
+    return new VegasLimitAlgorithmConfigBuilder(
         20,                        // initialLimit: conservative starting point
         1,                         // minLimit: always allow at least one probe
         200,                       // maxLimit: hard ceiling prevents runaway scaling
@@ -93,8 +118,8 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
    *
    * @return a balanced Vegas algorithm suitable for general production use
    */
-  public static VegasLimitAlgorithmConfig balanced() {
-    return new VegasLimitAlgorithmConfig(
+  public VegasLimitAlgorithmConfigBuilder balanced() {
+    return new VegasLimitAlgorithmConfigBuilder(
         50,                        // initialLimit: moderate starting point
         5,                         // minLimit: keeps a small probe window open
         500,                       // maxLimit: allows significant scaling headroom
@@ -139,8 +164,8 @@ public class VegasLimitAlgorithmConfigBuilder extends ExtensionBuilder<VegasLimi
    *
    * @return a throughput-optimized Vegas algorithm
    */
-  public static VegasLimitAlgorithmConfig performant() {
-    return new VegasLimitAlgorithmConfig(
+  public VegasLimitAlgorithmConfigBuilder performant() {
+    return new VegasLimitAlgorithmConfigBuilder(
         100,                       // initialLimit: high starting point
         10,                        // minLimit: substantial floor for elastic backends
         1000,                      // maxLimit: generous ceiling
