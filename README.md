@@ -27,9 +27,13 @@
 
 ## What will Inqudium be?
 
-Inqudium will be a fault-tolerance library for Java 21+ and Kotlin that takes a fundamentally different approach: instead of bridging resilience patterns across execution models, every paradigm will get its own **native implementation**.
+Inqudium will be a fault-tolerance library for Java 21+ and Kotlin that
+takes a fundamentally different approach: instead of bridging resilience
+patterns across execution models, every paradigm will get its own **native implementation**.
 
-A Kotlin Circuit Breaker will use `Mutex` — not `ReentrantLock`. A Reactor Retry will wait with `Mono.delay()` — not `LockSupport.parkNanos`. Backpressure won't be bolted on. It will flow from the native `Flow`, `Subscription`, or `Flowable`.
+A Kotlin Circuit Breaker will use `Mutex` — not `ReentrantLock`. A Reactor
+Retry will wait with `Mono.delay()` — not `LockSupport.parkNanos`.
+Backpressure won't be bolted on. It will flow from the native `Flow`, `Subscription`, or `Flowable`.
 
 Configuration, algorithms, and events shared. Execution native. That's the plan.
 
@@ -55,21 +59,15 @@ Configuration, algorithms, and events shared. Execution native. That's the plan.
 | **Rl** | Rate Limiter      | Controls throughput to prevent overloading downstream systems.              |
 | **Bh** | Bulkhead          | Isolates failures by limiting concurrent access to a resource.              |
 | **Tl** | Time Limiter      | Guards against slow responses by enforcing execution time boundaries.       |
-| **Ca** | Cache             | Caches successful results to reduce load and improve response times.        |
+| **Ts** | Traffic Shaper    | Turn a flood into a stream. Keep your services breathing.                   |
 
 ### Planned modules
 
 | Module                       | Artifact ID                      | Status       |
 |------------------------------|----------------------------------|--------------|
-| Core (SPI)                   | `inqudium-core`                  | Not started  |
-| Circuit Breaker (imperative) | `inqudium-circuitbreaker`        | Planned      |
-| Retry (imperative)           | `inqudium-retry`                 | Planned      |
-| Rate Limiter (imperative)    | `inqudium-ratelimiter`           | Planned      |
-| Bulkhead (imperative)        | `inqudium-bulkhead`              | Not started  |
-| Time Limiter (imperative)    | `inqudium-timelimiter`           | Planned      |
-| Cache (imperative)           | `inqudium-cache`                 | Planned      |
+| Core (SPI)                   | `inqudium-core`                  | in progress  |
+| Resilience      (imperative) | `inqudium-imperative`            | in progress  |
 | Kotlin Coroutines (native)   | `inqudium-kotlin`                | Planned      |
-| Project Reactor (native)     | `inqudium-reactor`               | Planned      |
 | RxJava 3 (native)            | `inqudium-rxjava3`               | Planned      |
 | Spring Boot Starter          | `inqudium-spring-boot3`          | Planned      |
 | Micrometer                   | `inqudium-micrometer`            | Planned      |
