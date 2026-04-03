@@ -1,57 +1,71 @@
 # Pipeline Composition
 
-The pipeline composes multiple elements into a single decoration chain with explicit ordering.
+Pipelines compose multiple resilience elements into a single cohesive unit. While you can nest elements manually, the `InqPipeline` API provides named orderings, startup validation, and structural guarantees for context propagation.
 
-## Basic usage
+## Creating a pipeline
+
+The `InqPipeline` builder defines the composition:
 
 ```java
-Supplier<Result> resilient = InqPipeline
-    .of(() -> paymentService.charge(order))
-    .shield(circuitBreakerDecorator)
-    .shield(retryDecorator)
-    .shield(rateLimiterDecorator)
-    .decorate();
-
-Result result = resilient.get();
+var pipeline = InqPipeline.of(circuitBreaker, retry, timeLimiter);
 ```
 
-## Pipeline ordering
+The order of elements in the `of()` method determines the nesting order. The first element is the outermost layer (closest to the caller), and the last element is the innermost layer (closest to the network).
 
-The order of `shield()` calls does not matter — the pipeline sorts elements according to the selected `PipelineOrder`. Two predefined orderings are available:
+## Predefined orderings
 
-**INQUDIUM (default)** — The canonical order. Cache → TimeLimiter → RateLimiter → Bulkhead → CircuitBreaker → Retry. The outer elements fire first.
-
-**RESILIENCE4J** — Compatible with Resilience4J's aspect ordering. Retry → CircuitBreaker → RateLimiter → TimeLimiter → Bulkhead.
+The order in which elements are composed fundamentally changes their behavior. Inqudium provides a named factory method for the recommended composition strategy:
 
 ```java
-InqPipeline.of(supplier)
-    .order(PipelineOrder.RESILIENCE4J) // for migration from R4J
-    .shield(cb).shield(retry).shield(rl)
-    .decorate();
-```
-
-The key difference: in the INQUDIUM order, Retry is innermost (each retry sees a fresh circuit breaker check). In the RESILIENCE4J order, Retry is outermost (retries the entire pipeline).
-
-## Custom ordering
-
-```java
-var order = PipelineOrder.custom(
-    InqElementType.RATE_LIMITER,
-    InqElementType.CIRCUIT_BREAKER,
-    InqElementType.RETRY
+var pipeline = InqPipeline.standard(
+    circuitBreaker,
+    retry,
+    timeLimiter,
+    bulkhead
 );
 ```
 
-## Anti-pattern detection
+This order encodes best practices:
 
-The pipeline emits warnings for known anti-patterns:
+1. **Bulkhead (innermost):** Limits concurrent connections to the target service.
+2. **TimeLimiter:** Bounds the wait time for the call. If it fires, the underlying call becomes an "orphaned" execution holding a bulkhead permit until it finishes.
+3. **Retry:** Re-attempts failures (including timeouts from the TimeLimiter).
+4. **CircuitBreaker (outermost):** Sees every individual attempt and its outcome. Opens quickly if the failure rate spikes, preventing new calls from even reaching the Retry or Bulkhead layers.
 
-- **Retry outside CircuitBreaker** — Retry may attempt to call an open circuit breaker.
-- **TimeLimiter inside Retry** — Each attempt gets a fresh timeout, but total wait is unbounded.
-- **RateLimiter inside Retry** — Each retry consumes a rate limit permit.
+For teams migrating from Resilience4J, a compatible ordering is available:
 
-These are warnings, not errors. Sometimes the "anti-pattern" is intentional.
+```java
+var pipeline = InqPipeline.resilience4jCompatible(
+    bulkhead,
+    timeLimiter,
+    rateLimiter,
+    circuitBreaker,
+    retry
+);
+```
+
+## Executing a pipeline
+
+Once built, execute the pipeline using the paradigm-specific API:
+
+### Imperative
+
+```java
+String result = pipeline.execute(() -> service.call());
+```
+
+### Kotlin Coroutines
+
+```kotlin
+val result = pipeline.executeSuspend { service.call() }
+```
+
+### Reactor
+
+```java
+Mono<String> result = pipeline.executeMono(Mono.defer(() -> service.call()));
+```
 
 ## Call identity
 
-The pipeline generates a unique `callId` (UUID) at each invocation. This ID propagates through all elements via the [context propagation](context-propagation.md) system and appears on every [event](events.md) emitted during the call. Filtering by `callId` reconstructs the complete lifecycle of a single request.
+The pipeline generates a unique `callId` (UUID) at each invocation. This ID propagates through all elements via the [context propagation](context-propagation.md) system and appears on every [event](events.md) emitted during the call when diagnostic events are enabled. Filtering by `callId` reconstructs the complete lifecycle of a single request.

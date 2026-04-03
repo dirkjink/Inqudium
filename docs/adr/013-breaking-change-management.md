@@ -252,7 +252,7 @@ The layers are merged. ServiceLoader flags form the base, and programmatic flags
 
 #### Decision: Strategy B (merge) as default, Strategy A available as opt-in
 
-**Strategy B (merge)** is the default because it matches the most common real-world pattern: an operations team provides organization-wide compatibility defaults via a shared ServiceLoader JAR, and individual services override specific flags where needed. Losing all ServiceLoader flags because one element sets one flag programmatically is a pit of failure.
+**Strategy B (merge)** is default because it matches the most common real-world pattern: an operations team provides organization-wide compatibility defaults via a shared ServiceLoader JAR, and individual services override specific flags where needed. Losing all ServiceLoader flags because one element sets one flag programmatically is a pit of failure.
 
 Strategy A is available as an explicit opt-in for elements that need full control:
 
@@ -418,7 +418,7 @@ Inqudium's `InqFlag` is **not** a feature toggle system:
 
 ### Relationship to event system (ADR-003)
 
-When a flag changes behavior, the affected element emits a one-time `InqCompatibilityEvent` at creation time:
+When a flag changes behavior, the affected element emits a one-time `InqCompatibilityEvent` at creation time when diagnostic events are enabled:
 
 ```java
 public class InqCompatibilityEvent extends InqEvent {

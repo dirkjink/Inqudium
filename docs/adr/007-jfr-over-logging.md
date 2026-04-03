@@ -40,7 +40,7 @@ Events extend `jdk.jfr.Event` and use `@Threshold("0 ms")` for events that shoul
 
 ### Binding mechanism
 
-JFR events are emitted by binder classes that subscribe to `InqEventPublisher` (ADR-003). The binder translates `InqEvent` instances to JFR events:
+JFR events are emitted by binder classes that subscribe to `InqEventPublisher` (ADR-003) when diagnostic events are enabled. The binder translates `InqEvent` instances to JFR events:
 
 ```java
 InqJfrRegistry.bindTo(circuitBreaker, retry, rateLimiter);
@@ -63,7 +63,7 @@ This is opt-in. If `inqudium-jfr` is not on the classpath, no JFR events are emi
 
 JFR events are **not** the primary event system of Inqudium — `InqEventPublisher` (ADR-003) is. The two type hierarchies are fully independent:
 
-- `InqEvent` (ADR-003) — lightweight POJOs in `inqudium-core`, always emitted, zero external dependencies.
+- `InqEvent` (ADR-003) — lightweight POJOs in `inqudium-core`, emitted when the corresponding event category is enabled, zero external dependencies.
 - `jdk.jfr.Event` subclasses (this ADR) — JFR-annotated classes in `inqudium-jfr`, only instantiated when the module is on the classpath.
 
 `InqEvent` does **not** extend `jdk.jfr.Event`. Merging them would force JFR's class lifecycle (`begin()`/`end()`/`commit()`, `@Name`/`@Label` annotations) onto `inqudium-core` — coupling the core event model to a specific observability backend.

@@ -1,20 +1,20 @@
 # ADR-022: Call identity propagation
 
 **Status:** Accepted  
-**Date:** 2026-03-29  
+**Date:** 2026-03-31
 **Deciders:** Core team  
 **Supersedes:** Initial ThreadLocal-based InqCallContext (removed)
 
 ## Context
 
-Every call through an Inqudium pipeline passes through multiple resilience elements — a Circuit Breaker, a Retry, a Rate Limiter, a Bulkhead, a Time Limiter — in sequence. For observability (ADR-003), all events emitted during a single call must share the same `callId`. This is the foundation of end-to-end correlation: filtering by `callId` in Kibana, Grafana, or JFR reconstructs the complete lifecycle of one request across all elements.
+Every call through an Inqudium pipeline passes through multiple resilience elements — a Circuit Breaker, a Retry, a Rate Limiter, a Bulkhead, a Time Limiter — in sequence. For observability (ADR-003), all events emitted during a single call when diagnostic events are enabled must share the same `callId`. This is the foundation of end-to-end correlation: filtering by `callId` in Kibana, Grafana, or JFR reconstructs the complete lifecycle of one request across all elements.
 
 ### The problem
 
 In the initial implementation, each element generated its own `callId` independently via `UUID.randomUUID().toString()`. When three elements were composed in a pipeline, three different `callId` values appeared on the events:
 
 ```
-Pipeline invocation:
+Pipeline.execute()
   CircuitBreaker generates callId "aaa-111" → emits CB events with "aaa-111"
     Retry generates callId "bbb-222"        → emits Retry events with "bbb-222"
       RateLimiter generates callId "ccc-333" → emits RL events with "ccc-333"
@@ -26,234 +26,219 @@ The `callId` correlation — the core promise of ADR-003 — was broken. There w
 
 1. **Shared identity in pipelines:** All elements in a pipeline must use the same `callId` for a given invocation.
 2. **Independent identity standalone:** When an element is used outside a pipeline, it generates its own `callId`. No pipeline context is required for standalone usage.
-3. **Paradigm-agnostic:** The solution must work identically for imperative Java, Kotlin Coroutines, Project Reactor, and RxJava 3. It must not rely on thread affinity.
+3. **Cross-paradigm:** The solution must work for imperative `Supplier`, Kotlin `suspend () -> T`, Project Reactor `Mono/Flux`, and RxJava `Single/Flowable`.
 4. **Testable:** The `callId` must be predictable in tests — no random UUIDs that make event assertions fragile.
-5. **Extensible:** The propagation mechanism should be able to carry additional context in the future (deadline, priority, trace context) without a redesign.
 
-## Alternatives considered
+### Rejected solution: ThreadLocal context
 
-### Alternative A: ThreadLocal-based InqCallContext
-
-The pipeline sets a `callId` on a `ThreadLocal` before invoking the decoration chain. Each element reads from the `ThreadLocal` instead of generating its own ID:
+The obvious Java solution is a `ThreadLocal<String> callIdContext`. The pipeline generates the ID, sets it in the ThreadLocal, and each element reads it:
 
 ```java
-// Pipeline:
-try (var scope = InqCallContext.activate(callId)) {
-    return decoratedChain.get();
-}
-
-// Element:
-var callId = InqCallContext.currentOrGenerate(config.getCallIdGenerator());
-```
-
-**Advantages:**
-- Simple implementation. No API changes needed — elements read from a global context.
-- The public API (`cb.decorateSupplier(supplier)`) remains unchanged.
-- Nesting is supported via save/restore of previous value.
-
-**Disadvantages:**
-- **Reactive paradigms are broken.** In Project Reactor, execution hops between scheduler threads (`boundedElastic`, `parallel`, `single`). A `ThreadLocal` set on thread A is invisible on thread B. The context propagation SPI (ADR-011) can bridge this, but it means adding a workaround for a problem the architecture created.
-- **Hidden state.** The `callId` is not visible in the method signature. A developer reading `element.decorateSupplier(supplier)` has no indication that a `ThreadLocal` is being read. Debugging requires knowledge of the context mechanism.
-- **Not extensible.** Adding more context (deadline, priority) means adding more `ThreadLocal` fields — each with its own save/restore lifecycle and the same reactive-incompatibility problem.
-- **Virtual thread proliferation.** With Java 21+ virtual threads, the number of threads in an application is effectively unbounded. ThreadLocals consume memory per thread. While the single `String callId` is small, the pattern does not scale if more context is added later.
-
-### Alternative B: Explicit parameter through the chain
-
-The `InqDecorator` interface receives the `callId` as an explicit parameter:
-
-```java
-public interface InqDecorator {
-    <T> Supplier<T> decorate(Supplier<T> supplier, String callId);
+// Anti-pattern
+InqCallContext.setCallId(UUID.randomUUID().toString());
+try {
+    return circuitBreaker.decorateSupplier(
+        () -> retry.decorateSupplier(service::call).get()
+    ).get();
+} finally {
+    InqCallContext.clear();
 }
 ```
 
-The pipeline generates the `callId` and passes it through. Each element reads it from the parameter.
-
-**Advantages:**
-- Fully transparent — the `callId` is visible in every method signature.
-- No hidden state, no threading concerns, works in all paradigms.
-- Testable: pass a known `callId` and assert on events.
-
-**Disadvantages:**
-- **Dual API surface.** The public API (`cb.decorateSupplier(supplier)`) does not carry a `callId`. The pipeline-internal API needs an additional parameter. This creates two decoration methods per element — one for standalone (generates own ID), one for pipeline (receives ID). The distinction is an implementation detail that leaks into the API.
-- **Not extensible.** Adding more context means adding more parameters: `decorate(supplier, callId, deadline, priority)`. The method signature grows with every new context field. Alternatively, a context object could bundle them — which is essentially Alternative D.
-- **Stringly typed.** The `callId` is a bare `String`. There is no type-safe distinction between "a callId that came from a pipeline" and "a callId that an element generated itself."
-
-### Alternative C: ScopedValue (Java 21+ Preview)
-
-Java 21 introduced `ScopedValue` as a modern alternative to `ThreadLocal`, designed for structured concurrency:
-
-```java
-private static final ScopedValue<String> CALL_ID = ScopedValue.newInstance();
-
-// Pipeline:
-ScopedValue.runWhere(CALL_ID, callId, () -> decoratedChain.get());
-
-// Element:
-var callId = CALL_ID.isBound() ? CALL_ID.get() : generator.generate();
-```
-
-**Advantages:**
-- No manual cleanup — scope-bound, automatically restored.
-- Inherits into `StructuredTaskScope` child tasks — designed for structured concurrency.
-- Faster than `ThreadLocal` (immutable after binding, no hash lookup).
-
-**Disadvantages:**
-- **Preview feature.** `ScopedValue` is a preview API in Java 21–24, finalized in Java 25. Using a preview feature in the core of a library means requiring `--enable-preview` for all consumers — unacceptable for a library that targets production use on Java 21+.
-- **Same reactive incompatibility as ThreadLocal.** `ScopedValue` is thread-bound. Reactor's `publishOn` and `subscribeOn` switch threads — the scoped value is not visible on the new thread. The same context propagation workaround (ADR-011) would be needed.
-- **Not extensible in the same way.** Adding more context means adding more `ScopedValue` declarations. The pattern is cleaner than `ThreadLocal` but fundamentally has the same single-field-per-declaration limitation.
-
-### Alternative D: Context-carrying wrapper object (InqCall) ✅ Selected
-
-Instead of propagating the `callId` through hidden state or extra parameters, the call itself carries its context. The `Supplier<T>` that flows through the decoration chain is replaced by an `InqCall<T>` record that bundles the `callId` with the supplier:
-
-```java
-public record InqCall<T>(String callId, Supplier<T> supplier) {
-    public InqCall<T> withSupplier(Supplier<T> newSupplier) {
-        return new InqCall<>(this.callId, newSupplier);
-    }
-    public T execute() {
-        return supplier.get();
-    }
-}
-```
-
-The `InqDecorator` interface operates on `InqCall` instead of `Supplier`:
-
-```java
-public interface InqDecorator extends InqElement {
-    <T> InqCall<T> decorate(InqCall<T> call);
-}
-```
-
-**Advantages:**
-- **No hidden state.** The `callId` is a field on the object flowing through the chain. Every decorator reads `call.callId()` — the source of the identity is visible and traceable.
-- **Paradigm-agnostic.** The `InqCall` is a value object. It does not depend on thread identity, ThreadLocal, ScopedValue, or any execution model. It works identically in imperative, reactive, and coroutine contexts.
-- **Extensible.** The `InqCall` record can grow to include additional context fields (deadline, priority, trace context, baggage) in future versions. All decorators automatically have access to the new fields without signature changes.
-- **Testable.** Create an `InqCall` with a known `callId` and pass it to any decorator — assert on the events it emits. No setup, no ThreadLocal initialization, no cleanup.
-- **Type-safe.** The `InqCall` is a distinct type. A method that accepts `InqCall` is unambiguously a pipeline-aware method. A method that accepts `Supplier` is a standalone entry point. The distinction is part of the type system, not a convention.
-
-**Disadvantages:**
-- **API surface change.** The `InqDecorator` interface uses `InqCall<T>` instead of `Supplier<T>`. Element interfaces must provide both `decorateSupplier(Supplier)` for standalone use and `decorate(InqCall)` for pipeline use. This is two methods instead of one — but the distinction is meaningful (standalone vs. pipeline) and not arbitrary.
-- **Record overhead.** Each decoration step creates a new `InqCall` instance via `withSupplier()`. This is one object allocation per element per call. In practice, this is negligible compared to the cost of the actual downstream call, and the JVM's escape analysis may eliminate the allocation entirely.
+**Why we rejected it:**
+- **Paradigm hostility.** ThreadLocal fails immediately in reactive streams and coroutines. Bridging ThreadLocal into `ContextView` (Reactor) or `CoroutineContext` (Kotlin) at every layer is complex, expensive, and fragile.
+- **Async disconnect.** If a Retry element schedules its next attempt on a different thread, the ThreadLocal is lost unless explicitly captured and restored.
+- **Hidden coupling.** The elements implicitly depend on state outside their method signatures.
 
 ## Decision
 
-**Use Alternative D: `InqCall` as a context-carrying wrapper.**
+We introduce an explicit **call record** that travels through the decoration chain. Instead of decorators taking a `Supplier<T>` and returning a `Supplier<T>`, they take an `InqCall<T>` and return an `InqCall<T>`.
 
-The `InqCall<T>` record carries the `callId` (and future context) through the decoration chain as part of the data flow. No ThreadLocal, no ScopedValue, no extra parameters.
-
-### Type hierarchy
-
-```
-InqElement (getName, getElementType, getEventPublisher)
-  └── InqDecorator (+ decorate(InqCall<T>))
-        ├── CircuitBreaker
-        ├── Retry
-        ├── RateLimiter
-        ├── Bulkhead
-        └── TimeLimiter
-```
-
-Every element interface extends `InqDecorator`, which extends `InqElement`. This means every element is automatically usable in `InqPipeline.shield()` without an adapter.
-
-### InqCall record
+### The `InqCall` abstraction
 
 ```java
-public record InqCall<T>(String callId, Supplier<T> supplier) {
-
-    public InqCall<T> withSupplier(Supplier<T> newSupplier) {
-        return new InqCall<>(this.callId, newSupplier);
+/**
+ * Represents a single execution passing through a resilience pipeline.
+ * Carries the operation to execute and the context of the execution.
+ */
+public record InqCall<T>(
+    String callId,
+    Supplier<T> supplier
+    // Future expansion: deadline, caller priority, etc.
+) {
+    /**
+     * Creates a new call with a generated UUID.
+     * Used by elements when operating standalone.
+     */
+    public static <T> InqCall<T> of(Supplier<T> supplier) {
+        return new InqCall<>(InqCallIdGenerator.generate(), supplier);
     }
 
-    public T execute() {
-        return supplier.get();
+    /**
+     * Creates a call with a specific ID.
+     * Used by pipelines and tests.
+     */
+    public static <T> InqCall<T> of(String callId, Supplier<T> supplier) {
+        return new InqCall<>(callId, supplier);
     }
 }
 ```
 
-`withSupplier()` is the key method: it creates a new `InqCall` with the same `callId` but a different supplier. This is how decorators wrap the call:
+The functional decoration API (ADR-002) changes from:
 
 ```java
-// Inside a CircuitBreaker decorator:
+// Old (implicit)
+Supplier<T> decorateSupplier(Supplier<T> supplier);
+```
+
+To:
+
+```java
+// New (explicit)
+InqCall<T> decorateCall(InqCall<T> call);
+
+// Convenience overloads (delegates to decorateCall)
+default Supplier<T> decorateSupplier(Supplier<T> supplier) {
+    return decorateCall(InqCall.of(supplier)).supplier();
+}
+```
+
+### How elements use `InqCall`
+
+When a Circuit Breaker decorates a call, it reads the `callId` from the input, uses it for observability, and returns a new `InqCall` containing the same `callId` and the wrapped supplier:
+
+```java
 @Override
-public <T> InqCall<T> decorate(InqCall<T> call) {
-    return call.withSupplier(() -> {
-        acquirePermission(call.callId());
-        var start = clock.instant();
-        try {
-            T result = call.supplier().get();
-            onSuccess(call.callId(), start);
-            return result;
-        } catch (Exception e) {
-            onError(call.callId(), start, e);
-            throw e;
+public <T> InqCall<T> decorateCall(InqCall<T> call) {
+    Supplier<T> wrapped = () -> {
+        // Use call.callId() for events/MDC
+        var context = InqContextPropagation.activateFor(call.callId(), ...);
+        try (context) {
+            // ... state machine logic ...
+            return call.supplier().get();
         }
-    });
-}
-```
-
-### Pipeline flow
-
-The pipeline generates one `callId`, wraps the original supplier in an `InqCall`, and passes it through all decorators in order:
-
-```java
-return () -> {
-    var callId = callIdGenerator.generate();
-    InqCall<T> call = InqCall.of(callId, originalSupplier);
-
-    // Each decorator wraps the call, preserving the callId
-    for (int i = chain.size() - 1; i >= 0; i--) {
-        call = chain.get(i).decorate(call);
-    }
-
-    return call.execute();
-};
-```
-
-All elements in the chain read `call.callId()` — the same value, from the same source, without any hidden state.
-
-### Standalone usage
-
-When an element is used outside a pipeline, the public API creates an `InqCall` internally:
-
-```java
-// CircuitBreaker.decorateSupplier — standalone entry point
-@Override
-public <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
-    return () -> {
-        var call = InqCall.of(config.getCallIdGenerator().generate(), supplier);
-        return executeCall(call);
     };
+    return new InqCall<>(call.callId(), wrapped);
 }
 ```
 
-The `callId` is generated fresh for each standalone invocation. The internal logic is identical — `executeCall(InqCall)` does not know or care whether the call came from a pipeline or from standalone usage.
+### How pipelines use `InqCall`
 
-### InqCallIdGenerator
-
-The `callId` is generated by `InqCallIdGenerator` — a `@FunctionalInterface` on every config, analogous to `InqClock` for time:
+The `InqPipeline` generates the `callId` once and pushes it through the chain:
 
 ```java
-@FunctionalInterface
-public interface InqCallIdGenerator {
-    String generate();
-    static InqCallIdGenerator uuid() { return () -> UUID.randomUUID().toString(); }
+// Inside InqPipeline.execute(Supplier<T>)
+String sharedCallId = InqCallIdGenerator.generate();
+
+InqCall<T> call = InqCall.of(sharedCallId, originalSupplier);
+
+for (InqDecorator decorator : decorators) {
+    call = decorator.decorateCall(call);
+}
+
+return call.supplier().get();
+```
+
+Because every decorator preserves the `callId` it receives, the entire chain operates on `sharedCallId`.
+
+### Paradigm translations
+
+The imperative `InqCall<T>` maps cleanly to reactive and coroutine paradigms:
+
+**Kotlin Coroutines:**
+```kotlin
+data class InqSuspendCall<T>(
+    val callId: String,
+    val action: suspend () -> T
+)
+
+fun <T> decorateSuspendCall(call: InqSuspendCall<T>): InqSuspendCall<T>
+```
+
+**Project Reactor:**
+In Reactor, the `callId` does not wrap the `Mono` — it travels *inside* the Reactive Context, which is the native propagation mechanism. The pipeline writes it once:
+
+```java
+// Reactor pipeline
+Mono<T> decorated = mono;
+for (ReactorDecorator decorator : decorators) {
+    decorated = decorator.decorateMono(decorated);
+}
+return decorated.contextWrite(ctx -> ctx.put(CALL_ID_KEY, sharedCallId));
+```
+
+Elements read it during subscription:
+
+```java
+// Reactor element
+return mono.deferContextual(ctx -> {
+    String callId = ctx.getOrDefault(CALL_ID_KEY, InqCallIdGenerator.generate());
+    // ... use callId ...
+});
+```
+
+### The `InqDecorator` interface
+
+To support pipeline composition without reflection or excessive type bounds, all imperative decorators implement a common interface:
+
+```java
+public interface InqDecorator extends InqElement {
+    <T> InqCall<T> decorateCall(InqCall<T> call);
+
+    // Default convenience method for standalone usage
+    default <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
+        return decorateCall(InqCall.of(supplier)).supplier();
+    }
 }
 ```
 
-Override for deterministic tests, trace ID integration (reuse OpenTelemetry `traceId` as `callId`), or custom formats (ULID, Snowflake).
+This unifies `CircuitBreaker`, `Retry`, `RateLimiter`, and `Bulkhead` under a single composable type. (`TimeLimiter` is an exception, as it requires `CompletionStage` semantics, see ADR-010. The pipeline handles this special case.)
 
-### Future extensibility
+## CallId Generator
 
-The `InqCall` record is designed to grow. When deadline propagation is needed:
+The default ID generator (`InqCallIdGenerator`) provides UUID strings. However, if the application already has a correlation ID (e.g., an OpenTelemetry Trace ID or a custom request ID), generating a new UUID is wasteful and breaks correlation.
+
+The pipeline configuration accepts an optional `CallIdSupplier`:
+
+```java
+var pipeline = InqPipeline.builder()
+    .decorators(circuitBreaker, retry)
+    .callIdSupplier(() -> MDC.get("request-id")) // Use existing ID
+    .build();
+```
+
+If the supplier returns null, or if no supplier is configured, `InqCallIdGenerator` falls back to UUID generation.
+
+## Testability
+
+The explicit `InqCall` dramatically improves testability. To test an element's event emission with a known `callId`:
+
+```java
+var cb = CircuitBreaker.ofDefaults("test");
+var call = InqCall.of("fixed-id-123", () -> "success");
+
+cb.decorateCall(call).supplier().get();
+
+assertThat(events).hasSize(1);
+assertThat(events.get(0).getCallId()).isEqualTo("fixed-id-123");
+```
+
+No thread-local setup, no mock static generators. Just pure data in, data out.
+
+## Why not `InqRequest`?
+
+The name `InqCall` was chosen over `InqRequest` to avoid confusion with HTTP requests. A resilience element protects a *method call* (which might be an HTTP request, a database query, or a local computation).
+
+## Extensibility
+
+The `InqCall` record is a natural carrier for other execution-scoped metadata that elements might need in the future. For example, if we introduce a `Deadline` concept (where the timeout shrinks as the call passes through the pipeline), `InqCall` can carry it:
 
 ```java
 public record InqCall<T>(
     String callId,
     Supplier<T> supplier,
-    Instant deadline       // new field — all decorators see it automatically
-) { ... }
+    Instant deadline  // added in future version
+)
 ```
 
 All existing decorators continue to work — they read `call.callId()` and `call.supplier()` as before. New decorators can additionally read `call.deadline()`. No signature changes, no ThreadLocal additions, no migration.
@@ -268,9 +253,8 @@ All existing decorators continue to work — they read `call.callId()` and `call
 - The type hierarchy (`InqDecorator extends InqElement`) means elements are directly usable in pipelines — no wrapper or adapter needed.
 
 **Negative:**
-- Two decoration methods per element: `decorateSupplier(Supplier)` for standalone, `decorate(InqCall)` for pipeline. This is intentional — the distinction is meaningful and part of the API contract — but it increases the interface surface.
-- One extra object allocation per decoration step (`InqCall.withSupplier()`). Negligible in practice.
+- Adds a small object allocation (`InqCall`) per decorator layer in imperative pipelines. JMH benchmarks show this is negligible (short-lived objects, escape-analyzed by C2), but it is non-zero.
+- The `decorateSupplier` API is now a default interface method rather than the core abstraction. Authors of custom elements must implement `decorateCall`.
 
 **Neutral:**
 - The `InqCall` record is a core type that all paradigm modules will use. It must be stable — field additions are additive (new fields with defaults), field removals are breaking changes. This is the same stability contract as `InqEvent` and `InqConfig`.
-- The `ThreadLocal` alternative was implemented and removed. The removal is a breaking change for anyone who depended on `InqCallContext` — but it was never released, so no external migration is needed.

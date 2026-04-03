@@ -1,186 +1,205 @@
 # ADR-015: Registry pattern
 
 **Status:** Accepted  
-**Date:** 2026-03-23  
+**Date:** 2026-03-24
 **Deciders:** Core team
 
 ## Context
 
-Resilience elements are named instances — "paymentService", "orderService", "inventoryCheck". The same Circuit Breaker instance must be shared across all code paths that protect the same downstream service. If each call site creates its own instance, the sliding window is fragmented, the failure rate is diluted, and the breaker never opens.
+Resilience elements have state (the Circuit Breaker's sliding window, the Rate Limiter's token bucket). Applications invoke the same element repeatedly to benefit from this state. If an application creates a new Circuit Breaker instance for every call, it effectively creates a sliding window of size 1 — the breaker will never open.
 
-The Registry is the mechanism that ensures: one name → one instance → one shared state.
+Elements must therefore be cached and retrieved. There are two common approaches:
 
-### What the registry must do
+**Approach A: Application-managed injection (Spring Beans)**
 
-1. **Store** named element instances with their configurations.
-2. **Retrieve** instances by name — always returning the same instance for the same name.
-3. **Create on demand** — optionally create an instance with a default configuration when a name is requested that doesn't exist yet.
-4. **Integrate with Spring Boot** — the auto-configuration creates instances from YAML properties and registers them; the `@InqShield` annotation resolves instances by name from the registry.
-5. **Support the R4J compatibility layer** — ADR-006 requires wrapping `InqRegistry` with Resilience4J's `CircuitBreakerRegistry` API.
+The application creates element instances via Spring `@Bean` definitions and injects them where needed:
 
-### Design questions
+```java
+@Bean
+public CircuitBreaker paymentBreaker() {
+    return CircuitBreaker.of("paymentService", config);
+}
 
-**Thread safety.** Multiple threads may request the same name concurrently — the first request creates the instance, subsequent requests must return the same one. The classic double-checked locking problem.
+@Service
+public class PaymentService {
+    @Autowired
+    public PaymentService(CircuitBreaker paymentBreaker) { ... }
+}
+```
 
-**Name collision.** What happens when code registers an instance under a name that already exists? This can happen legitimately (Spring auto-config creates from YAML, then application code creates programmatically with the same name) or accidentally (typo, copy-paste).
+This works well in dependency-injection environments but requires significant boilerplate, especially when dealing with dozens of backend services. It also requires the element to be created before it is first needed, even if it is never called.
 
-**Default configurations.** In Spring Boot, YAML properties define configurations per instance name. But code may request an instance name that has no YAML entry. Should the registry create it with a global default, refuse, or throw?
+**Approach B: Registry pattern (Resilience4J style)**
 
-**Scoping.** Is there one global registry per element type, or can registries be scoped (e.g., per tenant in a multi-tenant application)?
+The application creates a registry, configures default templates, and asks the registry for an element by name at the point of use:
+
+```java
+public class PaymentService {
+    private final CircuitBreaker cb;
+
+    public PaymentService(CircuitBreakerRegistry registry) {
+        this.cb = registry.circuitBreaker("paymentService"); // creates or returns existing
+    }
+}
+```
+
+This approach lazy-loads elements, reduces boilerplate, allows programmatic configuration on the fly, and works perfectly in environments without dependency injection (e.g., pure Java applications or Spark/Hadoop jobs).
 
 ## Decision
 
-### One registry per element type
+We adopt the **Registry pattern** as the primary mechanism for managing element instances.
 
-Each element type has its own registry:
+Each element type has its own registry: `CircuitBreakerRegistry`, `RetryRegistry`, `RateLimiterRegistry`, `BulkheadRegistry`, `TimeLimiterRegistry`.
 
-```java
-CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
-RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
-RateLimiterRegistry rateLimiterRegistry = RateLimiterRegistry.ofDefaults();
-// etc.
-```
+### Core responsibilities of a Registry
 
-Registries are **not** global singletons. The application creates and owns them. In Spring Boot, the auto-configuration creates one registry per element type and makes it a bean. In non-Spring applications, the developer creates registries explicitly.
+A registry exists to do four things:
 
-### Thread-safe via `ConcurrentHashMap.computeIfAbsent`
+1. **Store** instances of a specific element type.
+2. **Retrieve** instances by name — always returning the same instance for the same name.
+3. **Create** instances lazily on first request if they don't exist.
+4. **Manage configurations** (templates) used to create those instances.
 
-The registry uses `ConcurrentHashMap<String, T>` internally. Instance retrieval uses `computeIfAbsent`, which guarantees:
+### The `InqRegistry` interface
 
-- If the name exists, the existing instance is returned.
-- If the name does not exist, the creation function runs exactly once, even under concurrent access.
-- No explicit locking needed — `ConcurrentHashMap` handles it.
+All registries share a common contract defined in `inqudium-core`:
 
 ```java
-public class CircuitBreakerRegistry {
-    private final ConcurrentHashMap<String, CircuitBreaker> instances = new ConcurrentHashMap<>();
-    private final CircuitBreakerConfig defaultConfig;
+public interface InqRegistry<E extends InqElement, C> {
 
-    public CircuitBreaker circuitBreaker(String name) {
-        return instances.computeIfAbsent(name,
-            n -> CircuitBreaker.of(n, defaultConfig));
-    }
+    /**
+     * Returns an existing element or creates a new one using the default config.
+     */
+    E get(String name);
 
-    public CircuitBreaker circuitBreaker(String name, CircuitBreakerConfig config) {
-        return instances.computeIfAbsent(name,
-            n -> CircuitBreaker.of(n, config));
-    }
+    /**
+     * Returns an existing element or creates a new one using the specified config.
+     * If the element already exists, the provided config is ignored.
+     */
+    E get(String name, C config);
+
+    /**
+     * Returns an existing element or creates a new one using a named configuration template.
+     * Throws an exception if the template does not exist.
+     */
+    E get(String name, String configName);
+
+    /**
+     * Registers a configuration template.
+     */
+    void addConfiguration(String configName, C config);
+
+    /**
+     * Returns the default configuration.
+     */
+    C getDefaultConfig();
+
+    /**
+     * Removes an element. Its internal state is discarded.
+     * Returns true if it existed.
+     */
+    boolean remove(String name);
+
+    /**
+     * Removes all elements and templates.
+     */
+    void clear();
 }
 ```
 
-**Why not `ReentrantLock`?** ADR-008 mandates `ReentrantLock` over `synchronized` for element internals (state machines, where virtual threads may block while holding the lock). The registry is different — `computeIfAbsent` on `ConcurrentHashMap` is non-blocking for the common case (name exists, return cached instance). The creation function runs at most once per name and is brief (no I/O, no blocking). `ReentrantLock` would add complexity without benefit here.
+Type-specific registries (e.g. `CircuitBreakerRegistry`) extend this interface and provide type-specific convenience methods (`circuitBreaker(...)` delegating to `get(...)`) to avoid casting.
 
-### Name collision: first registration wins
+### Thread safety and concurrency
 
-If `circuitBreaker("paymentService", configA)` is called and "paymentService" already exists (created with `configB`), the **existing instance is returned unchanged**. The new configuration is ignored.
+The registry is backed by a `ConcurrentHashMap`. The `get()` methods use `computeIfAbsent()` to guarantee atomic creation:
 
-This is the `computeIfAbsent` semantic — "if absent, compute; if present, return existing." It is intentionally not `computeIfPresent` or `put` (which would overwrite).
+```java
+public E get(String name, C config) {
+    return elements.computeIfAbsent(name, k -> factory.create(k, config));
+}
+```
 
-**Rationale:**
-- **Predictability.** The instance returned for a name is always the same object with the same configuration, regardless of call order.
+This guarantees that two threads calling `circuitBreaker("serviceA")` simultaneously will receive the exact same object reference. The factory function is executed at most once per key.
+
+### First-registration-wins semantics
+
+If an element named "paymentService" already exists, and code calls `circuitBreaker("paymentService", differentConfig)`, what happens?
+
+The registry uses **first-registration-wins**. The existing element is returned, and the `differentConfig` is ignored. The element's behavior is determined entirely by the configuration it was originally created with.
+
+**Why?**
 - **Safety.** Overwriting would change the configuration of an instance that may already be in use by other threads — a recipe for subtle concurrency bugs.
 - **Spring Boot compatibility.** YAML-configured instances are created at startup. If application code later calls `circuitBreaker("paymentService", differentConfig)`, the YAML configuration takes precedence (it was registered first). This matches Spring's "external configuration wins" principle.
 
-When a collision occurs and the provided configuration differs from the existing instance's configuration, the registry emits a **warning event** through `InqEventPublisher`:
+When a collision occurs and the provided configuration differs from the existing instance's configuration, the registry emits a **warning event** through `InqEventPublisher` when diagnostic events are enabled:
 
 ```
-[Inqudium] Registry warning: CircuitBreaker 'paymentService' already exists with 
-failureRateThreshold=50. Ignoring new registration with failureRateThreshold=60. 
-The existing instance is returned.
+[Inqudium] Registry warning: CircuitBreaker 'paymentService' already exists with
+different configuration. The new configuration has been ignored.
 ```
 
-### Explicit registration for pre-configuration
+This makes configuration bugs visible without failing the application at runtime.
 
-For cases where the creation order matters — e.g., registering instances with specific configurations before any call site accesses them:
+### Configuration templates
+
+Registries manage templates — named configurations that act as blueprints:
 
 ```java
-var registry = CircuitBreakerRegistry.of(defaultConfig);
+var registry = CircuitBreakerRegistry.ofDefaults();
 
-// Pre-register with specific configs
-registry.register("paymentService", CircuitBreakerConfig.builder()
-    .failureRateThreshold(50)
-    .build());
-
-registry.register("orderService", CircuitBreakerConfig.builder()
-    .failureRateThreshold(30)
-    .build());
-
-// Later, at any call site:
-var cb = registry.circuitBreaker("paymentService"); // returns pre-registered instance
-var cb2 = registry.circuitBreaker("unknownService"); // created with defaultConfig
-```
-
-`register()` uses the same `computeIfAbsent` semantic — it does not overwrite existing instances.
-
-### Default configuration
-
-Every registry is created with a **default configuration** that applies to instances created on demand (names not explicitly pre-registered):
-
-```java
-// Global default
-var registry = CircuitBreakerRegistry.ofDefaults(); // uses CircuitBreakerConfig.ofDefaults()
-
-// Custom default
-var registry = CircuitBreakerRegistry.of(CircuitBreakerConfig.builder()
+// Register a blueprint for all backend services
+registry.addConfiguration("backend", CircuitBreakerConfig.builder()
     .failureRateThreshold(60)
-    .slidingWindowSize(20)
     .build());
+
+// Create instances using the blueprint
+var userCb = registry.circuitBreaker("userService", "backend");
+var orderCb = registry.circuitBreaker("orderService", "backend");
 ```
 
-When `circuitBreaker("unknownName")` is called and "unknownName" is not pre-registered, the instance is created with the registry's default configuration.
+This centralizes configuration tuning. If the "backend" failure rate threshold needs to be adjusted, it is changed in one place.
 
-There is no "refuse unknown names" mode. If an application wants strict control over which names are allowed, it should pre-register all expected names and use a custom wrapper that rejects unknown names.
+### Paradigm abstraction
 
-### Enumeration and inspection
+The core registry implementation (`DefaultInqRegistry`) operates on `InqElement`. But users interact with paradigm-specific APIs:
 
-The registry supports querying its contents:
+- `inqudium-circuitbreaker` provides `CircuitBreakerRegistry` (imperative)
+- `inqudium-kotlin` provides `CoroutineCircuitBreakerRegistry`
+- `inqudium-reactor` provides `ReactorCircuitBreakerRegistry`
 
-```java
-registry.getAllNames();                    // Set<String>
-registry.find("paymentService");           // Optional<CircuitBreaker>
-registry.getAll();                         // Map<String, CircuitBreaker> (unmodifiable)
-registry.getDefaultConfig();               // CircuitBreakerConfig
-```
+All paradigm registries delegate to the same underlying `DefaultInqRegistry` logic, but they are parameterized with their paradigm's specific element interface and factory function.
 
-These methods are useful for actuator endpoints (ADR-006: `/actuator/inqudium`), monitoring dashboards, and testing.
+### No global singleton registry
 
-### Scoping
+Inqudium does **not** provide a global `CircuitBreakerRegistry.getInstance()`.
 
-Registries are **not** globally scoped by design. The application controls how many registries exist and where they are used. For multi-tenant applications, a `Map<TenantId, CircuitBreakerRegistry>` is a simple and explicit pattern — no framework magic needed.
+Applications create their own registry instances. In Spring Boot, the starter creates a single registry bean and injects it. In plain Java, the developer calls `CircuitBreakerRegistry.ofDefaults()` and stores the reference.
 
-### Registry in `inqudium-core`
+**Why?** Global singletons cause state leakage between test executions, making parallel testing impossible without complex `tearDown()` cleanup blocks. By forcing explicit registry creation, tests naturally isolate state.
 
-The base registry contract lives in core as part of the shared contracts (ADR-005):
+### Integration with events (ADR-003)
 
-```java
-public interface InqRegistry<E extends InqElement, C extends InqConfig> {
-    E get(String name);
-    E get(String name, C config);
-    void register(String name, C config);
-    Optional<E> find(String name);
-    Set<String> getAllNames();
-    Map<String, E> getAll();
-    C getDefaultConfig();
-}
-```
+The registry is not responsible for event routing. When the registry creates an element instance, the element creates its own `InqEventPublisher`.
 
-Each imperative element module provides its concrete registry (`CircuitBreakerRegistry`, `RetryRegistry`, etc.). Paradigm modules provide their own registries (`CoroutineCircuitBreakerRegistry`, `ReactiveCircuitBreakerRegistry`, etc.) with the same contract.
-
-The registry is the resolution mechanism for annotation-based configuration: the `InqAnnotationScanner` (ADR-017) resolves element names from `@InqCircuitBreaker("paymentCb")` by calling `registry.get("paymentCb")`. If the name was pre-registered (via YAML or programmatic config), the existing instance is returned. If not, a new instance is created with the registry's default configuration.
+The registry does emit three lifecycle events of its own (via a registry-specific publisher):
+- `RegistryEntryAddedEvent`
+- `RegistryEntryRemovedEvent`
+- `RegistryConfigurationIgnoredEvent` (the collision warning described above)
 
 ## Consequences
 
 **Positive:**
-- One name, one instance, one state — guaranteed by `ConcurrentHashMap.computeIfAbsent`.
-- No explicit locking — the common case (name exists) is a single hash lookup.
-- First-registration-wins prevents accidental configuration overwrite.
-- Collision warnings make misconfiguration visible without failing.
-- Default configurations reduce boilerplate — only non-standard instances need explicit registration.
-- The registry contract in core ensures all paradigm modules offer the same lookup semantics.
+- **Zero boilerplate.** Developers retrieve configured elements on demand at the call site.
+- **Lazy loading.** Elements that are never called are never allocated.
+- **Predictability.** The instance returned for a name is always the same object with the same configuration, regardless of call order.
+- **First-registration-wins** prevents accidental configuration overwrite.
+- **Thread-safe** instance creation via `ConcurrentHashMap.computeIfAbsent()`.
+- **Template support** centralizes tuning for groups of similar services.
+- **No global state.** Tests can instantiate their own registries and run in parallel without cross-talk.
 
 **Negative:**
-- First-registration-wins means that if YAML configuration and programmatic configuration disagree, whichever was registered first wins. This requires the startup order to be well-defined — in Spring Boot, YAML is processed before user `@Bean` methods, so YAML wins. Outside Spring, the developer must ensure the correct registration order.
-- No built-in support for removing or replacing instances. Once registered, an instance exists for the JVM's lifetime. This is intentional — hot-swapping a Circuit Breaker whose state machine is mid-transition would be dangerous. For testing, create a new registry per test.
+- Developers might mistakenly expect `get("name", newConfig)` to update an existing element's configuration. The warning event mitigates this, but it requires reading logs to discover.
+- Applications with thousands of dynamically named elements (e.g. `circuitBreaker("user-" + userId)`) will cause an unbounded memory leak in the registry unless `remove()` is explicitly managed. (Inqudium elements are designed for service-level isolation, not per-user isolation).
 
 **Neutral:**
 - The registry is not a singleton. If an application creates two `CircuitBreakerRegistry` instances and registers "paymentService" in both, they are independent instances with independent state. This is by design but must be documented to prevent confusion.

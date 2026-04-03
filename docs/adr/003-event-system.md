@@ -17,7 +17,7 @@ Common approaches include:
 
 ## Decision
 
-We adopt a **unified event system** based on `InqEventPublisher`. Every element, regardless of paradigm, emits events through this shared mechanism.
+We adopt a **unified event system** based on `InqEventPublisher`. Every element, regardless of paradigm, emits events when diagnostic events are enabled through this shared mechanism.
 
 ### Event hierarchy
 
@@ -49,7 +49,7 @@ Element-specific subclasses add context: `fromState`/`toState` for circuit break
 
 ### Call identity: the `callId`
 
-Every invocation through an Inqudium element receives a unique `callId` (UUID or similar) that is carried by all events emitted during that call's lifecycle. In a pipeline with multiple elements, all elements share the same `callId`:
+Every invocation through an Inqudium element receives a unique `callId` (UUID or similar) that is carried by all events emitted when diagnostic events are enabled during that call's lifecycle. In a pipeline with multiple elements, all elements share the same `callId`:
 
 ```
 Call abc-123 → CircuitBreaker (emits event with callId=abc-123)

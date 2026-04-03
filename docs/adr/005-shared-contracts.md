@@ -62,7 +62,7 @@ The default implementation in core encodes the state machine logic: when to open
 
 ### 4. Event types (see ADR-003)
 
-All event classes live in core. Paradigm modules instantiate and emit them.
+All event classes live in core. Paradigm modules instantiate and emit them when diagnostic events are enabled.
 
 ### What core does NOT contain
 

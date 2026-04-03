@@ -2,14 +2,14 @@
 
 ## Overview
 
-The Inqudium event system provides a lightweight, allocation-free observability layer for resilience elements. Every element instance (circuit breaker, retry, rate limiter, etc.) owns its own `InqEventPublisher` that emits structured events as the element operates. These events flow in two directions:
+The Inqudium event system provides a lightweight, allocation-free diagnostic observability layer for resilience elements. Every element instance (circuit breaker, retry, rate limiter, etc.) owns its own `InqEventPublisher` that emits structured events as the element operates when diagnostic events are enabled. These events flow in two directions:
 
 - **Local consumers** — registered per-element via `onEvent()`, useful for element-specific monitoring, dashboards, or diagnostic tooling.
 - **Global exporters** — registered once in the `InqEventExporterRegistry`, receiving events from *all* elements. Ideal for forwarding to Kafka, CloudEvents, webhooks, or centralized monitoring.
 
 The system is designed for zero overhead on the hot path: publishing is lock-free, allocation-free in steady state, and uses copy-on-write arrays for optimal CPU cache locality. A JMH benchmark under 4-thread contention confirms ~58,000 ops/ms with zero GC pressure when both consumers and exporters are active.
 
-> **Important:** The event system is strictly for observation and analysis. Consumers and exporters must not trigger business logic, external I/O, or any side effect that could affect the application's functional behavior.
+> **Important:** The event system is strictly for diagnostic observation and analysis. It is designed to be enabled on-demand for troubleshooting. Consumers and exporters must not trigger business logic, external I/O, or any side effect that could affect the application's functional behavior.
 
 ## Quick Start
 

@@ -232,7 +232,7 @@ This means: under sustained timeouts, the Bulkhead may fill up with orphaned cal
 
 ### Metrics
 
-The Bulkhead emits events (ADR-003) for every acquisition and release:
+The Bulkhead emits events (ADR-003) for every acquisition and release when diagnostic events are enabled:
 
 - `BulkheadOnAcquireEvent` — permit acquired, `concurrentCalls` after acquisition
 - `BulkheadOnRejectEvent` — permit denied, `concurrentCalls` at rejection time

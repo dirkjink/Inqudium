@@ -126,7 +126,7 @@ var timeLimiter = TimeLimiter.of("paymentService", TimeLimiterConfig.builder()
 
 Design constraints for the callback:
 
-- **Optional.** If no handler is registered, orphaned results are discarded and an event is emitted through `InqEventPublisher` (ADR-003). This keeps the simple case simple.
+- **Optional.** If no handler is registered, orphaned results are discarded and an event is emitted through `InqEventPublisher` (ADR-003) if diagnostic events are enabled. This keeps the simple case simple.
 - **Fire-and-forget.** The callback runs asynchronously after the operation completes. It has no way to influence the caller's outcome — the caller has already moved on.
 - **Exception-safe.** If the callback itself throws, the exception is caught, logged via `InqEventPublisher`, and does not propagate. A misbehaving callback must never affect the resilience element's operation.
 - **No caller context.** The callback executes on the thread that completed the orphaned operation, not on the caller's thread. Thread-local state, MDC, security context, and transaction boundaries from the caller are not available. If the callback needs context (e.g. a trace ID), it should be captured in the `TimeLimiterConfig` or via a `CallContextSupplier`.
