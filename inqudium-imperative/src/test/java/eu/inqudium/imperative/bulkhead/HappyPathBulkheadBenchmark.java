@@ -46,8 +46,10 @@ import static eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig
  * <p>All bulkheads are configured identically:
  * <ul>
  *   <li>Max concurrent calls: 10</li>
- *   <li>Max wait time: 5 ms (fair queuing, no rejections under contention)</li>
+ *   <li>Max wait time: 150 ms — long enough to guarantee zero rejections under
+ *       contention, eliminating exception creation as a confounding variable</li>
  *   <li>Fair semaphore / FIFO ordering where applicable</li>
+ *   <li>Work: {@code Blackhole.consumeCPU(100)} per call</li>
  * </ul>
  *
  * <h2>Metrics setup (production-like)</h2>
@@ -67,57 +69,95 @@ import static eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig
  *       the recommended production default with zero happy-path event overhead.</li>
  * </ul>
  *
- * <h2>Results (2026-04-03)</h2>
+ * <h2>Results (2026-04-03, 150 ms wait timeout, @Fork(3), @Measurement(5))</h2>
  *
  * <h3>Pure Overhead — 10 threads, 10 permits, no contention</h3>
- * <p>Measures the facade cost in isolation: acquire → execute → release with no waiting.
+ * <p>Measures the facade cost in isolation: acquire → execute → release. No thread ever
+ * parks — every {@code tryAcquire} succeeds immediately.
  *
  * <table>
- *   <tr><th>Library</th><th>ops/ms</th><th>B/op</th><th>GC</th><th>vs Semaphore</th></tr>
- *   <tr><td>Semaphore (raw)</td><td>10,274</td><td>0.007</td><td>0</td><td>1.00×</td></tr>
- *   <tr><td>Resilience4j + Micrometer</td><td>9,722</td><td>0.009</td><td>0</td><td>0.95×</td></tr>
- *   <tr><td><b>Inqudium optimized</b></td><td><b>6,392</b></td><td><b>0.012</b></td><td><b>0</b></td><td><b>0.62×</b></td></tr>
- *   <tr><td>Inqudium diagnostic</td><td>4,563</td><td>80</td><td>36</td><td>0.44×</td></tr>
- *   <tr><td>Failsafe</td><td>2,090</td><td>440</td><td>89</td><td>0.20×</td></tr>
+ *   <tr><th>Library</th><th>ops/ms</th><th>B/op</th><th>GC</th><th>G1 Eden</th><th>vs Semaphore</th></tr>
+ *   <tr><td>Semaphore (raw)</td><td>10,909</td><td>0.24</td><td>3</td><td>46 MB</td><td>1.00×</td></tr>
+ *   <tr><td>Resilience4j + Micrometer</td><td>9,400</td><td>0.29</td><td>0</td><td>26 MB</td><td>0.86×</td></tr>
+ *   <tr><td><b>Inqudium optimized</b></td><td><b>5,427</b></td><td><b>0.55</b></td><td><b>0</b></td><td><b>38 MB</b></td><td><b>0.50×</b></td></tr>
+ *   <tr><td>Inqudium diagnostic</td><td>3,445</td><td>80.8</td><td>29</td><td>148 MB</td><td>0.32×</td></tr>
+ *   <tr><td>Failsafe</td><td>1,936</td><td>441.5</td><td>68</td><td>180 MB</td><td>0.18×</td></tr>
  * </table>
  *
- * <p><b>Analysis:</b> Inqudium optimized and Resilience4j both achieve zero allocation and
- * zero GC. The 35% throughput gap (6,392 vs 9,722 ops/ms) is explained by the two
+ * <p><b>Analysis:</b> Inqudium optimized and Resilience4j both achieve near-zero allocation
+ * and zero GC. The throughput gap (5,427 vs 9,400 ops/ms) is explained by the two
  * {@code nanoTimeSource.now()} calls that Inqudium makes on every happy path for RTT
  * measurement — infrastructure required for adaptive concurrency algorithms (AIMD, Vegas,
- * CoDel) that Resilience4j does not offer. Without these calls, Inqudium's overhead would
- * converge to R4j's. This is the deliberate cost of a feature, not an inefficiency.
+ * CoDel) that Resilience4j does not offer. This is the deliberate cost of a feature, not
+ * an inefficiency.
  *
- * <p>Failsafe allocates 440 B/op on every call and triggers 89 GC collections, placing it
- * at 5× the overhead of the next-slowest library.
+ * <p>Inqudium diagnostic (all events enabled) drops to 3,445 ops/ms with 80.8 B/op — the
+ * cost of two {@code Instant} objects + two event instances per call. This confirms why
+ * events are a diagnostic tool ({@link BulkheadEventConfig#diagnostic()}), not always-on
+ * telemetry.
+ *
+ * <p>Failsafe allocates 441.5 B/op on every call and triggers 68 GC collections, placing
+ * it at 5.6× the overhead of the next-slowest library.
  *
  * <h3>Contention — 20 threads, 10 permits, no rejections</h3>
- * <p>Measures queuing efficiency under sustained load. All threads compete for 10 permits
- * with a 5 ms wait timeout; the work ({@code Blackhole.consumeCPU(100)}) is short enough
- * that no rejections occur.
+ * <p>Measures queuing efficiency under sustained load. 20 threads compete for 10 permits
+ * with a 150 ms wait timeout. The work ({@code Blackhole.consumeCPU(100)}) is short enough
+ * that all threads eventually acquire a permit — zero rejections, zero exception overhead.
  *
  * <table>
- *   <tr><th>Library</th><th>ops/ms</th><th>B/op</th><th>GC</th></tr>
- *   <tr><td>Resilience4j + Micrometer</td><td>209</td><td>5</td><td>0</td></tr>
- *   <tr><td><b>Inqudium optimized</b></td><td><b>207</b></td><td><b>77</b></td><td><b>5</b></td></tr>
- *   <tr><td>Semaphore (raw)</td><td>205</td><td>7</td><td>2</td></tr>
- *   <tr><td>Inqudium diagnostic</td><td>199</td><td>103</td><td>5</td></tr>
- *   <tr><td>Failsafe</td><td>727</td><td>501</td><td>24</td></tr>
+ *   <tr><th>Library</th><th>ops/ms</th><th>B/op (±err)</th><th>GC</th><th>G1 Eden</th></tr>
+ *   <tr><td>Semaphore (raw)</td><td>215</td><td>17.6 (±6.4)</td><td>0</td><td>82 MB</td></tr>
+ *   <tr><td><b>Inqudium optimized</b></td><td><b>215</b></td><td><b>64.4 (±30.1)</b></td><td><b>4</b></td><td><b>142 MB</b></td></tr>
+ *   <tr><td>Resilience4j + Micrometer</td><td>212</td><td>21.7 (±10.0)</td><td>0</td><td>108 MB</td></tr>
+ *   <tr><td>Inqudium diagnostic</td><td>211</td><td>120.3 (±10.3)</td><td>6</td><td>144 MB</td></tr>
+ *   <tr><td>Failsafe</td><td>784</td><td>508.4 (±2.9)</td><td>39</td><td>148 MB</td></tr>
  * </table>
  *
- * <p><b>Analysis:</b> Under contention, all fair-semaphore implementations converge to
- * ~200–209 ops/ms. The facade overhead is invisible — throughput is entirely dominated by
- * the Condition/Semaphore park time. The ~77 B/op for Inqudium optimized under contention
- * (vs 0.012 B/op without contention) is a JVM effect: when threads park on
- * {@code Condition.awaitNanos}, the JIT cannot stack-allocate objects that span the
- * suspension point (lambda closures, call wrappers). This is inherent to blocking and
- * affects all libraries equally under real workloads.
+ * <p><b>Analysis — Throughput convergence:</b> All fair-semaphore implementations converge
+ * to ~211–215 ops/ms. The facade overhead is completely invisible — throughput is dominated
+ * by the Condition/Semaphore park time. Under real workloads (millisecond-scale downstream
+ * calls), the facade cost would be even less significant.
  *
- * <p>Failsafe's 727 ops/ms (3.5× higher than all others) indicates an unfair semaphore
- * or lock-free mechanism internally. Unfair scheduling allows "barging" where a newly
- * arrived thread acquires a permit before waiting threads are woken — maximizing throughput
- * at the cost of starvation risk. The 501 B/op allocation and 24 GC collections confirm
- * significant per-call object creation regardless of the scheduling advantage.
+ * <p><b>Analysis — Contention-induced allocation:</b> Even the raw Semaphore allocates
+ * 17.6 B/op under contention (vs 0.24 B/op without). This is not application code — it is
+ * the JDK's AQS framework allocating {@code Node} objects for the wait queue when threads
+ * actually park on {@code Semaphore.tryAcquire(timeout)}.
+ *
+ * <p>Inqudium optimized shows 64.4 B/op (±30.1) — the delta of ~47 B/op over the raw
+ * Semaphore comes from the facade's lambda closures ({@code call.withCallable(() -> {...})},
+ * the {@code InqCall} wrapping in {@code executeRunnable}) that the JIT cannot
+ * stack-allocate when threads park. When a thread suspends on {@code Condition.awaitNanos()},
+ * any object whose lifetime spans the suspension point must be materialized on the heap —
+ * Escape Analysis cannot prove the object dies within the frame because the frame itself is
+ * frozen. Without parking (Pure Overhead), the same objects are fully eliminated (0.55 B/op).
+ *
+ * <p>The high error margin (±30.1) confirms this is JIT-dependent: depending on compilation
+ * order, inlining depth, and OSR boundaries, the JIT sometimes succeeds and sometimes fails
+ * to eliminate these allocations across the parking boundary.
+ *
+ * <p>Resilience4j shows 21.7 B/op under contention — only ~4 B/op above the raw Semaphore.
+ * R4j's {@code decorateRunnable} creates a thinner wrapper layer without RTT measurement
+ * infrastructure, giving the JIT fewer objects to materialize at the suspension point.
+ *
+ * <p><b>Analysis — Failsafe fairness:</b> Failsafe's 784 ops/ms (3.6× higher than all
+ * others) indicates an unfair semaphore or lock-free mechanism internally. Unfair scheduling
+ * allows "barging" where a newly arrived thread acquires a permit before parked threads are
+ * signaled — maximizing throughput at the cost of starvation risk. The 508 B/op allocation
+ * and 39 GC collections confirm significant per-call object creation regardless of the
+ * scheduling advantage.
+ *
+ * <h3>GC Pause profile</h3>
+ * <table>
+ *   <tr><th>Library (Contention)</th><th>Pause count</th><th>Avg pause</th><th>p99 pause</th></tr>
+ *   <tr><td>Semaphore (raw)</td><td>0</td><td>—</td><td>—</td></tr>
+ *   <tr><td>Resilience4j</td><td>2</td><td>3.9 ms</td><td>4.3 ms</td></tr>
+ *   <tr><td><b>Inqudium optimized</b></td><td><b>1</b></td><td><b>4.1 ms</b></td><td><b>4.1 ms</b></td></tr>
+ *   <tr><td>Inqudium diagnostic</td><td>1</td><td>3.3 ms</td><td>3.3 ms</td></tr>
+ *   <tr><td>Failsafe</td><td>8</td><td>4.0 ms</td><td>8.4 ms</td></tr>
+ * </table>
+ *
+ * <p>GC pauses are negligible for all fair-semaphore implementations (0–2 pauses,
+ * sub-5 ms). Failsafe's 8 pauses with a p99 of 8.4 ms reflect its higher allocation rate.
  *
  * <h2>Dependencies</h2>
  * <pre>
