@@ -25,15 +25,15 @@ class AimdLimitAlgorithmTest {
 
       // When
       // Simulate a successful call with current in-flight calls matching the limit
-      algorithm.update(Duration.ofMillis(100), true, 5);
+      algorithm.update(Duration.ofMillis(100).toNanos(), true, 5);
 
       // Then
       assertThat(algorithm.getLimit()).isEqualTo(6);
 
       // When
       // We hit the maximum limit
-      algorithm.update(Duration.ofMillis(100), true, 6);
-      algorithm.update(Duration.ofMillis(100), true, 7);
+      algorithm.update(Duration.ofMillis(100).toNanos(), true, 6);
+      algorithm.update(Duration.ofMillis(100).toNanos(), true, 7);
 
       // Then
       // It must not exceed the configured maximum limit
@@ -54,15 +54,15 @@ class AimdLimitAlgorithmTest {
 
       // When
       // A failure occurs. The in-flight calls parameter is required but does not affect the decrease logic.
-      algorithm.update(Duration.ofMillis(100), false, 10);
+      algorithm.update(Duration.ofMillis(100).toNanos(), false, 10);
 
       // Then
       assertThat(algorithm.getLimit()).isEqualTo(5);
 
       // When
       // It drops below the minimum limit via consecutive halvings
-      algorithm.update(Duration.ofMillis(100), false, 5);
-      algorithm.update(Duration.ofMillis(100), false, 2);
+      algorithm.update(Duration.ofMillis(100).toNanos(), false, 5);
+      algorithm.update(Duration.ofMillis(100).toNanos(), false, 2);
 
       // Then
       // It must not drop below the specified absolute minimum

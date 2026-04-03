@@ -51,7 +51,6 @@ public final class AdaptiveBulkheadStrategy implements BlockingBulkheadStrategy 
   @Override
   public RejectionContext tryAcquire(Duration timeout) throws InterruptedException {
     long nanos = timeout.toNanos();
-    long startNanos = System.nanoTime();
 
     lock.lockInterruptibly();
     try {
@@ -64,13 +63,12 @@ public final class AdaptiveBulkheadStrategy implements BlockingBulkheadStrategy 
           if (timeout.isZero()) {
             return RejectionContext.capacityReached(limit, active);
           }
-          long waitedNanos = System.nanoTime() - startNanos;
-          return RejectionContext.timeoutExpired(limit, active, waitedNanos);
+          return RejectionContext.timeoutExpired(limit, active, timeout.toNanos());
         }
         nanos = notFull.awaitNanos(nanos);
       }
       activeCalls++;
-      return null; // permit acquired — no allocation
+      return null; // permit acquired — no allocation, no nanoTime call
 
     } catch (InterruptedException e) {
       notFull.signal(); // pass the baton

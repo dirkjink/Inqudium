@@ -37,7 +37,7 @@ class VegasLimitAlgorithmTest {
       // When
       for (int i = 0; i < initialLimit; i++) {
         virtualClock.addAndGet(Duration.ofMillis(50).toNanos());
-        algorithm.update(Duration.ofMillis(50), true, initialLimit);
+        algorithm.update(Duration.ofMillis(50).toNanos(), true, initialLimit);
       }
 
       // Then
@@ -57,7 +57,7 @@ class VegasLimitAlgorithmTest {
       // When
       for (int i = 0; i < 100; i++) {
         virtualClock.addAndGet(Duration.ofMillis(20).toNanos());
-        algorithm.update(Duration.ofMillis(20), true, initialLimit);
+        algorithm.update(Duration.ofMillis(20).toNanos(), true, initialLimit);
       }
 
       // Then
@@ -79,11 +79,11 @@ class VegasLimitAlgorithmTest {
       );
 
       virtualClock.addAndGet(Duration.ofMillis(10).toNanos());
-      algorithm.update(Duration.ofMillis(10), true, 100);
+      algorithm.update(Duration.ofMillis(10).toNanos(), true, 100);
 
       // When
       virtualClock.addAndGet(Duration.ofMillis(20).toNanos());
-      algorithm.update(Duration.ofMillis(20), true, 100);
+      algorithm.update(Duration.ofMillis(20).toNanos(), true, 100);
 
       // Then
       assertThat(algorithm.getLimit()).isEqualTo(50);
@@ -110,7 +110,7 @@ class VegasLimitAlgorithmTest {
       // We simulate 10 successful requests to stabilize the error rate at 0.0
       for (int i = 0; i < 10; i++) {
         virtualClock.addAndGet(Duration.ofMillis(10).toNanos());
-        algorithm.update(Duration.ofMillis(10), true, 100);
+        algorithm.update(Duration.ofMillis(10).toNanos(), true, 100);
       }
 
       // Ensure that we start at 100 (or slightly above due to probing)
@@ -120,7 +120,7 @@ class VegasLimitAlgorithmTest {
       // Now a single failure occurs. Due to the smoothing and history,
       // the error rate stays below the 10% threshold.
       virtualClock.addAndGet(Duration.ofMillis(10).toNanos());
-      algorithm.update(Duration.ofMillis(10), false, 100);
+      algorithm.update(Duration.ofMillis(10).toNanos(), false, 100);
 
       // Then
       // The limit must not have dropped to 80
@@ -141,7 +141,7 @@ class VegasLimitAlgorithmTest {
       // We simulate a massive failure (error rate shoots up)
       for (int i = 0; i < 5; i++) {
         virtualClock.addAndGet(Duration.ofMillis(100).toNanos());
-        algorithm.update(Duration.ofMillis(100), false, 100);
+        algorithm.update(Duration.ofMillis(100).toNanos(), false, 100);
       }
 
       // Then
@@ -164,11 +164,11 @@ class VegasLimitAlgorithmTest {
       );
 
       virtualClock.addAndGet(Duration.ofMillis(10).toNanos());
-      algorithm.update(Duration.ofMillis(10), true, 100);
+      algorithm.update(Duration.ofMillis(10).toNanos(), true, 100);
 
       // When
       virtualClock.addAndGet(Duration.ofMillis(10).toNanos());
-      algorithm.update(Duration.ofMillis(20), true, 100);
+      algorithm.update(Duration.ofMillis(20).toNanos(), true, 100);
 
       // Then
       assertThat(algorithm.getLimit()).isGreaterThan(95);
@@ -184,11 +184,11 @@ class VegasLimitAlgorithmTest {
       );
 
       virtualClock.addAndGet(Duration.ofMillis(10).toNanos());
-      algorithm.update(Duration.ofMillis(10), true, 100);
+      algorithm.update(Duration.ofMillis(10).toNanos(), true, 100);
 
       // When
       virtualClock.addAndGet(Duration.ofSeconds(4).toNanos());
-      algorithm.update(Duration.ofMillis(20), true, 100);
+      algorithm.update(Duration.ofMillis(20).toNanos(), true, 100);
 
       // Then
       assertThat(algorithm.getLimit()).isGreaterThan(50);

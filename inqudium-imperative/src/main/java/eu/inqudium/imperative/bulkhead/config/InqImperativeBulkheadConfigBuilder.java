@@ -1,6 +1,7 @@
 package eu.inqudium.imperative.bulkhead.config;
 
 import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfigBuilder;
+import eu.inqudium.core.element.bulkhead.event.BulkheadEventConfig;
 
 import java.time.Duration;
 
@@ -18,7 +19,8 @@ public class InqImperativeBulkheadConfigBuilder
   public static InqImperativeBulkheadConfigBuilder standard() {
     return new InqImperativeBulkheadConfigBuilder()
         .maxConcurrentCalls(25)
-        .maxWaitDuration(Duration.ZERO);
+        .maxWaitDuration(Duration.ZERO)
+        .eventConfig(BulkheadEventConfig.rejectionsOnly());
   }
 
   @Override

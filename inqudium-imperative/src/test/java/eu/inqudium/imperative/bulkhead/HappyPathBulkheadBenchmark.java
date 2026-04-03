@@ -1,6 +1,8 @@
 package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.core.config.InqConfig;
+import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
+import eu.inqudium.core.element.bulkhead.event.BulkheadEventConfig;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -19,6 +21,7 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
+import java.time.Duration;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -29,29 +32,34 @@ import static eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig
 @State(Scope.Benchmark)
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
-@Fork(1)
+@Fork(3)
 public class HappyPathBulkheadBenchmark {
 
   // We set the Bulkhead limit to 10 for all tests
   private static final int BULKHEAD_LIMIT = 10;
+  private static final int WAIT_MILLIS = 5;
   private Semaphore semaphore;
   private Bulkhead bulkhead;
 
   public static void main(String[] args) throws RunnerException {
     Options opt = new OptionsBuilder()
-        .addProfiler("gc").include(HappyPathBulkheadBenchmark.class.getSimpleName()).build();
+        .addProfiler("gc")
+        .include(HappyPathBulkheadBenchmark.class.getSimpleName())
+        //.include("measureContentionWithoutRejectionsSemaphore")
+        .build();
     new Runner(opt).run();
   }
 
   @Setup(Level.Trial)
   public void setUp() {
-    semaphore = new Semaphore(BULKHEAD_LIMIT);
+    semaphore = new Semaphore(BULKHEAD_LIMIT, true);
     var config = InqConfig.configure()
         .general()
         .with(bulkhead(), c -> c
-                .name("test")
-                .maxConcurrentCalls(10)
-            //  .maxWaitDuration(Duration.ofMillis(5))
+            .name("test")
+            .maxConcurrentCalls(BULKHEAD_LIMIT)
+            .eventConfig(BulkheadEventConfig.rejectionsOnly())
+            .maxWaitDuration(Duration.ofMillis(WAIT_MILLIS))
         ).build();
     bulkhead = Bulkhead.of(config);
   }
@@ -86,12 +94,14 @@ public class HappyPathBulkheadBenchmark {
   @Benchmark
   @Threads(10)
   public void measurePureOverheadSemaphore(Blackhole blackhole) throws InterruptedException {
-    // We use acquire. Since Threads <= Permits, it will never block.
-    semaphore.acquire();
-    try {
-      simulateWork(blackhole);
-    } finally {
-      semaphore.release();
+    if (semaphore.tryAcquire(WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
+      try {
+        simulateWork(blackhole);
+      } finally {
+        semaphore.release();
+      }
+    } else {
+      System.err.println("Attention: Unable to acquire permits.");
     }
   }
 
@@ -103,14 +113,14 @@ public class HappyPathBulkheadBenchmark {
   @Benchmark
   @Threads(20)
   public void measureContentionWithoutRejectionsSemaphore(Blackhole blackhole) throws InterruptedException {
-    // We use acquire() instead of tryAcquire().
-    // Threads will queue up and wait. We measure the throughput of the
-    // actual work PLUS the waiting/queueing overhead of the bulkhead.
-    semaphore.acquire();
-    try {
-      simulateWork(blackhole);
-    } finally {
-      semaphore.release();
+    if (semaphore.tryAcquire(WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
+      try {
+        simulateWork(blackhole);
+      } finally {
+        semaphore.release();
+      }
+    } else {
+      System.err.println("Attention: Unable to acquire permits.");
     }
   }
 
@@ -125,6 +135,6 @@ public class HappyPathBulkheadBenchmark {
   }
 
   private void simulateWork(Blackhole blackhole) {
-    blackhole.consume(1);
+    Blackhole.consumeCPU(100);
   }
 }

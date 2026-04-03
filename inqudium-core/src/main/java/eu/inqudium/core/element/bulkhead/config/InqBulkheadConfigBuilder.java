@@ -6,6 +6,7 @@ import eu.inqudium.core.config.GeneralConfig;
 import eu.inqudium.core.config.InqElementCommonConfig;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.algo.InqLimitAlgorithm;
+import eu.inqudium.core.element.bulkhead.event.BulkheadEventConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.event.InqEventPublisher;
 
@@ -23,6 +24,7 @@ public abstract class InqBulkheadConfigBuilder
   private int maxConcurrentCalls;
   private Duration maxWaitDuration;
   private InqLimitAlgorithm limitAlgorithm;
+  private BulkheadEventConfig eventConfig;
 
   protected InqBulkheadConfigBuilder() {
   }
@@ -76,6 +78,12 @@ public abstract class InqBulkheadConfigBuilder
   public B strategy(BulkheadStrategy strategy) {
     Objects.requireNonNull(strategy, "strategy must not be null");
     this.strategy = strategy;
+    return self();
+  }
+
+  public B eventConfig(BulkheadEventConfig bulkheadEventConfig) {
+    Objects.requireNonNull(bulkheadEventConfig, "eventConfig must not be null");
+    this.eventConfig = bulkheadEventConfig;
     return self();
   }
 
@@ -159,7 +167,8 @@ public abstract class InqBulkheadConfigBuilder
         maxConcurrentCalls,
         resolvedStrategy,
         maxWaitDuration,
-        limitAlgorithm
+        limitAlgorithm,
+        eventConfig
     ).inference();
 
     validate(config);

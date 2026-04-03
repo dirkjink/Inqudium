@@ -1,7 +1,6 @@
 package eu.inqudium.imperative.bulkhead.strategy;
 
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
-import eu.inqudium.core.element.bulkhead.strategy.NonBlockingBulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 
 import java.time.Duration;
@@ -57,19 +56,22 @@ public final class SemaphoreBulkheadStrategy implements BlockingBulkheadStrategy
    */
   @Override
   public RejectionContext tryAcquire(Duration timeout) throws InterruptedException {
-    long startNanos = System.nanoTime();
     boolean acquired = semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
     if (acquired) {
       acquiredPermits.incrementAndGet();
-      return null; // permit acquired — no allocation
+      return null; // permit acquired — no allocation, no nanoTime call
     }
-    long waitedNanos = System.nanoTime() - startNanos;
-    int currentActive = acquiredPermits.get();
 
+    // Rejection path only — all allocation and measurement happens here
+    int currentActive = acquiredPermits.get();
     if (timeout.isZero()) {
       return RejectionContext.capacityReached(maxConcurrent, currentActive);
     }
-    return RejectionContext.timeoutExpired(maxConcurrent, currentActive, waitedNanos);
+    // The semaphore waited approximately the full timeout before returning false.
+    // Using the configured timeout as the waited time avoids a System.nanoTime()
+    // call on every happy-path acquire — a critical optimization under contention,
+    // where nanoTime's native call becomes a secondary contention point.
+    return RejectionContext.timeoutExpired(maxConcurrent, currentActive, timeout.toNanos());
   }
 
   @Override

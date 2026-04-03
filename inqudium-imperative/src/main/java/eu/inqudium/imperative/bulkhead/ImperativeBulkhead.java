@@ -3,6 +3,7 @@ package eu.inqudium.imperative.bulkhead;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.element.bulkhead.InqBulkheadInterruptedException;
+import eu.inqudium.core.element.bulkhead.event.BulkheadEventConfig;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnAcquireEvent;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnRejectEvent;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnReleaseEvent;
@@ -41,6 +42,7 @@ public final class ImperativeBulkhead implements Bulkhead {
   private final InqImperativeBulkheadConfig config;
   private final BlockingBulkheadStrategy strategy;
   private final InqEventPublisher eventPublisher;
+  private final BulkheadEventConfig eventConfig;
   private final Duration maxWaitDuration;
   private final InqNanoTimeSource nanoTimeSource;
   private final InqClock clock;
@@ -58,6 +60,7 @@ public final class ImperativeBulkhead implements Bulkhead {
     this.name = config.name();
     this.config = config;
     this.strategy = blocking;
+    this.eventConfig = config.eventConfig();
     this.maxWaitDuration = config.maxWaitDuration();
     this.nanoTimeSource = config.general().nanoTimesource();
     this.eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
@@ -146,28 +149,34 @@ public final class ImperativeBulkhead implements Bulkhead {
   // ======================== Telemetry — acquire ========================
 
   private void handleAcquireSuccess(String callId, long startWait) {
-    // Tier 1: Acquire event — rollback on failure
-    try {
-      eventPublisher.publish(new BulkheadOnAcquireEvent(
-          callId, name, strategy.concurrentCalls(), clock.instant()));
-    } catch (RuntimeException e) {
-      strategy.rollback();
+    if (eventConfig.isLifecycleEnabled()) {
+      // Tier 1: Acquire event — rollback on failure
       try {
-        eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(
-            callId, name, e.getClass().getSimpleName(), clock.instant()));
-      } catch (RuntimeException traceError) {
-        logger.error().log("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
-            + "Permit rolled back.", name, callId, traceError);
+        eventPublisher.publish(new BulkheadOnAcquireEvent(
+            callId, name, strategy.concurrentCalls(), clock.instant()));
+      } catch (RuntimeException e) {
+        strategy.rollback();
+        if (eventConfig.isTraceEnabled()) {
+          try {
+            eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(
+                callId, name, e.getClass().getSimpleName(), clock.instant()));
+          } catch (RuntimeException traceError) {
+            logger.error().log("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
+                + "Permit rolled back.", name, callId, traceError);
+          }
+        }
+        throw e;
       }
-      throw e;
     }
 
     // Tier 2: Wait trace — best-effort
-    try {
-      publishWaitTrace(callId, startWait, true);
-    } catch (RuntimeException e) {
-      logger.error().log("Failed to publish wait trace for acquired call on bulkhead '{}', "
-          + "callId='{}'. Telemetry-only failure.", name, callId, e);
+    if (eventConfig.isTraceEnabled()) {
+      try {
+        publishWaitTrace(callId, startWait, true);
+      } catch (RuntimeException e) {
+        logger.error().log("Failed to publish wait trace for acquired call on bulkhead '{}', "
+            + "callId='{}'. Telemetry-only failure.", name, callId, e);
+      }
     }
   }
 
@@ -180,18 +189,22 @@ public final class ImperativeBulkhead implements Bulkhead {
    *                  an {@link InterruptedException} (no rejection decision was made)
    */
   private void handleAcquireFailure(String callId, long startWait, RejectionContext rejection) {
-    try {
-      publishWaitTrace(callId, startWait, false);
-    } catch (RuntimeException e) {
-      logger.error().log("Failed to publish wait trace for rejected call on bulkhead '{}', "
-          + "callId='{}'. Telemetry-only failure.", name, callId, e);
+    if (eventConfig.isTraceEnabled()) {
+      try {
+        publishWaitTrace(callId, startWait, false);
+      } catch (RuntimeException e) {
+        logger.error().log("Failed to publish wait trace for rejected call on bulkhead '{}', "
+            + "callId='{}'. Telemetry-only failure.", name, callId, e);
+      }
     }
-    try {
-      eventPublisher.publish(new BulkheadOnRejectEvent(
-          callId, name, rejection, clock.instant()));
-    } catch (RuntimeException e) {
-      logger.error().log("Failed to publish reject event for bulkhead '{}', callId='{}'. "
-          + "Telemetry-only failure.", name, callId, e);
+    if (eventConfig.isRejectionEnabled()) {
+      try {
+        eventPublisher.publish(new BulkheadOnRejectEvent(
+            callId, name, rejection, clock.instant()));
+      } catch (RuntimeException e) {
+        logger.error().log("Failed to publish reject event for bulkhead '{}', callId='{}'. "
+            + "Telemetry-only failure.", name, callId, e);
+      }
     }
   }
 
@@ -215,12 +228,14 @@ public final class ImperativeBulkhead implements Bulkhead {
       }
     }
 
-    try {
-      eventPublisher.publish(new BulkheadOnReleaseEvent(
-          callId, name, strategy.concurrentCalls(), clock.instant()));
-    } catch (RuntimeException publisherError) {
-      logger.error().log("Failed to publish release event for bulkhead '{}', callId='{}'. "
-          + "Telemetry-only failure.", name, callId, publisherError);
+    if (eventConfig.isLifecycleEnabled()) {
+      try {
+        eventPublisher.publish(new BulkheadOnReleaseEvent(
+            callId, name, strategy.concurrentCalls(), clock.instant()));
+      } catch (RuntimeException publisherError) {
+        logger.error().log("Failed to publish release event for bulkhead '{}', callId='{}'. "
+            + "Telemetry-only failure.", name, callId, publisherError);
+      }
     }
 
     if (releaseError != null) {

@@ -192,7 +192,6 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
   @Override
   public RejectionContext tryAcquire(Duration timeout) throws InterruptedException {
     long remainingNanos = timeout.toNanos();
-    long startNanos = nanoTimeSource.getAsLong();
 
     try {
       lock.lockInterruptibly();
@@ -211,8 +210,9 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
             if (timeout.isZero()) {
               return RejectionContext.capacityReached(maxConcurrent, active);
             }
-            long waitedNanos = nanoTimeSource.getAsLong() - startNanos;
-            return RejectionContext.timeoutExpired(maxConcurrent, active, waitedNanos);
+            // Approximation: the semaphore waited approximately the full timeout.
+            // Avoids a nanoTimeSource call on every happy-path acquire.
+            return RejectionContext.timeoutExpired(maxConcurrent, active, timeout.toNanos());
           }
           remainingNanos = permitAvailable.awaitNanos(remainingNanos);
         }
@@ -244,11 +244,13 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
             // downstream has recovered (sojourn times drop below target → full reset).
             firstAboveTargetNanos = 0L;
             int active = activeCalls;
-            long waitedNanos = now - startNanos;
+            // waitedNanos ≈ sojournNanos: the sojourn time (post-lock queue wait) is the
+            // dominant component. The difference (lock acquisition time) is typically
+            // sub-microsecond and not worth a nanoTimeSource call on every happy-path acquire.
             permitAvailable.signal(); // wake next waiter for fresh evaluation
             logger.debug().log("CoDel drop: sojourn={}ns target={}ns interval={}ns",
                 sojournNanos, targetDelayNanos, intervalNanos);
-            return RejectionContext.codelDrop(maxConcurrent, active, waitedNanos, sojournNanos);
+            return RejectionContext.codelDrop(maxConcurrent, active, sojournNanos, sojournNanos);
           }
         } else {
           // Sojourn time acceptable — reset congestion stopwatch

@@ -8,6 +8,7 @@ import eu.inqudium.core.element.bulkhead.algo.InqLimitAlgorithm;
 import eu.inqudium.core.element.bulkhead.config.AimdLimitAlgorithmConfig;
 import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
 import eu.inqudium.core.element.bulkhead.config.VegasLimitAlgorithmConfig;
+import eu.inqudium.core.element.bulkhead.event.BulkheadEventConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
@@ -50,6 +51,10 @@ public record InqImperativeBulkheadConfig(
     return bulkhead.eventPublisher();
   }
 
+  public BulkheadEventConfig eventConfig() {
+    return bulkhead.eventConfig();
+  }
+
   @Override
   public InqImperativeBulkheadConfig inference() {
     BulkheadStrategy strategy = strategy();
@@ -75,7 +80,8 @@ public record InqImperativeBulkheadConfig(
             this.bulkhead.maxConcurrentCalls(),
             strategy,
             this.bulkhead.maxWaitDuration(),
-            this.bulkhead.limitAlgorithm()
+            this.bulkhead.limitAlgorithm(),
+            this.bulkhead.eventConfig()
         )
     );
   }
