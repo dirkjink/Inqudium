@@ -1,7 +1,6 @@
 package eu.inqudium.core.pipeline;
 
 import java.util.function.Supplier;
-import java.util.function.Supplier;
 
 /**
  * Ein homogener Wrapper für das Supplier-Interface.

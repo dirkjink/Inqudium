@@ -7,6 +7,12 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
 
   private final T delegate;
   private final String name;
+
+  /**
+   * Identifies the wrapper chain this layer belongs to.
+   * All layers wrapping the same core delegate share the same chainId.
+   * Generated once when the innermost wrapper (closest to the real delegate) is constructed.
+   */
   private final String chainId;
 
   protected BaseWrapper(String name, T delegate) {
@@ -30,7 +36,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
    * Each call receives a unique call ID for tracing purposes.
    */
   protected R initiateChain(A argument) {
-    return this.executeWithId(UUID.randomUUID().toString(), argument);
+    return this.executeWithId(generateCallId(), argument);
   }
 
   @Override
@@ -44,8 +50,36 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
     return invokeCore(argument);
   }
 
+  /**
+   * Called for every layer in the chain during top-down traversal.
+   * Use this to implement cross-cutting concerns like logging, metrics, or context propagation.
+   *
+   * @param callId unique identifier for this particular invocation, shared across all layers
+   * @param argument the argument passed through the chain
+   */
   protected abstract void handleLayer(String callId, A argument);
+
+  /**
+   * Executes the actual core logic by delegating to the wrapped target.
+   * Only invoked on the innermost wrapper whose delegate is NOT a BaseWrapper.
+   * Outer wrappers must still implement this method (it is abstract), but their
+   * implementation will never be called during normal chain execution.
+   *
+   * @param argument the argument passed through the chain
+   * @return the result of the core delegate execution
+   */
   protected abstract R invokeCore(A argument);
+
+  /**
+   * Creates a unique identifier for a single chain invocation.
+   * Override this to supply custom ID strategies (e.g. sequential counters,
+   * shorter IDs, or externally provided correlation IDs).
+   *
+   * @return a new unique call ID
+   */
+  protected String generateCallId() {
+    return UUID.randomUUID().toString();
+  }
 
   @Override public String getChainId() { return chainId; }
   @Override public String getLayerDescription() { return name; }

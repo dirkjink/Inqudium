@@ -3,10 +3,10 @@ package eu.inqudium.core.pipeline;
 import java.util.concurrent.Callable;
 
 /**
- * Ein homogener Wrapper für das Callable-Interface.
- * Nimmt keine Argumente (Void), gibt aber einen Wert zurück und kann checked Exceptions werfen.
+ * A homogeneous wrapper for the {@link Callable} interface.
+ * Takes no arguments (Void) but returns a value and may throw checked exceptions.
  *
- * @param <V> Der Rückgabetyp des Callables.
+ * @param <V> the return type of the callable
  */
 public class CallableWrapper<V>
     extends BaseWrapper<Callable<V>, Void, V, CallableWrapper<V>>
@@ -20,12 +20,14 @@ public class CallableWrapper<V>
   public V call() throws Exception {
     try {
       return initiateChain(null);
-    } catch (RuntimeException e) {
-      // Entpackt die Exception, falls sie im Core geworfen und gewrappt wurde
-      if (e.getCause() instanceof Exception) {
-        throw (Exception) e.getCause();
+    } catch (WrappedCheckedException e) {
+      // Only unwrap exceptions that were explicitly wrapped by invokeCore
+      Throwable cause = e.getCause();
+      if (cause instanceof Exception) {
+        throw (Exception) cause;
       }
-      throw e;
+      // Should not happen, but handle gracefully
+      throw new RuntimeException(cause);
     }
   }
 
@@ -33,14 +35,20 @@ public class CallableWrapper<V>
   protected V invokeCore(Void argument) {
     try {
       return getDelegate().call();
+    } catch (RuntimeException e) {
+      // Let runtime exceptions pass through unwrapped
+      throw e;
+    } catch (Error e) {
+      // Let errors pass through unwrapped
+      throw e;
     } catch (Exception e) {
-      // Wickelt die checked Exception für den Transport durch die InternalExecutor-Kette ein
-      throw new RuntimeException(e);
+      // Wrap only checked exceptions for transport through the InternalExecutor chain
+      throw new WrappedCheckedException(e);
     }
   }
 
   @Override
   protected void handleLayer(String callId, Void argument) {
-    // Schichtspezifische Logik mit Zugriff auf die Call-ID
+    // Layer-specific logic with access to the call ID
   }
 }

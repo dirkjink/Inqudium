@@ -2,8 +2,9 @@ package eu.inqudium.core.pipeline;
 
 /**
  * Wrapper for dynamic proxies and Spring AOP JoinPoints.
- * Implements ProxyExecution to allow homogeneous chaining.
+ * Implements {@link ProxyExecution} to allow homogeneous chaining.
  * Since the proxy encapsulates its own arguments, the chain argument type is Void.
+ *
  * <p>
  * This method creates a {@link JoinPointWrapper} around the intercepted join point.
  * By doing so, the AOP execution becomes a formal layer in the static wrapper stack.
@@ -15,28 +16,25 @@ package eu.inqudium.core.pipeline;
  * <pre>{@code
  * @Around("@annotation(MyCustomAnnotation)")
  * public Object traceHierarchy(ProceedingJoinPoint pjp) throws Throwable {
- * // Create a new layer for this specific execution point
- * JoinPointWrapper<Object> wrapper = new JoinPointWrapper<>(
- * pjp.getSignature().toShortString(),
- * pjp::proceed
- * );
- *
- * // Initiates the chain from the outermost layer, ensuring
- * // all high-level wrappers and ID generation are processed.
- * return wrapper.execute();
+ *     JoinPointWrapper<Object> wrapper = new JoinPointWrapper<>(
+ *         pjp.getSignature().toShortString(),
+ *         pjp::proceed
+ *     );
+ *     return wrapper.proceed();
  * }
  * }</pre>
  *
  * <p><strong>Key Benefits:</strong></p>
  * <ul>
- * <li><b>ID Consistency:</b> Every sub-call within the join point can access
- * the same {@code callId} via the stack.</li>
- * <li><b>Full Transparency:</b> The {@code toStringHierarchy()} will list
- * the AOP proxy as a named layer (e.g., "Service.doWork()").</li>
- * <li><b>Exception Safety:</b> Throwable exceptions from {@code proceed()}
- * are passed through transparently.</li>
+ *   <li><b>ID Consistency:</b> Every sub-call within the join point can access
+ *       the same {@code callId} via the stack.</li>
+ *   <li><b>Full Transparency:</b> The {@code toStringHierarchy()} will list
+ *       the AOP proxy as a named layer.</li>
+ *   <li><b>Exception Safety:</b> Throwable exceptions from {@code proceed()}
+ *       are passed through transparently via {@link WrappedCheckedException}.</li>
  * </ul>
  *
+ * @param <R> the return type of the join point execution
  */
 public class JoinPointWrapper<R>
     extends BaseWrapper<ProxyExecution<R>, Void, R, JoinPointWrapper<R>>
@@ -46,20 +44,13 @@ public class JoinPointWrapper<R>
     super(name, delegate);
   }
 
-  /**
-   * The entry point replacing the old execute() method.
-   */
   @Override
   public R proceed() throws Throwable {
     try {
-      // Starts the chain without an argument (Void -> null)
       return initiateChain(null);
-    } catch (RuntimeException e) {
-      // Unpack the exception if it was thrown by the core
-      if (e.getCause() != null) {
-        throw e.getCause();
-      }
-      throw e;
+    } catch (WrappedCheckedException e) {
+      // Only unwrap exceptions that were explicitly wrapped by invokeCore
+      throw e.getCause();
     }
   }
 
@@ -67,14 +58,20 @@ public class JoinPointWrapper<R>
   protected R invokeCore(Void argument) {
     try {
       return getDelegate().proceed();
+    } catch (RuntimeException e) {
+      // Let runtime exceptions pass through unwrapped
+      throw e;
+    } catch (Error e) {
+      // Let errors pass through unwrapped
+      throw e;
     } catch (Throwable t) {
-      // Wrap checked exceptions or throwables for transport through the InternalExecutor chain
-      throw new RuntimeException(t);
+      // Wrap only checked exceptions/throwables for transport through the InternalExecutor chain
+      throw new WrappedCheckedException(t);
     }
   }
 
   @Override
   protected void handleLayer(String callId, Void argument) {
-    // Optional: Logging context updates using the callId
+    // Optional: logging context updates using the callId
   }
 }
