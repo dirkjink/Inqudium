@@ -2,6 +2,7 @@ package eu.inqudium.imperative.bulkhead.strategy;
 
 import eu.inqudium.core.element.bulkhead.algo.InqLimitAlgorithm;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
+import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -48,20 +49,28 @@ public final class AdaptiveBulkheadStrategy implements BlockingBulkheadStrategy 
   }
 
   @Override
-  public boolean tryAcquire(Duration timeout) throws InterruptedException {
+  public RejectionContext tryAcquire(Duration timeout) throws InterruptedException {
     long nanos = timeout.toNanos();
+    long startNanos = System.nanoTime();
 
     lock.lockInterruptibly();
     try {
       while (activeCalls >= limitAlgorithm.getLimit()) {
         if (nanos <= 0L) {
+          int limit = limitAlgorithm.getLimit();
+          int active = activeCalls;
           notFull.signal(); // pass the baton
-          return false;
+
+          if (timeout.isZero()) {
+            return RejectionContext.capacityReached(limit, active);
+          }
+          long waitedNanos = System.nanoTime() - startNanos;
+          return RejectionContext.timeoutExpired(limit, active, waitedNanos);
         }
         nanos = notFull.awaitNanos(nanos);
       }
       activeCalls++;
-      return true;
+      return null; // permit acquired — no allocation
 
     } catch (InterruptedException e) {
       notFull.signal(); // pass the baton

@@ -27,10 +27,12 @@ public interface NonBlockingBulkheadStrategy extends BulkheadStrategy {
    * Attempts to acquire a permit without blocking.
    *
    * <p>Returns immediately. If a permit is available, it is claimed atomically
-   * and {@code true} is returned. If the bulkhead is at capacity, {@code false}
-   * is returned without any waiting or retry.
+   * and {@code null} is returned (the happy path — no object allocation). If the
+   * bulkhead is at capacity, a {@link RejectionContext} captured at the exact
+   * moment of rejection is returned.
    *
-   * @return {@code true} if a permit was acquired, {@code false} if full
+   * @return {@code null} if a permit was acquired, or a {@link RejectionContext}
+   *         describing why the request was rejected
    */
-  boolean tryAcquire();
+  RejectionContext tryAcquire();
 }

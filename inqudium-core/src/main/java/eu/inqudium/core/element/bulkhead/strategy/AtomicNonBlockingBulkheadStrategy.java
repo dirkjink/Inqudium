@@ -31,8 +31,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <pre>{@code
  * // Reactor example (pseudo-code)
  * Mono<T> decoratedMono = Mono.defer(() -> {
- *     if (!strategy.tryAcquire()) {
- *         return Mono.error(new InqBulkheadFullException(...));
+ *     RejectionContext rejection = strategy.tryAcquire();
+ *     if (rejection != null) {
+ *         return Mono.error(new InqBulkheadFullException(name, rejection));
  *     }
  *     return upstream
  *         .doOnTerminate(() -> strategy.release())
@@ -108,17 +109,17 @@ public final class AtomicNonBlockingBulkheadStrategy implements NonBlockingBulkh
    * succeeds (permit granted), fails definitively (at capacity), or retries
    * (another thread modified the counter concurrently — guaranteed progress).
    *
-   * @return {@code true} if a permit was acquired, {@code false} if at capacity
+   * @return {@code null} if a permit was acquired, or a {@link RejectionContext} if at capacity
    */
   @Override
-  public boolean tryAcquire() {
+  public RejectionContext tryAcquire() {
     while (true) {
       int current = activeCalls.get();
       if (current >= maxConcurrent) {
-        return false;
+        return RejectionContext.capacityReached(maxConcurrent, current);
       }
       if (activeCalls.compareAndSet(current, current + 1)) {
-        return true;
+        return null; // permit acquired — no allocation
       }
       // CAS failed — another thread modified activeCalls concurrently.
       // Retry: re-read and re-evaluate. This is the standard lock-free

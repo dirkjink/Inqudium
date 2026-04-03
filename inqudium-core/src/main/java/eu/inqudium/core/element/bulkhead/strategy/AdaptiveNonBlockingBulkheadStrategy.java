@@ -29,8 +29,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <pre>{@code
  * // Reactor example (pseudo-code)
  * Mono<T> decorated = Mono.defer(() -> {
- *     if (!strategy.tryAcquire()) {
- *         return Mono.error(new InqBulkheadFullException(...));
+ *     RejectionContext rejection = strategy.tryAcquire();
+ *     if (rejection != null) {
+ *         return Mono.error(new InqBulkheadFullException(name, rejection));
  *     }
  *     long start = System.nanoTime();
  *     return upstream
@@ -87,18 +88,18 @@ public final class AdaptiveNonBlockingBulkheadStrategy implements NonBlockingBul
    * harmless: the CAS will either succeed (correct decision) or fail and retry with
    * a fresh read.
    *
-   * @return {@code true} if a permit was acquired, {@code false} if at capacity
+   * @return {@code null} if a permit was acquired, or a {@link RejectionContext} if at capacity
    */
   @Override
-  public boolean tryAcquire() {
+  public RejectionContext tryAcquire() {
     while (true) {
       int current = activeCalls.get();
       int limit = limitAlgorithm.getLimit();
       if (current >= limit) {
-        return false;
+        return RejectionContext.capacityReached(limit, current);
       }
       if (activeCalls.compareAndSet(current, current + 1)) {
-        return true;
+        return null; // permit acquired — no allocation
       }
       // CAS failed — another thread modified activeCalls. Retry with fresh reads.
     }

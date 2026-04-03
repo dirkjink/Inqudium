@@ -2,13 +2,14 @@ package eu.inqudium.imperative.bulkhead.strategy;
 
 import eu.inqudium.core.element.bulkhead.config.InqBulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
+import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 import eu.inqudium.core.log.Logger;
-import eu.inqudium.core.time.InqNanoTimeSource;
 
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.LongSupplier;
 
 /**
  * CoDel (Controlled Delay) bulkhead strategy for queue-based congestion management.
@@ -29,7 +30,7 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
   private final int maxConcurrent;
   private final long targetDelayNanos;
   private final long intervalNanos;
-  private final InqNanoTimeSource nanoTimeSource;
+  private final LongSupplier nanoTimeSource;
 
   private final ReentrantLock lock = new ReentrantLock(true); // fair — critical for CoDel
   private final Condition permitAvailable = lock.newCondition();
@@ -42,7 +43,7 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
                                int maxConcurrentCalls,
                                Duration targetDelay,
                                Duration interval,
-                               InqNanoTimeSource nanoTimeSource) {
+                               LongSupplier nanoTimeSource) {
     if (maxConcurrentCalls < 0) {
       throw new IllegalArgumentException("maxConcurrentCalls must be >= 0, got " + maxConcurrentCalls);
     }
@@ -98,7 +99,7 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
   public static CoDelBulkheadStrategy protective(InqBulkheadConfig config) {
     return new CoDelBulkheadStrategy(
         config,
-        20,              // maxConcurrentCalls: tight permit budget
+        20,                         // maxConcurrentCalls: tight permit budget
         Duration.ofMillis(50),      // targetDelay: detect queuing early
         Duration.ofMillis(500),     // interval: start dropping after 500 ms sustained congestion
         System::nanoTime
@@ -138,9 +139,9 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
   public static CoDelBulkheadStrategy balanced(InqBulkheadConfig config) {
     return new CoDelBulkheadStrategy(
         config,
-        50,              // maxConcurrentCalls: moderate permit budget
+        50,                         // maxConcurrentCalls: moderate permit budget
         Duration.ofMillis(100),     // targetDelay: tolerates brief spikes
-        Duration.ofSeconds(1),    // interval: absorbs transient congestion
+        Duration.ofSeconds(1),      // interval: absorbs transient congestion
         System::nanoTime
     );
   }
@@ -189,28 +190,35 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
   }
 
   @Override
-  public boolean tryAcquire(Duration timeout) throws InterruptedException {
+  public RejectionContext tryAcquire(Duration timeout) throws InterruptedException {
     long remainingNanos = timeout.toNanos();
+    long startNanos = nanoTimeSource.getAsLong();
 
     try {
       lock.lockInterruptibly();
       acquireThreads++;
 
       // CoDel enqueue time — post-lock, excludes lock contention
-      long codelEnqueueNanos = nanoTimeSource.now();
+      long codelEnqueueNanos = nanoTimeSource.getAsLong();
 
       try {
         // Phase 1: Wait for capacity
         while (activeCalls >= maxConcurrent) {
           if (remainingNanos <= 0L) {
+            int active = activeCalls;
             permitAvailable.signal(); // pass the baton
-            return false;
+
+            if (timeout.isZero()) {
+              return RejectionContext.capacityReached(maxConcurrent, active);
+            }
+            long waitedNanos = nanoTimeSource.getAsLong() - startNanos;
+            return RejectionContext.timeoutExpired(maxConcurrent, active, waitedNanos);
           }
           remainingNanos = permitAvailable.awaitNanos(remainingNanos);
         }
 
         // Phase 2: CoDel sojourn time evaluation
-        long now = nanoTimeSource.now();
+        long now = nanoTimeSource.getAsLong();
         long sojournNanos = now - codelEnqueueNanos;
 
         if (sojournNanos > targetDelayNanos) {
@@ -235,10 +243,12 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
             // grants can occur between drops, allowing the system to detect when
             // downstream has recovered (sojourn times drop below target → full reset).
             firstAboveTargetNanos = 0L;
+            int active = activeCalls;
+            long waitedNanos = now - startNanos;
             permitAvailable.signal(); // wake next waiter for fresh evaluation
             logger.debug().log("CoDel drop: sojourn={}ns target={}ns interval={}ns",
                 sojournNanos, targetDelayNanos, intervalNanos);
-            return false;
+            return RejectionContext.codelDrop(maxConcurrent, active, waitedNanos, sojournNanos);
           }
         } else {
           // Sojourn time acceptable — reset congestion stopwatch
@@ -247,7 +257,7 @@ public final class CoDelBulkheadStrategy implements BlockingBulkheadStrategy {
 
         // Phase 3: Grant the permit
         activeCalls++;
-        return true;
+        return null; // permit acquired — no allocation
 
       } catch (InterruptedException e) {
         permitAvailable.signal(); // pass the baton

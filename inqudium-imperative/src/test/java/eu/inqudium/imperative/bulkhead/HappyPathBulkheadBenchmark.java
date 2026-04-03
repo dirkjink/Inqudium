@@ -8,6 +8,7 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
+import java.time.Duration;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -42,6 +43,7 @@ public class HappyPathBulkheadBenchmark {
         .with(bulkhead(), c -> c
             .name("test")
             .maxConcurrentCalls(10)
+            .maxWaitDuration(Duration.ofMillis(1))
         ).build();
     bulkhead = Bulkhead.of(config);
   }

@@ -11,6 +11,7 @@ import eu.inqudium.core.element.bulkhead.event.BulkheadWaitTraceEvent;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.NonBlockingBulkheadStrategy;
+import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.invoke.InqCall;
 import eu.inqudium.core.log.Logger;
@@ -86,22 +87,20 @@ public final class ImperativeBulkhead implements Bulkhead {
 
       // Duty 1: Acquire
       long startWait = nanoTimeSource.now();
-      boolean acquired;
+      RejectionContext rejection;
       try {
-        acquired = strategy.tryAcquire(maxWaitDuration);
+        rejection = strategy.tryAcquire(maxWaitDuration);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        handleAcquireFailure(call.callId(), startWait);
-        throw new InqBulkheadInterruptedException(
-            call.callId(), name,
-            strategy.concurrentCalls(), strategy.maxConcurrentCalls());
+        // No RejectionContext available for interrupts — the strategy never made
+        // a rejection decision, the thread was externally interrupted.
+        handleAcquireFailure(call.callId(), startWait, null);
+        throw new InqBulkheadInterruptedException(call.callId(), name);
       }
 
-      if (!acquired) {
-        handleAcquireFailure(call.callId(), startWait);
-        throw new InqBulkheadFullException(
-            call.callId(), name,
-            strategy.concurrentCalls(), strategy.maxConcurrentCalls());
+      if (rejection != null) {
+        handleAcquireFailure(call.callId(), startWait, rejection);
+        throw new InqBulkheadFullException(call.callId(), name, rejection);
       }
 
       // Two-tier acquire telemetry
@@ -172,7 +171,15 @@ public final class ImperativeBulkhead implements Bulkhead {
     }
   }
 
-  private void handleAcquireFailure(String callId, long startWait) {
+  /**
+   * Handles telemetry for a failed acquire attempt.
+   *
+   * @param callId    the call identifier
+   * @param startWait the nanoTime when the acquire attempt started
+   * @param rejection the rejection context, or {@code null} if the failure was due to
+   *                  an {@link InterruptedException} (no rejection decision was made)
+   */
+  private void handleAcquireFailure(String callId, long startWait, RejectionContext rejection) {
     try {
       publishWaitTrace(callId, startWait, false);
     } catch (RuntimeException e) {
@@ -181,7 +188,7 @@ public final class ImperativeBulkhead implements Bulkhead {
     }
     try {
       eventPublisher.publish(new BulkheadOnRejectEvent(
-          callId, name, strategy.concurrentCalls(), clock.instant()));
+          callId, name, rejection, clock.instant()));
     } catch (RuntimeException e) {
       logger.error().log("Failed to publish reject event for bulkhead '{}', callId='{}'. "
           + "Telemetry-only failure.", name, callId, e);

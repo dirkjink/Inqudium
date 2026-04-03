@@ -1,6 +1,8 @@
 package eu.inqudium.imperative.bulkhead.strategy;
 
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
+import eu.inqudium.core.element.bulkhead.strategy.NonBlockingBulkheadStrategy;
+import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
@@ -48,18 +50,26 @@ public final class SemaphoreBulkheadStrategy implements BlockingBulkheadStrategy
    * <p><b>Fairness note for {@code Duration.ZERO}:</b> Unlike
    * {@link NonBlockingBulkheadStrategy#tryAcquire()}, which succeeds whenever capacity
    * is available, this method respects the fair semaphore's FIFO queue even for zero-timeout
-   * attempts. If other threads are already queued, a zero-timeout call may return
-   * {@code false} despite available permits. This prevents starvation of waiting threads
+   * attempts. If other threads are already queued, a zero-timeout call may return a
+   * rejection despite available permits. This prevents starvation of waiting threads
    * but means {@code tryAcquire(Duration.ZERO)} is not semantically identical to a
    * non-blocking strategy's {@code tryAcquire()}.
    */
   @Override
-  public boolean tryAcquire(Duration timeout) throws InterruptedException {
+  public RejectionContext tryAcquire(Duration timeout) throws InterruptedException {
+    long startNanos = System.nanoTime();
     boolean acquired = semaphore.tryAcquire(timeout.toNanos(), TimeUnit.NANOSECONDS);
     if (acquired) {
       acquiredPermits.incrementAndGet();
+      return null; // permit acquired — no allocation
     }
-    return acquired;
+    long waitedNanos = System.nanoTime() - startNanos;
+    int currentActive = acquiredPermits.get();
+
+    if (timeout.isZero()) {
+      return RejectionContext.capacityReached(maxConcurrent, currentActive);
+    }
+    return RejectionContext.timeoutExpired(maxConcurrent, currentActive, waitedNanos);
   }
 
   @Override
