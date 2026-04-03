@@ -6,6 +6,7 @@ import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.exception.InqException;
 import eu.inqudium.core.exception.InqRuntimeException;
 import eu.inqudium.core.invoke.InqCall;
+import eu.inqudium.core.invoke.InqExecutor;
 import eu.inqudium.core.invoke.Invocation;
 import eu.inqudium.core.invoke.Invocation2;
 import eu.inqudium.core.invoke.Invocation3;
@@ -107,23 +108,10 @@ public interface InqDecorator extends InqElement {
    * @return a decorated supplier (checked exceptions wrapped in InqRuntimeException)
    */
   default <T> Supplier<T> decorateCallable(Callable<T> callable) {
-    return () -> {
-      var call = InqCall.standalone(callable);
-      try {
-        return decorate(call).execute();
-      } catch (InqException ie) {
-        // Expected element behavior (CB open, BH full, etc.) — rethrow without logging
-        throw ie;
-      } catch (RuntimeException re) {
-//        getConfig().getLogger().error("{} '{}': {}",
-//            getElementType(), getName(), re.toString());
-        throw re;
-      } catch (Exception e) {
-//        getConfig().getLogger().error("{} '{}': {}",
-//            getElementType(), getName(), e.toString());
-        throw new InqRuntimeException(InqCallIdGenerator.NONE, getName(), getElementType(), e);
-      }
-    };
+    return () -> InqExecutor.executeInqCall(InqCall.standalone(callable),
+        getName(),
+        getElementType(),
+        InqCallIdGenerator.NONE);
   }
 
   /**
@@ -256,47 +244,5 @@ public interface InqDecorator extends InqElement {
   default <T> InvocationVarargs<T> decorateInvocation(InvocationVarargs<T> invocation) {
     InvocationArray<T> decorated = decorateInvocation(invocation.asArray());
     return InvocationVarargs.fromArray(decorated);
-  }
-
-  // ── Execute methods — decorate and immediately invoke ──
-
-  /**
-   * Decorates and immediately executes a callable.
-   *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param callable the callable to execute
-   * @param <T>      the result type
-   * @return the result
-   */
-  default <T> T executeCallable(Callable<T> callable) {
-    return decorateCallable(callable).get();
-  }
-
-  /**
-   * Decorates and immediately executes a supplier.
-   *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param supplier the supplier to execute
-   * @param <T>      the result type
-   * @return the result
-   */
-  default <T> T executeSupplier(Supplier<T> supplier) {
-    return decorateSupplier(supplier).get();
-  }
-
-  /**
-   * Decorates and immediately executes a runnable.
-   *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param runnable the runnable to execute
-   */
-  default void executeRunnable(Runnable runnable) {
-    decorateRunnable(runnable).run();
   }
 }

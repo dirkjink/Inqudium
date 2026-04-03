@@ -19,15 +19,36 @@ import eu.inqudium.core.log.Logger;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
+import eu.inqudium.imperative.core.InqAsyncExecutor;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Future;
+import java.util.function.Supplier;
 
 /**
  * Composition-based imperative bulkhead facade.
  *
  * <p>Delegates permit management to a {@link BlockingBulkheadStrategy} and
- * owns the diagnostic event lifecycle.
+ * owns the diagnostic event lifecycle. Supports both synchronous execution
+ * (via {@link #decorate(InqCall)}) and asynchronous execution (via
+ * {@link InqAsyncExecutor}).
+ *
+ * <h2>Execution modes</h2>
+ * <ul>
+ *   <li><b>Synchronous</b> ({@link #decorate}, {@code decorateRunnable}, {@code executeRunnable}):
+ *       Acquire and release both happen on the calling thread. The permit is held for
+ *       the duration of the blocking call.</li>
+ *   <li><b>Asynchronous</b> ({@link #executeAsync}, {@link #executeFutureAsync},
+ *       {@link #executeCompletionStageAsync}): Acquire is synchronous (on the calling thread),
+ *       but release is asynchronous — it fires as a dependent action on the
+ *       {@link java.util.concurrent.CompletableFuture} pipeline when the business operation
+ *       completes. The returned future is the <b>same object</b> produced by the supplier
+ *       (pipeline identity is preserved).</li>
+ * </ul>
  *
  * <h2>Observability model</h2>
  * <p><b>Metrics</b> (always on, zero per-call overhead) are delivered via polling-based
@@ -48,7 +69,7 @@ import java.util.Objects;
  *
  * @since 0.3.0
  */
-public final class ImperativeBulkhead implements Bulkhead {
+public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, BulkheadContext {
 
   private final Logger logger;
   private final String name;
@@ -59,6 +80,7 @@ public final class ImperativeBulkhead implements Bulkhead {
   private final Duration maxWaitDuration;
   private final InqNanoTimeSource nanoTimeSource;
   private final InqClock clock;
+  private final CompletableFutureAsyncExecutor asyncExecutor;
 
   public ImperativeBulkhead(InqImperativeBulkheadConfig config, BulkheadStrategy strategy) {
     Objects.requireNonNull(config, "config must not be null");
@@ -78,6 +100,7 @@ public final class ImperativeBulkhead implements Bulkhead {
     this.nanoTimeSource = config.general().nanoTimesource();
     this.eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
     this.clock = config.general().clock();
+    this.asyncExecutor = new CompletableFutureAsyncExecutor(this);
   }
 
   // ======================== Bulkhead facade ========================
@@ -155,6 +178,89 @@ public final class ImperativeBulkhead implements Bulkhead {
 
   public BlockingBulkheadStrategy getStrategy() {
     return strategy;
+  }
+
+  // ======================== BulkheadContext (package-private SPI) ========================
+
+  @Override
+  public String bulkheadName() {
+    return name;
+  }
+
+  @Override
+  public BlockingBulkheadStrategy strategy() {
+    return strategy;
+  }
+
+  @Override
+  public Duration maxWaitDuration() {
+    return maxWaitDuration;
+  }
+
+  @Override
+  public InqNanoTimeSource nanoTimeSource() {
+    return nanoTimeSource;
+  }
+
+  @Override
+  public BulkheadEventConfig eventConfig() {
+    return eventConfig;
+  }
+
+  @Override
+  public InqEventPublisher eventPublisher() {
+    return eventPublisher;
+  }
+
+  @Override
+  public InqClock clock() {
+    return clock;
+  }
+
+  @Override
+  public Logger logger() {
+    return logger;
+  }
+
+  // ======================== Async execution (InqAsyncExecutor) ========================
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to {@link CompletableFutureAsyncExecutor}. Permit acquisition is
+   * synchronous on the calling thread; the callable executes on the
+   * {@link java.util.concurrent.ForkJoinPool#commonPool() common pool}.
+   * The permit is released when the future completes.
+   */
+  @Override
+  public <T> CompletableFuture<T> executeAsync(Callable<T> callable) {
+    return asyncExecutor.executeAsync(callable);
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to {@link CompletableFutureAsyncExecutor}. The returned
+   * {@link CompletableFuture} is the <b>same object</b> as the one produced by
+   * the supplier (if it is a {@code CompletableFuture}). The permit release
+   * handler is attached as a dependent action without wrapping.
+   */
+  @Override
+  public <T> CompletableFuture<T> executeFutureAsync(Supplier<Future<T>> futureSupplier) {
+    return asyncExecutor.executeFutureAsync(futureSupplier);
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to {@link CompletableFutureAsyncExecutor}. The returned
+   * {@link CompletableFuture} is the <b>same object</b> as
+   * {@code stageSupplier.get().toCompletableFuture()} — no wrapping, no copying.
+   */
+  @Override
+  public <T> CompletableFuture<T> executeCompletionStageAsync(
+      Supplier<CompletionStage<T>> stageSupplier) {
+    return asyncExecutor.executeCompletionStageAsync(stageSupplier);
   }
 
   // ======================== Diagnostic events — acquire ========================

@@ -5,8 +5,12 @@ import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.BulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.pipeline.InqDecorator;
+import eu.inqudium.core.invoke.InqExecutor;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
+
+import java.util.concurrent.Callable;
+import java.util.function.Supplier;
 
 /**
  * Imperative bulkhead — limits concurrent calls via pluggable strategies.
@@ -39,7 +43,7 @@ import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
  *
  * @since 0.1.0
  */
-public interface Bulkhead extends InqDecorator {
+public interface Bulkhead extends InqDecorator, InqExecutor {
 
   static Bulkhead of(InqConfig config) {
     return of(config.of(InqImperativeBulkheadConfig.class).orElseThrow());
@@ -65,4 +69,20 @@ public interface Bulkhead extends InqDecorator {
   default InqElementType getElementType() {
     return InqElementType.BULKHEAD;
   }
+
+  @Override
+  default <T> T executeCallable(Callable<T> callable) {
+    return decorateCallable(callable).get();
+  }
+
+  @Override
+  default <T> T executeSupplier(Supplier<T> supplier) {
+    return decorateSupplier(supplier).get();
+  }
+
+  @Override
+  default void executeRunnable(Runnable runnable) {
+    decorateRunnable(runnable).run();
+  }
+
 }
