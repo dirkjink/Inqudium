@@ -24,27 +24,43 @@ import java.time.Duration;
  */
 interface BulkheadContext {
 
-  /** The bulkhead instance name, used for events, exceptions, and logging. */
+  /**
+   * The bulkhead instance name, used for events, exceptions, and logging.
+   */
   String bulkheadName();
 
-  /** The blocking strategy that manages permits. */
+  /**
+   * The blocking strategy that manages permits.
+   */
   BlockingBulkheadStrategy strategy();
 
-  /** Maximum time to wait for a permit before rejecting. */
+  /**
+   * Maximum time to wait for a permit before rejecting.
+   */
   Duration maxWaitDuration();
 
-  /** Nanosecond time source for RTT measurement (adaptive algorithms). */
+  /**
+   * Nanosecond time source for RTT measurement (adaptive algorithms).
+   */
   InqNanoTimeSource nanoTimeSource();
 
-  /** Controls which event categories are enabled (standard vs diagnostic). */
+  /**
+   * Controls which event categories are enabled (standard vs diagnostic).
+   */
   BulkheadEventConfig eventConfig();
 
-  /** Per-element event publisher for diagnostic events. */
+  /**
+   * Per-element event publisher for diagnostic events.
+   */
   InqEventPublisher eventPublisher();
 
-  /** Clock for event timestamps. */
+  /**
+   * Clock for event timestamps.
+   */
   InqClock clock();
 
-  /** Logger for error reporting in release/event paths. */
+  /**
+   * Logger for error reporting in release/event paths.
+   */
   Logger logger();
 }

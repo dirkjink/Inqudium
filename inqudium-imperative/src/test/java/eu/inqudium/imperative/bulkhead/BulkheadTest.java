@@ -2,6 +2,7 @@ package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
+import eu.inqudium.core.element.bulkhead.config.BulkheadEventConfig;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnAcquireEvent;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnRejectEvent;
 import eu.inqudium.core.element.bulkhead.event.BulkheadOnReleaseEvent;
@@ -100,6 +101,7 @@ class BulkheadTest {
           .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(1)
+              .eventConfig(BulkheadEventConfig.diagnostic())
           ).build();
       var bh = Bulkhead.of(config);
 
@@ -183,10 +185,11 @@ class BulkheadTest {
           .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(5)
+              .eventConfig(BulkheadEventConfig.diagnostic())
           ).build();
       var bh = Bulkhead.of(config);
       var events = Collections.synchronizedList(new ArrayList<InqEvent>());
-      bh.getEventPublisher().onEvent(events::add);
+      bh.getEventPublisher().onEvent(InqEvent.class, events::add);
 
       // When
       bh.executeSupplier(() -> "ok");
@@ -205,6 +208,7 @@ class BulkheadTest {
           .with(bulkhead(), c -> c
               .name("test")
               .maxConcurrentCalls(1)
+              .eventConfig(BulkheadEventConfig.diagnostic())
           ).build();
       var bh = Bulkhead.of(config);
       var events = Collections.synchronizedList(new ArrayList<InqEvent>());

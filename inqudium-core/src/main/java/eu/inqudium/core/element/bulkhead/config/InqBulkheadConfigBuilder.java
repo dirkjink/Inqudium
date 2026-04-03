@@ -24,6 +24,7 @@ public abstract class InqBulkheadConfigBuilder
   private Duration maxWaitDuration;
   private InqLimitAlgorithm limitAlgorithm;
   private BulkheadEventConfig eventConfig;
+  private Boolean enableExceptionOptimization;
 
   protected InqBulkheadConfigBuilder() {
   }
@@ -124,6 +125,12 @@ public abstract class InqBulkheadConfigBuilder
     return self();
   }
 
+  public InqBulkheadConfigBuilder<B, E> enableExceptionOptimization(Boolean enableExceptionOptimization) {
+    Objects.requireNonNull(enableExceptionOptimization, "enableExceptionOptimization must not be null");
+    this.enableExceptionOptimization = enableExceptionOptimization;
+    return this;
+  }
+
   /**
    * Sets an optional adaptive limit algorithm that dynamically adjusts the
    * concurrency limit at runtime based on observed throughput and error rates.
@@ -158,7 +165,10 @@ public abstract class InqBulkheadConfigBuilder
     BulkheadStrategy resolvedStrategy = this.strategy;
 
     InqElementCommonConfig common =
-        new InqElementCommonConfig(name, InqElementType.BULKHEAD, eventPublisher);
+        new InqElementCommonConfig(name,
+            InqElementType.BULKHEAD,
+            eventPublisher,
+            enableExceptionOptimization);
 
     InqBulkheadConfig config = new InqBulkheadConfig(
         this.generalConfig,

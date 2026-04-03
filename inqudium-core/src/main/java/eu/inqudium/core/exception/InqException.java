@@ -33,6 +33,7 @@ public abstract class InqException extends RuntimeException {
   private final String code;
   private final String elementName;
   private final InqElementType elementType;
+  private final boolean enableExceptionOptimization;
 
   /**
    * Creates a new exception with call identity, error code, and element context.
@@ -43,32 +44,44 @@ public abstract class InqException extends RuntimeException {
    * @param elementType the type of the element
    * @param message     the detail message (without code/callId prefix — prepended automatically)
    */
-  protected InqException(String callId, String code, String elementName,
-                         InqElementType elementType, String message) {
+  protected InqException(String callId,
+                         String code,
+                         String elementName,
+                         InqElementType elementType,
+                         String message) {
     super(formatMessage(callId, code, message));
     this.callId = callId;
     this.code = code;
     this.elementName = elementName;
     this.elementType = elementType;
+    this.enableExceptionOptimization = false;
   }
 
   /**
    * Creates a new exception with call identity, error code, element context, and a cause.
    *
-   * @param callId      the unique call identifier, or {@link InqCallIdGenerator#NONE} for standalone use
-   * @param code        the structured error code
-   * @param elementName the name of the element instance
-   * @param elementType the type of the element
-   * @param message     the detail message (without code/callId prefix — prepended automatically)
-   * @param cause       the underlying cause
+   * @param callId                      the unique call identifier, or {@link InqCallIdGenerator#NONE} for standalone use
+   * @param code                        the structured error code
+   * @param elementName                 the name of the element instance
+   * @param elementType                 the type of the element
+   * @param message                     the detail message (without code/callId prefix — prepended automatically)
+   * @param cause                       the underlying cause
+   * @param enableExceptionOptimization whether suppression is enabled or disabled, and whether the stack trace
+   *                                    should be writable.
    */
-  protected InqException(String callId, String code, String elementName,
-                         InqElementType elementType, String message, Throwable cause) {
-    super(formatMessage(callId, code, message), cause);
+  protected InqException(String callId,
+                         String code,
+                         String elementName,
+                         InqElementType elementType,
+                         String message,
+                         Throwable cause,
+                         boolean enableExceptionOptimization) {
+    super(formatMessage(callId, code, message), cause, enableExceptionOptimization, !enableExceptionOptimization);
     this.callId = callId;
     this.code = code;
     this.elementName = elementName;
     this.elementType = elementType;
+    this.enableExceptionOptimization = enableExceptionOptimization;
   }
 
   private static String formatMessage(String callId, String code, String message) {
@@ -79,6 +92,10 @@ public abstract class InqException extends RuntimeException {
     if (t instanceof VirtualMachineError) throw (VirtualMachineError) t;
     if (t instanceof ThreadDeath) throw (ThreadDeath) t;
     if (t instanceof LinkageError) throw (LinkageError) t;
+  }
+
+  public boolean isEnableExceptionOptimization() {
+    return enableExceptionOptimization;
   }
 
   /**

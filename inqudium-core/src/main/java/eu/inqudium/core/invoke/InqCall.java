@@ -1,12 +1,9 @@
 package eu.inqudium.core.invoke;
 
 import eu.inqudium.core.callid.InqCallIdGenerator;
-import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.exception.InqRuntimeException;
 
 import java.util.Objects;
 import java.util.concurrent.Callable;
-import java.util.function.Supplier;
 
 /**
  * Context-carrying wrapper for a call through the resilience pipeline.

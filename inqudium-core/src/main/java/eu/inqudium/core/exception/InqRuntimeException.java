@@ -62,7 +62,7 @@ public class InqRuntimeException extends InqException {
         elementName,
         elementType != null ? elementType : InqElementType.NO_ELEMENT,
         formatCauseMessage(elementName, elementType, InqFailure.unwrap(cause)),
-        InqFailure.unwrap(cause));
+        InqFailure.unwrap(cause), false);
   }
 
   /**
@@ -78,7 +78,7 @@ public class InqRuntimeException extends InqException {
     super(InqCallIdGenerator.NONE, InqElementType.NO_ELEMENT.errorCode(0),
         null, InqElementType.NO_ELEMENT,
         formatCauseMessage(null, null, InqFailure.unwrap(cause)),
-        InqFailure.unwrap(cause));
+        InqFailure.unwrap(cause), false);
   }
 
   private static String formatCauseMessage(String elementName, InqElementType elementType, Throwable unwrapped) {

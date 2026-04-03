@@ -180,25 +180,19 @@ public class HappyPathBulkheadBenchmarkOne {
 
   private static final int BULKHEAD_LIMIT = 10;
   private static final int WAIT_MILLIS = 150;
-
-  // ── Raw Semaphore (baseline, no metrics) ──
-  private Semaphore semaphore;
-
-  // ── Inqudium: all events enabled (fair comparison with R4j internal events) ──
-  private eu.inqudium.imperative.bulkhead.Bulkhead inqBulkheadAllEvents;
-
-  // ── Inqudium: rejections only (optimized, shows ceiling) ──
-  private eu.inqudium.imperative.bulkhead.Bulkhead inqBulkheadOptimized;
-
-  // ── Resilience4j with Micrometer (production Spring Boot setup) ──
-  private io.github.resilience4j.bulkhead.Bulkhead r4jBulkhead;
-
-  // ── Failsafe with event listeners (only metrics mechanism available) ──
-  private FailsafeExecutor<Void> failsafeExecutor;
-
   // ── Failsafe metrics counters ──
   private final LongAdder failsafeSuccess = new LongAdder();
   private final LongAdder failsafeFailure = new LongAdder();
+  // ── Raw Semaphore (baseline, no metrics) ──
+  private Semaphore semaphore;
+  // ── Inqudium: all events enabled (fair comparison with R4j internal events) ──
+  private eu.inqudium.imperative.bulkhead.Bulkhead inqBulkheadAllEvents;
+  // ── Inqudium: rejections only (optimized, shows ceiling) ──
+  private eu.inqudium.imperative.bulkhead.Bulkhead inqBulkheadOptimized;
+  // ── Resilience4j with Micrometer (production Spring Boot setup) ──
+  private io.github.resilience4j.bulkhead.Bulkhead r4jBulkhead;
+  // ── Failsafe with event listeners (only metrics mechanism available) ──
+  private FailsafeExecutor<Void> failsafeExecutor;
 
   public static void main(String[] args) throws RunnerException {
     Options opt = new OptionsBuilder()

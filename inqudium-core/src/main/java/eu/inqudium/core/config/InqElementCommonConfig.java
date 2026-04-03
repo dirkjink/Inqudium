@@ -8,7 +8,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public record InqElementCommonConfig(
     String name,
     InqElementType elementType,
-    InqEventPublisher eventPublisher
+    InqEventPublisher eventPublisher,
+    Boolean enableExceptionOptimization
 ) implements InqElementConfig, ConfigExtension<InqElementCommonConfig> {
 
   private final static AtomicInteger counter = new AtomicInteger(1);
@@ -25,7 +26,15 @@ public record InqElementCommonConfig(
       eventPublisherInference = InqEventPublisher.create(nameInference, elementType);
     }
 
-    return new InqElementCommonConfig(nameInference, elementType, eventPublisherInference);
+    Boolean enableExceptionOptimizationInference = enableExceptionOptimization;
+    if (enableExceptionOptimization == null) {
+      enableExceptionOptimizationInference = true;
+    }
+
+    return new InqElementCommonConfig(nameInference,
+        elementType,
+        eventPublisherInference,
+        enableExceptionOptimizationInference);
   }
 
   @Override

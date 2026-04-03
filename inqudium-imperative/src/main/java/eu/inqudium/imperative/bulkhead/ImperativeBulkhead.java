@@ -1,5 +1,6 @@
 package eu.inqudium.imperative.bulkhead;
 
+import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.element.bulkhead.InqBulkheadInterruptedException;
@@ -14,6 +15,7 @@ import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.NonBlockingBulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 import eu.inqudium.core.event.InqEventPublisher;
+import eu.inqudium.core.exception.InqRuntimeException;
 import eu.inqudium.core.invoke.InqCall;
 import eu.inqudium.core.log.Logger;
 import eu.inqudium.core.time.InqClock;
@@ -118,6 +120,34 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
   @Override
   public InqImperativeBulkheadConfig getConfig() {
     return config;
+  }
+
+  /**
+   * Explicit override of {@link eu.inqudium.core.pipeline.InqDecorator#decorateCallable}.
+   *
+   * <p>This override is functionally identical to the default method on {@code InqDecorator}.
+   * It exists because JDK 25 EA exhibits a default-method resolution issue in the diamond
+   * hierarchy ({@code ImperativeBulkhead} → {@code Bulkhead} → {@code InqDecorator} +
+   * {@code InqExecutor}): the default {@code decorateCallable} is not dispatched correctly,
+   * causing the bulkhead's {@link #decorate(InqCall)} to be silently skipped. The explicit
+   * override forces the method into {@code ImperativeBulkhead.class} directly, bypassing
+   * the dispatch bug.
+   *
+   * <p>This override should be kept even if the JDK bug is fixed — it makes the decoration
+   * path explicit and self-documenting, and gives the JIT a monomorphic call target.
+   */
+  @Override
+  public <T> Supplier<T> decorateCallable(Callable<T> callable) {
+    return () -> {
+      var call = InqCall.<T>standalone(callable);
+      try {
+        return decorate(call).execute();
+      } catch (RuntimeException re) {
+        throw re;
+      } catch (Exception e) {
+        throw new InqRuntimeException(InqCallIdGenerator.NONE, getName(), getElementType(), e);
+      }
+    };
   }
 
   @Override

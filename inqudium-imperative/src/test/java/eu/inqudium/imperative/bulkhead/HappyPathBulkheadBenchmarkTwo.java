@@ -179,20 +179,17 @@ public class HappyPathBulkheadBenchmarkTwo {
 
   private static final int BULKHEAD_LIMIT = 10;
   private static final int WAIT_MILLIS = 150;
-
+  // ── Failsafe metrics counters ──
+  private final LongAdder failsafeSuccess = new LongAdder();
+  private final LongAdder failsafeFailure = new LongAdder();
   // ── Raw Semaphore (baseline, no metrics) ──
   private Semaphore semaphore;
-
   // ── Pre-decorated wrappers (created once in setUp, invoked per iteration) ──
   private Runnable decoratedSemaphore;
   private Runnable decoratedInqDiagnostic;
   private Runnable decoratedInqOptimized;
   private Runnable decoratedR4j;
   private Runnable decoratedFailsafe;
-
-  // ── Failsafe metrics counters ──
-  private final LongAdder failsafeSuccess = new LongAdder();
-  private final LongAdder failsafeFailure = new LongAdder();
 
   public static void main(String[] args) throws RunnerException {
     Options opt = new OptionsBuilder()
@@ -206,6 +203,14 @@ public class HappyPathBulkheadBenchmarkTwo {
         .build();
     new Runner(opt).run();
   }
+
+  private static void simulateWork() {
+    Blackhole.consumeCPU(100);
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // BASELINE — no bulkhead
+  // ════════════════════════════════════════════════════════════════════
 
   @Setup(Level.Trial)
   public void setUp() {
@@ -266,10 +271,15 @@ public class HappyPathBulkheadBenchmarkTwo {
     decoratedSemaphore = () -> {
       try {
         if (semaphore.tryAcquire(WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
-          try { simulateWork(); }
-          finally { semaphore.release(); }
+          try {
+            simulateWork();
+          } finally {
+            semaphore.release();
+          }
         }
-      } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
     };
 
     decoratedInqDiagnostic = inqBulkheadAllEvents.decorateRunnable(
@@ -286,7 +296,9 @@ public class HappyPathBulkheadBenchmarkTwo {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // BASELINE — no bulkhead
+  // PURE OVERHEAD — Threads (10) == Permits (10), no contention
+  // Wrappers are pre-created in setUp — the benchmark measures only
+  // the .run() invocation (acquire → work → release), not decoration.
   // ════════════════════════════════════════════════════════════════════
 
   @Benchmark
@@ -294,12 +306,6 @@ public class HappyPathBulkheadBenchmarkTwo {
   public void baselineNoBulkhead() {
     simulateWork();
   }
-
-  // ════════════════════════════════════════════════════════════════════
-  // PURE OVERHEAD — Threads (10) == Permits (10), no contention
-  // Wrappers are pre-created in setUp — the benchmark measures only
-  // the .run() invocation (acquire → work → release), not decoration.
-  // ════════════════════════════════════════════════════════════════════
 
   @Benchmark
   @Threads(10)
@@ -325,16 +331,16 @@ public class HappyPathBulkheadBenchmarkTwo {
     decoratedR4j.run();
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  // CONTENTION — Threads (20) > Permits (10), no rejections
+  // Same pre-created wrappers, more threads than permits.
+  // ════════════════════════════════════════════════════════════════════
+
   @Benchmark
   @Threads(10)
   public void measurePureOverheadFailsafe() {
     decoratedFailsafe.run();
   }
-
-  // ════════════════════════════════════════════════════════════════════
-  // CONTENTION — Threads (20) > Permits (10), no rejections
-  // Same pre-created wrappers, more threads than permits.
-  // ════════════════════════════════════════════════════════════════════
 
   @Benchmark
   @Threads(20)
@@ -360,15 +366,11 @@ public class HappyPathBulkheadBenchmarkTwo {
     decoratedR4j.run();
   }
 
+  // ════════════════════════════════════════════════════════════════════
+
   @Benchmark
   @Threads(20)
   public void measureContentionFailsafe() {
     decoratedFailsafe.run();
-  }
-
-  // ════════════════════════════════════════════════════════════════════
-
-  private static void simulateWork() {
-    Blackhole.consumeCPU(100);
   }
 }

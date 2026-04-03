@@ -4,8 +4,8 @@ import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.BulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
-import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.invoke.InqExecutor;
+import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
 
