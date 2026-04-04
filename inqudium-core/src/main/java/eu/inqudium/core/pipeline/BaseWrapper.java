@@ -64,6 +64,21 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   private final String chainId;
 
   /**
+   * The next step in the execution chain, resolved once at construction time.
+   * Points to the inner wrapper's {@code executeWithId} if the delegate is another
+   * {@link BaseWrapper}, or to this layer's {@link #invokeCore} if the delegate
+   * is the terminal target. This eliminates the need for a runtime
+   * {@code instanceof} check on every invocation.
+   */
+  private final InternalExecutor<A, R> nextStep;
+
+  /**
+   * Cached reference to the inner wrapper, or {@code null} if the delegate is the
+   * terminal target. Resolved once at construction time since the chain is immutable.
+   */
+  private final S inner;
+
+  /**
    * Constructs a new wrapper layer around the given delegate.
    *
    * <p>If the delegate is itself a {@code BaseWrapper}, this layer joins the same chain
@@ -74,6 +89,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
    * @param delegate the target to wrap (must not be {@code null})
    * @throws IllegalArgumentException if {@code name} or {@code delegate} is {@code null}
    */
+  @SuppressWarnings("unchecked")
   protected BaseWrapper(String name, T delegate) {
     if (name == null) {
       throw new IllegalArgumentException("Name must not be null");
@@ -84,11 +100,16 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
     this.name = name;
     this.delegate = delegate;
 
-    // Inherit the chain ID from the inner wrapper, or start a new chain
+    // Resolve chain structure once — the chain is immutable after construction
     if (delegate instanceof BaseWrapper) {
-      this.chainId = ((BaseWrapper<?, ?, ?, ?>) delegate).getChainId();
+      this.inner = (S) delegate;
+      this.chainId = this.inner.getChainId();
+      this.nextStep = (InternalExecutor<A, R>) delegate;
     } else {
+      this.inner = null;
       this.chainId = UUID.randomUUID().toString();
+      // Terminal delegate — forward directly to invokeCore, skipping the callId
+      this.nextStep = (callId, argument) -> invokeCore(argument);
     }
   }
 
@@ -109,15 +130,13 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   }
 
   /**
-   * Processes this layer and propagates the call to the next inner layer.
+   * Processes this layer and propagates the call to the next step in the chain.
    *
-   * <p>The execution order for each layer is:</p>
-   * <ol>
-   *   <li>Call {@link #handleLayer} to execute this layer's cross-cutting concern</li>
-   *   <li>If the delegate is another {@link InternalExecutor}, forward the call inward</li>
-   *   <li>Otherwise, this is the innermost layer — call {@link #invokeCore} to execute
-   *       the actual delegate logic</li>
-   * </ol>
+   * <p>The execution is straightforward: first this layer's {@link #handleLayer} runs,
+   * then the pre-resolved {@code nextStep} is invoked. The {@code nextStep} was
+   * determined at construction time — it either forwards to the inner wrapper's
+   * {@code executeWithId}, or calls {@link #invokeCore} on the terminal delegate.
+   * No runtime type checks are needed.</p>
    *
    * @param callId   the unique identifier for this invocation
    * @param argument the argument flowing through the chain
@@ -125,18 +144,8 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
    */
   @Override
   public R executeWithId(String callId, A argument) {
-    // Step 1: Let this layer do its work (logging, metrics, security, etc.)
     handleLayer(callId, argument);
-
-    // Step 2: Decide whether to forward inward or invoke the core delegate
-    if (delegate instanceof InternalExecutor) {
-      @SuppressWarnings("unchecked")
-      InternalExecutor<A, R> internalInner = (InternalExecutor<A, R>) delegate;
-      return internalInner.executeWithId(callId, argument);
-    }
-
-    // Step 3: We are the innermost wrapper — execute the actual target
-    return invokeCore(argument);
+    return nextStep.executeWithId(callId, argument);
   }
 
   /**
@@ -200,13 +209,10 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   /**
    * {@inheritDoc}
    *
-   * <p>Returns the delegate cast to the self-type if it is a {@code BaseWrapper},
-   * or {@code null} if the delegate is the terminal target.</p>
+   * <p>Returns the cached inner wrapper reference, or {@code null} if the delegate
+   * is the terminal target. Resolved once at construction time.</p>
    */
-  @SuppressWarnings("unchecked")
-  @Override public S getInner() {
-    return (delegate instanceof BaseWrapper) ? (S) delegate : null;
-  }
+  @Override public S getInner() { return inner; }
 
   /**
    * Provides subclasses with access to the wrapped delegate for use in
