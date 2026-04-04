@@ -38,7 +38,7 @@ public interface InqAsyncExecutor<A, R> extends AsyncLayerAction<A, R> {
    */
   @SuppressWarnings("unchecked")
   default CompletionStage<Void> executeAsyncRunnable(Supplier<CompletionStage<Void>> supplier) {
-    return ((AsyncLayerAction<Void, Void>) this).execute(
+    return ((AsyncLayerAction<Void, Void>) this).executeAsync(
         StandaloneIdGenerator.nextChainId(),
         StandaloneIdGenerator.nextCallId(),
         null,
@@ -51,7 +51,7 @@ public interface InqAsyncExecutor<A, R> extends AsyncLayerAction<A, R> {
    */
   @SuppressWarnings("unchecked")
   default <T> CompletionStage<T> executeAsyncSupplier(Supplier<CompletionStage<T>> supplier) {
-    return ((AsyncLayerAction<Void, T>) this).execute(
+    return ((AsyncLayerAction<Void, T>) this).executeAsync(
         StandaloneIdGenerator.nextChainId(),
         StandaloneIdGenerator.nextCallId(),
         null,
@@ -67,7 +67,7 @@ public interface InqAsyncExecutor<A, R> extends AsyncLayerAction<A, R> {
   default <V> CompletionStage<V> executeAsyncCallable(
       Callable<CompletionStage<V>> callable) throws Exception {
     try {
-      return ((AsyncLayerAction<Void, V>) this).execute(
+      return ((AsyncLayerAction<Void, V>) this).executeAsync(
           StandaloneIdGenerator.nextChainId(),
           StandaloneIdGenerator.nextCallId(),
           null,
@@ -97,7 +97,7 @@ public interface InqAsyncExecutor<A, R> extends AsyncLayerAction<A, R> {
    */
   default CompletionStage<R> executeAsyncFunction(
       Function<A, CompletionStage<R>> function, A input) {
-    return execute(
+    return executeAsync(
         StandaloneIdGenerator.nextChainId(),
         StandaloneIdGenerator.nextCallId(),
         input,
@@ -113,7 +113,7 @@ public interface InqAsyncExecutor<A, R> extends AsyncLayerAction<A, R> {
   default <T> CompletionStage<T> executeAsyncJoinPoint(
       ProxyExecution<CompletionStage<T>> execution) throws Throwable {
     try {
-      return ((AsyncLayerAction<Void, T>) this).execute(
+      return ((AsyncLayerAction<Void, T>) this).executeAsync(
           StandaloneIdGenerator.nextChainId(),
           StandaloneIdGenerator.nextCallId(),
           null,

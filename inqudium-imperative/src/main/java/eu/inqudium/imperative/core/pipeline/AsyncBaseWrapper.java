@@ -17,14 +17,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * <pre>{@code
  * outerWrapper.get()
  *   └── initiateChain(null)
- *         └── outer.execute(chainId, callId, null)
- *               └── outerAction.execute(chainId, callId, null, next=inner)
- *                     │  acquire()                           // sync start phase
- *                     └── inner.execute(chainId, callId, null)
- *                           └── innerAction.execute(chainId, callId, null, next=core)
- *                                 └── coreExecution          // returns CompletionStage
- *                                 └── .whenComplete(...)     // async end phase (inner)
- *                     └── .whenComplete(...)                  // async end phase (outer)
+ *         └── outer.executeAsync(chainId, callId, null)
+ *               └── outerAction.executeAsync(chainId, callId, null, next=inner)
+ *                     │  acquire()                                // sync start phase
+ *                     └── inner.executeAsync(chainId, callId, null)
+ *                           └── innerAction.executeAsync(chainId, callId, null, next=core)
+ *                                 └── coreExecution               // returns CompletionStage
+ *                                 └── .whenComplete(...)          // async end phase (inner)
+ *                     └── .whenComplete(...)                       // async end phase (outer)
  * }</pre>
  *
  * @param <T> the delegate type this wrapper wraps around
@@ -92,15 +92,15 @@ public abstract class AsyncBaseWrapper<T, A, R, S extends AsyncBaseWrapper<T, A,
    * Entry point for async chain execution. Generates a call ID and starts traversal.
    */
   protected CompletionStage<R> initiateChain(A argument) {
-    return this.execute(chainId, generateCallId(), argument);
+    return this.executeAsync(chainId, generateCallId(), argument);
   }
 
   /**
    * Delegates to this layer's {@link AsyncLayerAction}, passing the next step.
    */
   @Override
-  public CompletionStage<R> execute(long chainId, long callId, A argument) {
-    return layerAction.execute(chainId, callId, argument, nextStep);
+  public CompletionStage<R> executeAsync(long chainId, long callId, A argument) {
+    return layerAction.executeAsync(chainId, callId, argument, nextStep);
   }
 
   protected long generateCallId() {

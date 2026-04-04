@@ -1,4 +1,6 @@
-package eu.inqudium.core.pipeline;
+package eu.inqudium.imperative.core.pipeline;
+
+import eu.inqudium.core.pipeline.LayerAction;
 
 import java.util.concurrent.CompletionStage;
 
