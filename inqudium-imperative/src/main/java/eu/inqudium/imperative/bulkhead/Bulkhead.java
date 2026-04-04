@@ -4,85 +4,94 @@ import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.BulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
-import eu.inqudium.core.invoke.InqExecutor;
-import eu.inqudium.core.pipeline.InqDecorator;
+import eu.inqudium.core.pipeline.Decorator;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
-
-import java.util.concurrent.Callable;
-import java.util.function.Supplier;
 
 /**
  * Imperative bulkhead — limits concurrent calls via pluggable strategies.
  *
+ * <p>Extends {@link Decorator} to participate directly in the wrapper pipeline.
+ * The bulkhead's around-advice (acquire → execute → release) is defined by the
+ * {@link Decorator#execute} method, and the factory methods inherited from
+ * {@link Decorator} allow wrapping any functional interface in one line:</p>
+ *
  * <h2>Usage</h2>
  * <pre>{@code
- * // Static (Semaphore — default)
- * var bh = Bulkhead.of("inventoryService", BulkheadConfig.builder()
+ * // Create a bulkhead
+ * Bulkhead<Void, String> bh = Bulkhead.of(BulkheadConfig.builder()
  *     .maxConcurrentCalls(10)
  *     .build());
  *
- * // Adaptive (AIMD)
- * var bh = Bulkhead.of("paymentService", BulkheadConfig.builder()
- *     .maxConcurrentCalls(25)
- *     .limitAlgorithm(new AimdLimitAlgorithm(25, 5, 100, 0.5))
- *     .build());
+ * // Decorate via Decorator factory methods — fully type-safe
+ * Supplier<String> protected = bh.decorateSupplier(() -> inventoryService.check(sku));
+ * Callable<String> protected = bh.decorateCallable(() -> readFile(path));
  *
- * // CoDel
- * var bh = Bulkhead.of("searchService", BulkheadConfig.builder()
- *     .maxConcurrentCalls(25)
- *     .codel(Duration.ofMillis(20), Duration.ofMillis(500))
- *     .build());
- *
- * var result = bh.executeSupplier(() -> inventoryService.check(sku));
+ * // Compose with other decorators
+ * Supplier<String> resilient = retry.decorateSupplier(
+ *     bh.decorateSupplier(() -> callApi())
+ * );
  * }</pre>
  *
  * <p>The strategy is selected automatically by {@link BulkheadConfig.Builder#build()}.
- * All auto-selected strategies are {@link BlockingBulkheadStrategy}
- * instances. For custom non-blocking strategies, use the reactive bulkhead facade.
+ * All auto-selected strategies are {@link BlockingBulkheadStrategy} instances.
+ * For custom non-blocking strategies, use the reactive bulkhead facade.</p>
  *
- * @since 0.1.0
+ * @param <A> the argument type flowing through the chain
+ * @param <R> the return type flowing back through the chain
+ * @since 0.4.0
  */
-public interface Bulkhead extends InqDecorator, InqExecutor {
+public interface Bulkhead<A, R> extends Decorator<A, R> {
 
-  static Bulkhead of(InqConfig config) {
+  /**
+   * Creates a bulkhead from a general {@link InqConfig} container.
+   *
+   * @param config the configuration container holding an {@link InqImperativeBulkheadConfig}
+   * @param <A>    the argument type
+   * @param <R>    the return type
+   * @return a new bulkhead instance
+   */
+  static <A, R> Bulkhead<A, R> of(InqConfig config) {
     return of(config.of(InqImperativeBulkheadConfig.class).orElseThrow());
   }
 
   /**
    * Creates a bulkhead with the given configuration.
    *
-   * <p>Uses {@link BulkheadConfig#getBlockingStrategy()} — throws if a
-   * non-blocking strategy was configured (imperative paradigm requires blocking).
+   * <p>Uses a {@link SemaphoreBulkheadStrategy} with the configured
+   * maximum concurrent calls.</p>
+   *
+   * @param config the bulkhead configuration
+   * @param <A>    the argument type
+   * @param <R>    the return type
+   * @return a new bulkhead instance
    */
-  static Bulkhead of(InqImperativeBulkheadConfig config) {
-    return new ImperativeBulkhead(config, new SemaphoreBulkheadStrategy(config.maxConcurrentCalls()));
+  static <A, R> Bulkhead<A, R> of(InqImperativeBulkheadConfig config) {
+    return new ImperativeBulkhead<>(config, new SemaphoreBulkheadStrategy(config.maxConcurrentCalls()));
   }
 
+  /**
+   * Returns the bulkhead configuration.
+   */
   InqImperativeBulkheadConfig getConfig();
 
+  /**
+   * Returns the number of currently active concurrent calls.
+   */
   int getConcurrentCalls();
 
+  /**
+   * Returns the number of permits currently available.
+   */
   int getAvailablePermits();
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Always returns {@link InqElementType#BULKHEAD}.</p>
+   */
   @Override
   default InqElementType getElementType() {
     return InqElementType.BULKHEAD;
   }
-
-  @Override
-  default <T> T executeCallable(Callable<T> callable) {
-    return decorateCallable(callable).get();
-  }
-
-  @Override
-  default <T> T executeSupplier(Supplier<T> supplier) {
-    return decorateSupplier(supplier).get();
-  }
-
-  @Override
-  default void executeRunnable(Runnable runnable) {
-    decorateRunnable(runnable).run();
-  }
-
 }

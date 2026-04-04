@@ -1,6 +1,5 @@
 package eu.inqudium.imperative.bulkhead;
 
-import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.element.bulkhead.InqBulkheadInterruptedException;
@@ -12,12 +11,10 @@ import eu.inqudium.core.element.bulkhead.event.BulkheadRollbackTraceEvent;
 import eu.inqudium.core.element.bulkhead.event.BulkheadWaitTraceEvent;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
-import eu.inqudium.core.element.bulkhead.strategy.NonBlockingBulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 import eu.inqudium.core.event.InqEventPublisher;
-import eu.inqudium.core.exception.InqRuntimeException;
-import eu.inqudium.core.invoke.InqCall;
 import eu.inqudium.core.log.Logger;
+import eu.inqudium.core.pipeline.InternalExecutor;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
@@ -32,46 +29,44 @@ import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 /**
- * Composition-based imperative bulkhead facade.
+ * Composition-based imperative bulkhead implementing the {@link Decorator} interface.
  *
- * <p>Delegates permit management to a {@link BlockingBulkheadStrategy} and
- * owns the diagnostic event lifecycle. Supports both synchronous execution
- * (via {@link #decorate(InqCall)}) and asynchronous execution (via
- * {@link InqAsyncExecutor}).
+ * <p>The bulkhead logic is expressed as around-advice in {@link #execute}: it acquires a
+ * permit, delegates to the next step in the chain via {@code next.execute(...)}, measures
+ * RTT, and releases the permit in a {@code finally} block. This replaces the previous
+ * {@code decorate(InqCall)} approach with the unified pipeline execution model.</p>
+ *
+ * <h2>Usage via Decorator factory methods</h2>
+ * <pre>{@code
+ * ImperativeBulkhead<Void, String> bulkhead = new ImperativeBulkhead<>(config, strategy);
+ *
+ * // Wrap any functional interface — fully type-safe
+ * Supplier<String> protected = bulkhead.decorateSupplier(() -> callApi());
+ * Callable<String> protected = bulkhead.decorateCallable(() -> readFile());
+ *
+ * // Compose with other decorators
+ * Supplier<String> resilient = retry.decorateSupplier(
+ *     bulkhead.decorateSupplier(() -> callApi())
+ * );
+ * }</pre>
  *
  * <h2>Execution modes</h2>
  * <ul>
- *   <li><b>Synchronous</b> ({@link #decorate}, {@code decorateRunnable}, {@code executeRunnable}):
- *       Acquire and release both happen on the calling thread. The permit is held for
- *       the duration of the blocking call.</li>
+ *   <li><b>Synchronous</b> (via {@link Decorator} factory methods): Acquire and release
+ *       both happen on the calling thread.</li>
  *   <li><b>Asynchronous</b> ({@link #executeAsync}, {@link #executeFutureAsync},
- *       {@link #executeCompletionStageAsync}): Acquire is synchronous (on the calling thread),
- *       but release is asynchronous — it fires as a dependent action on the
- *       {@link java.util.concurrent.CompletableFuture} pipeline when the business operation
- *       completes. The returned future is the <b>same object</b> produced by the supplier
- *       (pipeline identity is preserved).</li>
+ *       {@link #executeCompletionStageAsync}): Acquire is synchronous, release is
+ *       asynchronous via the {@link CompletableFuture} pipeline.</li>
  * </ul>
  *
  * <h2>Observability model</h2>
- * <p><b>Metrics</b> (always on, zero per-call overhead) are delivered via polling-based
- * gauges that read the strategy's introspection methods ({@link BlockingBulkheadStrategy#concurrentCalls()},
- * {@link BlockingBulkheadStrategy#availablePermits()}). These are bound to a
- * {@code MeterRegistry} externally.
+ * <p><b>Metrics</b> (always on) are delivered via polling-based gauges.
+ * <b>Events</b> (off by default) provide per-call tracing controlled by
+ * {@link BulkheadEventConfig}.</p>
  *
- * <p><b>Events</b> (off by default, enable for diagnostics) provide per-call tracing
- * for troubleshooting: permit lifecycle, wait durations, rejection context. Controlled
- * by {@link BulkheadEventConfig} — the {@linkplain BulkheadEventConfig#standard() standard}
- * configuration emits only rejection events. Switch to
- * {@linkplain BulkheadEventConfig#diagnostic() diagnostic} mode for full per-call tracing
- * during incident analysis.
- *
- * <p>Requires a {@link BlockingBulkheadStrategy} — non-blocking strategies
- * are rejected at construction time. For reactive paradigms, use the reactive
- * bulkhead facade (which accepts a {@link NonBlockingBulkheadStrategy}).
- *
- * @since 0.3.0
+ * @since 0.4.0
  */
-public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, BulkheadContext {
+public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncExecutor, BulkheadContext {
 
   private final Logger logger;
   private final String name;
@@ -107,7 +102,72 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
     this.enableExceptionOptimization = config.enableExceptionOptimization();
   }
 
-  // ======================== Bulkhead facade ========================
+  // ======================== Decorator (around-advice) ========================
+
+  /**
+   * Core bulkhead logic as around-advice for the wrapper pipeline.
+   *
+   * <p>This method replaces the previous {@code decorate(InqCall)} approach. The execution
+   * flow is:</p>
+   * <ol>
+   *   <li>Acquire a permit from the {@link BlockingBulkheadStrategy} (with configurable wait)</li>
+   *   <li>On success: publish diagnostic acquire event, then delegate to {@code next}</li>
+   *   <li>On rejection or interrupt: publish failure event, throw appropriate exception</li>
+   *   <li>Measure RTT and release the permit in a {@code finally} block</li>
+   * </ol>
+   *
+   * <p>The {@code chainId} and {@code callId} are converted to {@code String} for event
+   * correlation and exception context, preserving compatibility with the existing
+   * observability infrastructure.</p>
+   *
+   * @param chainId  the chain identifier (converted to String for event correlation)
+   * @param callId   the call identifier (converted to String for exception context)
+   * @param argument the argument flowing through the chain (passed through unchanged)
+   * @param next     the next step in the chain — the actual business logic
+   * @return the result of the downstream chain execution
+   */
+  @Override
+  public R execute(long chainId, long callId, A argument, InternalExecutor<A, R> next) {
+    String callIdStr = Long.toString(callId);
+
+    // ── Acquire permit ──
+    // startWait is only needed for trace events (wait duration measurement).
+    // In standard mode (trace disabled), this nanoTime call is skipped entirely.
+    long startWait = eventConfig.isTraceEnabled() ? nanoTimeSource.now() : 0L;
+
+    RejectionContext rejection;
+    try {
+      rejection = strategy.tryAcquire(maxWaitDuration);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      handleAcquireFailure(callIdStr, startWait, null);
+      throw new InqBulkheadInterruptedException(callIdStr, name, enableExceptionOptimization);
+    }
+
+    if (rejection != null) {
+      handleAcquireFailure(callIdStr, startWait, rejection);
+      throw new InqBulkheadFullException(callIdStr, name, rejection, enableExceptionOptimization);
+    }
+
+    // Diagnostic events (acquire) — no-op in standard mode
+    handleAcquireSuccess(callIdStr, startWait);
+
+    // ── Execute downstream chain with RTT measurement ──
+    long startNanos = nanoTimeSource.now();
+    Throwable businessError = null;
+
+    try {
+      return next.execute(chainId, callId, argument);
+    } catch (Throwable t) {
+      businessError = t;
+      throw t;
+    } finally {
+      long rttNanos = nanoTimeSource.now() - startNanos;
+      releaseAndReport(callIdStr, rttNanos, businessError);
+    }
+  }
+
+  // ======================== InqElement (via Bulkhead → Decorator) ========================
 
   @Override
   public String getName() {
@@ -119,83 +179,11 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
     return eventPublisher;
   }
 
+  // ======================== Bulkhead facade ========================
+
   @Override
   public InqImperativeBulkheadConfig getConfig() {
     return config;
-  }
-
-  /**
-   * Explicit override of {@link eu.inqudium.core.pipeline.InqDecorator#decorateCallable}.
-   *
-   * <p>This override is functionally identical to the default method on {@code InqDecorator}.
-   * It exists because JDK 25 EA exhibits a default-method resolution issue in the diamond
-   * hierarchy ({@code ImperativeBulkhead} → {@code Bulkhead} → {@code InqDecorator} +
-   * {@code InqExecutor}): the default {@code decorateCallable} is not dispatched correctly,
-   * causing the bulkhead's {@link #decorate(InqCall)} to be silently skipped. The explicit
-   * override forces the method into {@code ImperativeBulkhead.class} directly, bypassing
-   * the dispatch bug.
-   *
-   * <p>This override should be kept even if the JDK bug is fixed — it makes the decoration
-   * path explicit and self-documenting, and gives the JIT a monomorphic call target.
-   */
-  @Override
-  public <T> Supplier<T> decorateCallable(Callable<T> callable) {
-    return () -> {
-      var call = InqCall.<T>standalone(callable);
-      try {
-        return decorate(call).execute();
-      } catch (RuntimeException re) {
-        throw re;
-      } catch (Exception e) {
-        throw new InqRuntimeException(InqCallIdGenerator.NONE,
-            getName(),
-            getElementType(),
-            e,
-            enableExceptionOptimization);
-      }
-    };
-  }
-
-  @Override
-  public <T> InqCall<T> decorate(InqCall<T> call) {
-    return call.withCallable(() -> {
-
-      // ── Acquire permit ──
-      // startWait is only needed for trace events (wait duration measurement).
-      // In standard mode (trace disabled), this nanoTime call is skipped entirely.
-      long startWait = eventConfig.isTraceEnabled() ? nanoTimeSource.now() : 0L;
-
-      RejectionContext rejection;
-      try {
-        rejection = strategy.tryAcquire(maxWaitDuration);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        handleAcquireFailure(call.callId(), startWait, null);
-        throw new InqBulkheadInterruptedException(call.callId(), name, enableExceptionOptimization);
-      }
-
-      if (rejection != null) {
-        handleAcquireFailure(call.callId(), startWait, rejection);
-        throw new InqBulkheadFullException(call.callId(), name, rejection, enableExceptionOptimization);
-      }
-
-      // Diagnostic events (acquire) — no-op in standard mode
-      handleAcquireSuccess(call.callId(), startWait);
-
-      // ── Execute business call with RTT measurement ──
-      long startNanos = nanoTimeSource.now();
-      Throwable businessError = null;
-
-      try {
-        return call.callable().call();
-      } catch (Throwable t) {
-        businessError = t;
-        throw t;
-      } finally {
-        long rttNanos = nanoTimeSource.now() - startNanos;
-        releaseAndReport(call.callId(), rttNanos, businessError);
-      }
-    });
   }
 
   @Override
@@ -267,11 +255,6 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
 
   /**
    * {@inheritDoc}
-   *
-   * <p>Delegates to {@link CompletableFutureAsyncExecutor}. Permit acquisition is
-   * synchronous on the calling thread; the callable executes on the
-   * {@link java.util.concurrent.ForkJoinPool#commonPool() common pool}.
-   * The permit is released when the future completes.
    */
   @Override
   public <T> CompletableFuture<T> executeAsync(Callable<T> callable) {
@@ -280,11 +263,6 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
 
   /**
    * {@inheritDoc}
-   *
-   * <p>Delegates to {@link CompletableFutureAsyncExecutor}. The returned
-   * {@link CompletableFuture} is the <b>same object</b> as the one produced by
-   * the supplier (if it is a {@code CompletableFuture}). The permit release
-   * handler is attached as a dependent action without wrapping.
    */
   @Override
   public <T> CompletableFuture<T> executeFutureAsync(Supplier<Future<T>> futureSupplier) {
@@ -293,10 +271,6 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
 
   /**
    * {@inheritDoc}
-   *
-   * <p>Delegates to {@link CompletableFutureAsyncExecutor}. The returned
-   * {@link CompletableFuture} is the <b>same object</b> as
-   * {@code stageSupplier.get().toCompletableFuture()} — no wrapping, no copying.
    */
   @Override
   public <T> CompletableFuture<T> executeCompletionStageAsync(
@@ -307,12 +281,10 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
   // ======================== Diagnostic events — acquire ========================
 
   /**
-   * Publishes diagnostic acquire events. In standard mode ({@link BulkheadEventConfig#standard()}),
-   * both lifecycle and trace are disabled — this method is a complete no-op.
+   * Publishes diagnostic acquire events. In standard mode, this is a complete no-op.
    */
   private void handleAcquireSuccess(String callId, long startWait) {
     if (eventConfig.isLifecycleEnabled()) {
-      // Lifecycle tracing: acquire event with rollback safety
       try {
         eventPublisher.publish(new BulkheadOnAcquireEvent(
             callId, name, strategy.concurrentCalls(), clock.instant()));
@@ -343,7 +315,6 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
 
   /**
    * Publishes diagnostic events for a rejected or interrupted acquire attempt.
-   * Rejection events are enabled in standard mode; trace events only in diagnostic mode.
    */
   private void handleAcquireFailure(String callId, long startWait, RejectionContext rejection) {
     if (eventConfig.isTraceEnabled()) {
@@ -368,8 +339,7 @@ public final class ImperativeBulkhead implements Bulkhead, InqAsyncExecutor, Bul
   // ======================== Release + diagnostic events ========================
 
   /**
-   * Releases the permit, feeds the adaptive algorithm, and optionally publishes
-   * the diagnostic release event (only in {@link BulkheadEventConfig#diagnostic()} mode).
+   * Releases the permit, feeds the adaptive algorithm, and publishes diagnostic events.
    */
   private void releaseAndReport(String callId, long rttNanos, Throwable businessError) {
     RuntimeException releaseError = null;
