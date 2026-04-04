@@ -10,8 +10,8 @@ import java.time.Instant;
 public class BulkheadOnAcquireEvent extends BulkheadEvent {
   private final int concurrentCalls;
 
-  public BulkheadOnAcquireEvent(String callId, String elementName, int concurrentCalls, Instant timestamp) {
-    super(callId, elementName, timestamp);
+  public BulkheadOnAcquireEvent(long chainId, long callId, String elementName, int concurrentCalls, Instant timestamp) {
+    super(chainId, callId, elementName, timestamp);
     this.concurrentCalls = concurrentCalls;
   }
 

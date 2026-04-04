@@ -22,8 +22,8 @@ public final class BulkheadRollbackTraceEvent extends BulkheadEvent {
    * @param errorType   the class name of the exception that triggered the rollback
    * @param timestamp   the exact time the rollback occurred
    */
-  public BulkheadRollbackTraceEvent(String callId, String elementName, String errorType, Instant timestamp) {
-    super(callId, elementName, timestamp);
+  public BulkheadRollbackTraceEvent(long chainId, long callId, String elementName, String errorType, Instant timestamp) {
+    super(chainId, callId, elementName, timestamp);
     this.errorType = errorType;
   }
 

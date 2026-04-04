@@ -33,7 +33,7 @@ public final class InqProviderErrorEvent extends InqEvent {
    */
   public InqProviderErrorEvent(String providerClassName, String spiInterfaceName,
                                ProviderPhase phase, String errorMessage, Instant timestamp) {
-    super("system", "InqServiceLoader", InqElementType.NO_ELEMENT, timestamp);
+    super(-1, -1, "InqServiceLoader", InqElementType.NO_ELEMENT, timestamp);
     this.providerClassName = Objects.requireNonNull(providerClassName, "providerClassName must not be null");
     this.spiInterfaceName = Objects.requireNonNull(spiInterfaceName, "spiInterfaceName must not be null");
     this.phase = Objects.requireNonNull(phase, "phase must not be null");

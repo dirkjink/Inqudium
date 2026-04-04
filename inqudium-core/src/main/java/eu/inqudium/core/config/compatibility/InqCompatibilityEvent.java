@@ -29,9 +29,12 @@ public class InqCompatibilityEvent extends InqEvent {
    * @param enabled     whether the new behavior is active
    * @param timestamp   when the element was created
    */
-  public InqCompatibilityEvent(String elementName, InqElementType elementType,
-                               InqFlag flag, boolean enabled, Instant timestamp) {
-    super("system", elementName, elementType, timestamp);
+  public InqCompatibilityEvent(String elementName,
+                               InqElementType elementType,
+                               InqFlag flag,
+                               boolean enabled,
+                               Instant timestamp) {
+    super(-1, -1, elementName, elementType, timestamp);
     this.flag = flag;
     this.enabled = enabled;
     this.description = String.format(java.util.Locale.ROOT, "%s=%s for %s '%s'",

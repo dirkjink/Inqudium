@@ -24,13 +24,14 @@ public final class BulkheadLimitChangedTraceEvent extends BulkheadEvent {
    * @param rttNanos    the round-trip time in nanoseconds that triggered this change
    * @param timestamp   the exact time the limit was changed
    */
-  public BulkheadLimitChangedTraceEvent(String callId,
+  public BulkheadLimitChangedTraceEvent(long chainId,
+                                        long callId,
                                         String elementName,
                                         int oldLimit,
                                         int newLimit,
                                         long rttNanos,
                                         Instant timestamp) {
-    super(callId, elementName, timestamp);
+    super(chainId, callId, elementName, timestamp);
     this.oldLimit = oldLimit;
     this.newLimit = newLimit;
     this.rttNanos = rttNanos;

@@ -14,6 +14,7 @@ import eu.inqudium.core.element.bulkhead.strategy.BulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.log.Logger;
+import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.InternalExecutor;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
@@ -29,7 +30,7 @@ import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 /**
- * Composition-based imperative bulkhead implementing the {@link Decorator} interface.
+ * Composition-based imperative bulkhead implementing the {@link InqDecorator} interface.
  *
  * <p>The bulkhead logic is expressed as around-advice in {@link #execute}: it acquires a
  * permit, delegates to the next step in the chain via {@code next.execute(...)}, measures
@@ -52,7 +53,7 @@ import java.util.function.Supplier;
  *
  * <h2>Execution modes</h2>
  * <ul>
- *   <li><b>Synchronous</b> (via {@link Decorator} factory methods): Acquire and release
+ *   <li><b>Synchronous</b> (via {@link InqDecorator} factory methods): Acquire and release
  *       both happen on the calling thread.</li>
  *   <li><b>Asynchronous</b> ({@link #executeAsync}, {@link #executeFutureAsync},
  *       {@link #executeCompletionStageAsync}): Acquire is synchronous, release is
@@ -140,17 +141,17 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
       rejection = strategy.tryAcquire(maxWaitDuration);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      handleAcquireFailure(callIdStr, startWait, null);
+      handleAcquireFailure(chainId, callId, startWait, null);
       throw new InqBulkheadInterruptedException(callIdStr, name, enableExceptionOptimization);
     }
 
     if (rejection != null) {
-      handleAcquireFailure(callIdStr, startWait, rejection);
+      handleAcquireFailure(chainId, callId, startWait, rejection);
       throw new InqBulkheadFullException(callIdStr, name, rejection, enableExceptionOptimization);
     }
 
     // Diagnostic events (acquire) — no-op in standard mode
-    handleAcquireSuccess(callIdStr, startWait);
+    handleAcquireSuccess(chainId, callId, startWait);
 
     // ── Execute downstream chain with RTT measurement ──
     long startNanos = nanoTimeSource.now();
@@ -163,7 +164,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
       throw t;
     } finally {
       long rttNanos = nanoTimeSource.now() - startNanos;
-      releaseAndReport(callIdStr, rttNanos, businessError);
+      releaseAndReport(chainId, callId, rttNanos, businessError);
     }
   }
 
@@ -283,17 +284,23 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
   /**
    * Publishes diagnostic acquire events. In standard mode, this is a complete no-op.
    */
-  private void handleAcquireSuccess(String callId, long startWait) {
+  private void handleAcquireSuccess(long chainId, long callId, long startWait) {
     if (eventConfig.isLifecycleEnabled()) {
       try {
-        eventPublisher.publish(new BulkheadOnAcquireEvent(
-            callId, name, strategy.concurrentCalls(), clock.instant()));
+        eventPublisher.publish(new BulkheadOnAcquireEvent(chainId,
+            callId,
+            name,
+            strategy.concurrentCalls(),
+            clock.instant()));
       } catch (RuntimeException e) {
         strategy.rollback();
         if (eventConfig.isTraceEnabled()) {
           try {
-            eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(
-                callId, name, e.getClass().getSimpleName(), clock.instant()));
+            eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(chainId,
+                callId,
+                name,
+                e.getClass().getSimpleName(),
+                clock.instant()));
           } catch (RuntimeException traceError) {
             logger.error().log("Failed to publish rollback trace for bulkhead '{}', callId='{}'. "
                 + "Permit rolled back.", name, callId, traceError);
@@ -305,7 +312,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
 
     if (eventConfig.isTraceEnabled()) {
       try {
-        publishWaitTrace(callId, startWait, true);
+        publishWaitTrace(chainId, callId, startWait, true);
       } catch (RuntimeException e) {
         logger.error().log("Failed to publish wait trace for acquired call on bulkhead '{}', "
             + "callId='{}'. Diagnostic-only failure.", name, callId, e);
@@ -316,10 +323,10 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
   /**
    * Publishes diagnostic events for a rejected or interrupted acquire attempt.
    */
-  private void handleAcquireFailure(String callId, long startWait, RejectionContext rejection) {
+  private void handleAcquireFailure(long chainId, long callId, long startWait, RejectionContext rejection) {
     if (eventConfig.isTraceEnabled()) {
       try {
-        publishWaitTrace(callId, startWait, false);
+        publishWaitTrace(chainId, callId, startWait, false);
       } catch (RuntimeException e) {
         logger.error().log("Failed to publish wait trace for rejected call on bulkhead '{}', "
             + "callId='{}'. Diagnostic-only failure.", name, callId, e);
@@ -327,8 +334,11 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
     }
     if (eventConfig.isRejectionEnabled()) {
       try {
-        eventPublisher.publish(new BulkheadOnRejectEvent(
-            callId, name, rejection, clock.instant()));
+        eventPublisher.publish(new BulkheadOnRejectEvent(chainId,
+            callId,
+            name,
+            rejection,
+            clock.instant()));
       } catch (RuntimeException e) {
         logger.error().log("Failed to publish reject event for bulkhead '{}', callId='{}'. "
             + "Diagnostic-only failure.", name, callId, e);
@@ -341,7 +351,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
   /**
    * Releases the permit, feeds the adaptive algorithm, and publishes diagnostic events.
    */
-  private void releaseAndReport(String callId, long rttNanos, Throwable businessError) {
+  private void releaseAndReport(long chainId, long callId, long rttNanos, Throwable businessError) {
     RuntimeException releaseError = null;
 
     try {
@@ -361,8 +371,11 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
 
     if (eventConfig.isLifecycleEnabled()) {
       try {
-        eventPublisher.publish(new BulkheadOnReleaseEvent(
-            callId, name, strategy.concurrentCalls(), clock.instant()));
+        eventPublisher.publish(new BulkheadOnReleaseEvent(chainId,
+            callId,
+            name,
+            strategy.concurrentCalls(),
+            clock.instant()));
       } catch (RuntimeException publisherError) {
         logger.error().log("Failed to publish release event for bulkhead '{}', callId='{}'. "
             + "Diagnostic-only failure.", name, callId, publisherError);
@@ -380,12 +393,16 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
 
   // ======================== Internal ========================
 
-  private void publishWaitTrace(String callId, long startWait, boolean acquired) {
+  private void publishWaitTrace(long chainId, long callId, long startWait, boolean acquired) {
     if (eventPublisher.isTraceEnabled()) {
       long waitDurationNanos = nanoTimeSource.now() - startWait;
       if (waitDurationNanos > 0) {
-        eventPublisher.publishTrace(() -> new BulkheadWaitTraceEvent(
-            callId, name, waitDurationNanos, acquired, clock.instant()));
+        eventPublisher.publishTrace(() -> new BulkheadWaitTraceEvent(chainId,
+            callId,
+            name,
+            waitDurationNanos,
+            acquired,
+            clock.instant()));
       }
     }
   }

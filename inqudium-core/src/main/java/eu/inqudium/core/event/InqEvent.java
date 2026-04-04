@@ -23,7 +23,8 @@ import java.util.Objects;
  */
 public abstract class InqEvent {
 
-  private final String callId;
+  private final long chainId;
+  private final long callId;
   private final String elementName;
   private final InqElementType elementType;
   private final Instant timestamp;
@@ -37,10 +38,11 @@ public abstract class InqEvent {
    * @param timestamp   when the event occurred
    * @throws IllegalArgumentException if callId or elementName is blank
    */
-  protected InqEvent(String callId, String elementName, InqElementType elementType, Instant timestamp) {
+  protected InqEvent(long chainId, long callId, String elementName, InqElementType elementType, Instant timestamp) {
     // Validate correlation identifiers are not blank — empty strings
     // are silently useless for correlation and hard to debug downstream.
-    this.callId = requireNonBlank(callId, "callId");
+    this.chainId = chainId;
+    this.callId = callId;
     this.elementName = requireNonBlank(elementName, "elementName");
     this.elementType = Objects.requireNonNull(elementType, "elementType must not be null");
     this.timestamp = Objects.requireNonNull(timestamp, "timestamp must not be null");
@@ -61,10 +63,14 @@ public abstract class InqEvent {
     return value;
   }
 
+  public long getChainId() {
+    return chainId;
+  }
+
   /**
    * Returns the unique call identifier shared across all elements in the pipeline.
    */
-  public String getCallId() {
+  public long getCallId() {
     return callId;
   }
 
@@ -92,7 +98,8 @@ public abstract class InqEvent {
   @Override
   public String toString() {
     return getClass().getSimpleName() + "{" +
-        "callId='" + callId + '\'' +
+        "chainId='" + chainId + '\'' +
+        ", callId='" + callId + '\'' +
         ", elementName='" + elementName + '\'' +
         ", elementType=" + elementType +
         ", timestamp=" + timestamp +

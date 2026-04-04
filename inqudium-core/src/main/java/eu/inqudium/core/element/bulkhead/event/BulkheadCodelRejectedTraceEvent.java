@@ -26,8 +26,8 @@ public final class BulkheadCodelRejectedTraceEvent extends BulkheadEvent {
    * @param targetDelayNanos the configured target delay that was exceeded
    * @param timestamp        the exact time the rejection occurred
    */
-  public BulkheadCodelRejectedTraceEvent(String callId, String elementName, long sojournTimeNanos, long targetDelayNanos, Instant timestamp) {
-    super(callId, elementName, timestamp);
+  public BulkheadCodelRejectedTraceEvent(long chainId, long callId, String elementName, long sojournTimeNanos, long targetDelayNanos, Instant timestamp) {
+    super(chainId, callId, elementName, timestamp);
     this.sojournTimeNanos = sojournTimeNanos;
     this.targetDelayNanos = targetDelayNanos;
   }

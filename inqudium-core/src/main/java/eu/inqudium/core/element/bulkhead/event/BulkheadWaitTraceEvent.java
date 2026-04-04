@@ -24,8 +24,8 @@ public final class BulkheadWaitTraceEvent extends BulkheadEvent {
    * @param acquired          true if the permit was acquired, false if it timed out or was rejected
    * @param timestamp         the exact time the wait operation concluded
    */
-  public BulkheadWaitTraceEvent(String callId, String elementName, long waitDurationNanos, boolean acquired, Instant timestamp) {
-    super(callId, elementName, timestamp);
+  public BulkheadWaitTraceEvent(long chainId, long callId, String elementName, long waitDurationNanos, boolean acquired, Instant timestamp) {
+    super(chainId, callId, elementName, timestamp);
     this.waitDurationNanos = waitDurationNanos;
     this.acquired = acquired;
   }

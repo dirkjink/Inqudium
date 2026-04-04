@@ -216,7 +216,7 @@ public final class CompletableFutureAsyncExecutor implements InqAsyncExecutor {
     if (ctx.eventConfig().isLifecycleEnabled()) {
       try {
         ctx.eventPublisher().publish(new BulkheadOnAcquireEvent(
-            "async", ctx.bulkheadName(), ctx.strategy().concurrentCalls(), ctx.clock().instant()));
+            -1, -1, ctx.bulkheadName(), ctx.strategy().concurrentCalls(), ctx.clock().instant()));
       } catch (RuntimeException e) {
         // Rollback: the acquire already happened, but if the event publisher fails,
         // we must undo the acquire to maintain consistency
@@ -230,7 +230,7 @@ public final class CompletableFutureAsyncExecutor implements InqAsyncExecutor {
     if (ctx.eventConfig().isLifecycleEnabled()) {
       try {
         ctx.eventPublisher().publish(new BulkheadOnReleaseEvent(
-            "async", ctx.bulkheadName(), ctx.strategy().concurrentCalls(), ctx.clock().instant()));
+            -1, -1, ctx.bulkheadName(), ctx.strategy().concurrentCalls(), ctx.clock().instant()));
       } catch (RuntimeException e) {
         ctx.logger().error().log("Failed to publish async release event for bulkhead '{}'.",
             ctx.bulkheadName(), e);
@@ -242,7 +242,7 @@ public final class CompletableFutureAsyncExecutor implements InqAsyncExecutor {
     if (ctx.eventConfig().isRejectionEnabled()) {
       try {
         ctx.eventPublisher().publish(new BulkheadOnRejectEvent(
-            "async", ctx.bulkheadName(), rejection, ctx.clock().instant()));
+            -1, -1, ctx.bulkheadName(), rejection, ctx.clock().instant()));
       } catch (RuntimeException e) {
         ctx.logger().error().log("Failed to publish async reject event for bulkhead '{}'.",
             ctx.bulkheadName(), e);
