@@ -9,7 +9,7 @@ package eu.inqudium.core.pipeline;
  * @param <A> the argument type passed through the chain
  * @param <R> the return type produced by the chain
  */
-interface InternalExecutor<A, R> {
+public interface InternalExecutor<A, R> {
 
   /**
    * Executes this layer and propagates to the next.
