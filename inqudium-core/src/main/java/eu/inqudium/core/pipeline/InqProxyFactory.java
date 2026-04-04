@@ -12,13 +12,12 @@ package eu.inqudium.core.pipeline;
 @FunctionalInterface
 public interface InqProxyFactory {
 
-  <T> T protect(Class<T> serviceInterface, T target);
-
   @SuppressWarnings("unchecked")
   static InqProxyFactory of(String name, LayerAction<?, ?> action) {
     LayerAction<Void, Object> sync = (LayerAction<Void, Object>) action;
     return new InqProxyFactory() {
-      @Override public <T> T protect(Class<T> serviceInterface, T target) {
+      @Override
+      public <T> T protect(Class<T> serviceInterface, T target) {
         PipelineInvocationHandler.validateInterface(serviceInterface);
         return PipelineInvocationHandler.createProxy(serviceInterface, target, name, sync);
       }
@@ -28,4 +27,6 @@ public interface InqProxyFactory {
   static InqProxyFactory of(LayerAction<?, ?> action) {
     return of("proxy", action);
   }
+
+  <T> T protect(Class<T> serviceInterface, T target);
 }

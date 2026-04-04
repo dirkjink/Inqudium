@@ -43,8 +43,8 @@ public interface InqAsyncProxyFactory extends InqProxyFactory {
    */
   @SuppressWarnings("unchecked")
   static InqAsyncProxyFactory of(String name,
-                                  LayerAction<?, ?> syncAction,
-                                  AsyncLayerAction<?, ?> asyncAction) {
+                                 LayerAction<?, ?> syncAction,
+                                 AsyncLayerAction<?, ?> asyncAction) {
     LayerAction<Void, Object> sync = (LayerAction<Void, Object>) syncAction;
     AsyncLayerAction<Void, Object> async = (AsyncLayerAction<Void, Object>) asyncAction;
     return new InqAsyncProxyFactory() {
@@ -64,7 +64,7 @@ public interface InqAsyncProxyFactory extends InqProxyFactory {
    * @return an async proxy factory
    */
   static InqAsyncProxyFactory of(LayerAction<?, ?> syncAction,
-                                  AsyncLayerAction<?, ?> asyncAction) {
+                                 AsyncLayerAction<?, ?> asyncAction) {
     return of("proxy", syncAction, asyncAction);
   }
 

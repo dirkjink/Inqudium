@@ -70,12 +70,12 @@ public record TrafficShaperConfig<S extends SchedulingState>(
 
   public static final class Builder<S extends SchedulingState> {
     private final String name;
+    private final SchedulingStrategy<S> strategy;
     private double ratePerSecond = 10.0;
     private int maxQueueDepth = 50;
     private Duration maxWaitDuration = Duration.ofSeconds(10);
     private ThrottleMode throttleMode = ThrottleMode.SHAPE_AND_REJECT_OVERFLOW;
     private Duration unboundedWarnAfter = Duration.ofMinutes(1);
-    private final SchedulingStrategy<S> strategy;
     private Integer rawCount = null;
     private Duration rawPeriod = null;
 

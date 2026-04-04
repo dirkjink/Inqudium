@@ -8,5 +8,6 @@ public final class ChainIdGenerator {
    */
   public static final AtomicLong CHAIN_ID_COUNTER = new AtomicLong();
 
-  private ChainIdGenerator() {}
+  private ChainIdGenerator() {
+  }
 }

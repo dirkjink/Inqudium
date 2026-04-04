@@ -49,23 +49,78 @@ public class PipelineInvocationHandler
   private final Object realTarget;
   private final LayerAction<Void, Object> syncAction;
 
-  /** Wrapping a real target — creates new chain metadata. */
+  /**
+   * Wrapping a real target — creates new chain metadata.
+   */
   public PipelineInvocationHandler(String name, Object target,
-                                    LayerAction<Void, Object> syncAction) {
+                                   LayerAction<Void, Object> syncAction) {
     super(name, target, PROXY_CORE);
     this.realTarget = target;
     this.syncAction = syncAction;
   }
 
-  /** Wrapping another handler — BaseWrapper inherits chainId and callIdCounter. */
+  /**
+   * Wrapping another handler — BaseWrapper inherits chainId and callIdCounter.
+   */
   public PipelineInvocationHandler(String name, PipelineInvocationHandler inner,
-                                    LayerAction<Void, Object> syncAction) {
+                                   LayerAction<Void, Object> syncAction) {
     super(name, inner, PROXY_CORE);
     this.realTarget = inner.realTarget;
     this.syncAction = syncAction;
   }
 
-  /** The unwrapped real target at the bottom of the chain. */
+  @SuppressWarnings("unchecked")
+  protected static <E extends Throwable> RuntimeException rethrow(Throwable t) throws E {
+    throw (E) t;
+  }
+
+  public static void validateInterface(Class<?> type) {
+    if (!type.isInterface()) {
+      throw new IllegalArgumentException(
+          "InqProxyFactory requires an interface, but received: " + type.getName());
+    }
+  }
+
+  /**
+   * Creates a sync-only proxy. Detects existing pipeline proxies and stacks on top.
+   */
+  @SuppressWarnings("unchecked")
+  public static <T> T createProxy(Class<T> serviceInterface, T target, String name,
+                                  LayerAction<Void, Object> syncAction) {
+    PipelineInvocationHandler handler = resolveHandler(target, name, syncAction);
+    return (T) Proxy.newProxyInstance(
+        serviceInterface.getClassLoader(),
+        new Class<?>[]{serviceInterface, Wrapper.class},
+        handler);
+  }
+
+  /**
+   * Resolves the inner handler if the target is a pipeline proxy, then creates a new handler.
+   * Protected so that async subclasses can reuse the detection logic.
+   */
+  protected static PipelineInvocationHandler resolveInner(Object target) {
+    if (Proxy.isProxyClass(target.getClass())) {
+      InvocationHandler h = Proxy.getInvocationHandler(target);
+      if (h instanceof PipelineInvocationHandler inner) {
+        return inner;
+      }
+    }
+    return null;
+  }
+
+  private static PipelineInvocationHandler resolveHandler(Object target, String name,
+                                                          LayerAction<Void, Object> syncAction) {
+    PipelineInvocationHandler inner = resolveInner(target);
+    return (inner != null)
+        ? new PipelineInvocationHandler(name, inner, syncAction)
+        : new PipelineInvocationHandler(name, target, syncAction);
+  }
+
+  // ======================== Infrastructure dispatch ========================
+
+  /**
+   * The unwrapped real target at the bottom of the chain.
+   */
   protected Object realTarget() {
     return realTarget;
   }
@@ -77,6 +132,8 @@ public class PipelineInvocationHandler
     }
     return dispatchServiceMethod(method, args);
   }
+
+  // ======================== Utilities ========================
 
   /**
    * Dispatches a service method call. Override in subclasses to add async routing.
@@ -91,9 +148,13 @@ public class PipelineInvocationHandler
    * Recursive sync chain walk — mirrors {@link BaseWrapper#execute}.
    * Each handler applies its LayerAction, with {@code next} pointing to the
    * inner handler's chain walk (or the terminal at the bottom).
+   *
+   * <p>Public visibility is required because the async subclass in the imperative
+   * artifact calls this method on inner handlers typed as {@code PipelineInvocationHandler}
+   * — Java's protected access rules do not permit cross-package access through a
+   * parent-class reference.</p>
    */
-  public final Object executeSyncChain(long chainId,
-                                       long callId,
+  public final Object executeSyncChain(long chainId, long callId,
                                        InternalExecutor<Void, Object> terminal) {
     PipelineInvocationHandler inner = getInner();
     InternalExecutor<Void, Object> next = (inner != null)
@@ -120,8 +181,6 @@ public class PipelineInvocationHandler
     };
   }
 
-  // ======================== Infrastructure dispatch ========================
-
   private boolean isInfrastructureMethod(Method method) {
     if (method.getDeclaringClass() == Object.class) return true;
     if (method.getParameterCount() == 0) {
@@ -136,62 +195,21 @@ public class PipelineInvocationHandler
   private Object handleInfrastructureMethod(Method method, Object[] args) throws Throwable {
     if (method.getParameterCount() == 0) {
       switch (method.getName()) {
-        case "getChainId" -> { return getChainId(); }
-        case "getLayerDescription" -> { return getLayerDescription(); }
-        case "getInner" -> { return getInner(); }
-        case "toStringHierarchy" -> { return toStringHierarchy(); }
+        case "getChainId" -> {
+          return getChainId();
+        }
+        case "getLayerDescription" -> {
+          return getLayerDescription();
+        }
+        case "getInner" -> {
+          return getInner();
+        }
+        case "toStringHierarchy" -> {
+          return toStringHierarchy();
+        }
       }
     }
     // Object methods (toString, hashCode, equals)
     return method.invoke(this, args);
-  }
-
-  // ======================== Utilities ========================
-
-  @SuppressWarnings("unchecked")
-  protected static <E extends Throwable> RuntimeException rethrow(Throwable t) throws E {
-    throw (E) t;
-  }
-
-  public static void validateInterface(Class<?> type) {
-    if (!type.isInterface()) {
-      throw new IllegalArgumentException(
-          "InqProxyFactory requires an interface, but received: " + type.getName());
-    }
-  }
-
-  /**
-   * Creates a sync-only proxy. Detects existing pipeline proxies and stacks on top.
-   */
-  @SuppressWarnings("unchecked")
-  public static <T> T createProxy(Class<T> serviceInterface, T target, String name,
-                                   LayerAction<Void, Object> syncAction) {
-    PipelineInvocationHandler handler = resolveHandler(target, name, syncAction);
-    return (T) Proxy.newProxyInstance(
-        serviceInterface.getClassLoader(),
-        new Class<?>[]{ serviceInterface, Wrapper.class },
-        handler);
-  }
-
-  /**
-   * Resolves the inner handler if the target is a pipeline proxy, then creates a new handler.
-   * Protected so that async subclasses can reuse the detection logic.
-   */
-  protected static PipelineInvocationHandler resolveInner(Object target) {
-    if (Proxy.isProxyClass(target.getClass())) {
-      InvocationHandler h = Proxy.getInvocationHandler(target);
-      if (h instanceof PipelineInvocationHandler inner) {
-        return inner;
-      }
-    }
-    return null;
-  }
-
-  private static PipelineInvocationHandler resolveHandler(Object target, String name,
-                                                           LayerAction<Void, Object> syncAction) {
-    PipelineInvocationHandler inner = resolveInner(target);
-    return (inner != null)
-        ? new PipelineInvocationHandler(name, inner, syncAction)
-        : new PipelineInvocationHandler(name, target, syncAction);
   }
 }

@@ -25,7 +25,6 @@ import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.profile.GCProfiler;
 import org.openjdk.jmh.profile.MemPoolProfiler;
 import org.openjdk.jmh.profile.PausesProfiler;
-import org.openjdk.jmh.profile.StackProfiler;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
@@ -186,9 +185,9 @@ public class HappyPathBulkheadBenchmarkOne {
   // ── Raw Semaphore (baseline, no metrics) ──
   private Semaphore semaphore;
   // ── Inqudium: all events enabled (fair comparison with R4j internal events) ──
-  private eu.inqudium.imperative.bulkhead.Bulkhead<?,?> inqBulkheadAllEvents;
+  private eu.inqudium.imperative.bulkhead.Bulkhead<?, ?> inqBulkheadAllEvents;
   // ── Inqudium: rejections only (optimized, shows ceiling) ──
-  private eu.inqudium.imperative.bulkhead.Bulkhead<?,?> inqBulkheadOptimized;
+  private eu.inqudium.imperative.bulkhead.Bulkhead<?, ?> inqBulkheadOptimized;
   // ── Resilience4j with Micrometer (production Spring Boot setup) ──
   private io.github.resilience4j.bulkhead.Bulkhead r4jBulkhead;
   // ── Failsafe with event listeners (only metrics mechanism available) ──

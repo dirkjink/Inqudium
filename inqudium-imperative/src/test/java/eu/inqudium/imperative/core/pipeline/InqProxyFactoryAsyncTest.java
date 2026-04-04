@@ -23,8 +23,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 /**
  * Tests for {@link InqProxyFactory} — dynamic proxy creation with sync and async routing.
  */
-@DisplayName("InqProxyFactory")
-class InqProxyFactoryTest {
+@DisplayName("InqProxyFactory (async and sync)")
+class InqProxyFactoryAsyncTest {
 
   // =========================================================================
   // Test service interfaces

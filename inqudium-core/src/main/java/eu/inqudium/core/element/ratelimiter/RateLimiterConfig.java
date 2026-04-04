@@ -59,11 +59,11 @@ public record RateLimiterConfig<S extends RateLimiterState>(
 
   public static final class Builder<S extends RateLimiterState> {
     private final String name;
+    private final RateLimiterStrategy<S> strategy;
     private int capacity = 10;
     private int refillPermits = 10;
     private Duration refillPeriod = Duration.ofSeconds(1);
     private Duration defaultTimeout = Duration.ZERO;
-    private final RateLimiterStrategy<S> strategy;
 
     private Builder(String name, RateLimiterStrategy<S> strategy) {
       this.name = Objects.requireNonNull(name);
