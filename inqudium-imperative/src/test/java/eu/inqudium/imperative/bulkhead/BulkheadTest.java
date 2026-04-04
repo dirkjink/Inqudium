@@ -447,7 +447,7 @@ class BulkheadTest {
           .isInstanceOfSatisfying(Wrapper.class, wrapper -> {
             long chainId = wrapper.getChainId();
             String layerDescription = wrapper.getLayerDescription();
-            assertThat(layerDescription).isEqualTo("sync-reuse");
+            assertThat(layerDescription).isEqualTo("BULKHEAD(sync-reuse)");
             assertThat(wrapper.toStringHierarchy()).isEqualToIgnoringNewLines(
                 "Chain-ID: " + chainId + layerDescription);
           });

@@ -121,7 +121,11 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
    * @param coreExecution the terminal execution logic
    */
   protected BaseWrapper(InqDecorator<A, R> decorator, T delegate, InternalExecutor<A, R> coreExecution) {
-    this(decorator.getName(), delegate, coreExecution, decorator);
+    this(newLayerDesc(decorator), delegate, coreExecution, decorator);
+  }
+
+  private static String newLayerDesc(InqDecorator<?, ?> decorator) {
+    return decorator.getElementType().name() + "(" + decorator.getName() + ")";
   }
 
   /**
