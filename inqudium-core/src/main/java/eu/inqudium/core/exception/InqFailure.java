@@ -46,7 +46,7 @@ public final class InqFailure {
 
   private final Throwable original;
   private final InqException found;
-  boolean enableExceptionOptimization = false;
+  private final boolean enableExceptionOptimization = false;
   private boolean handled;
 
   private InqFailure(Throwable original, InqException found) {

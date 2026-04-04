@@ -12,9 +12,9 @@ import java.time.Duration;
  *
  * <p>All three built-in strategies implement this interface:
  * <ul>
- *   <li>{@link SemaphoreBulkheadStrategy} — {@link java.util.concurrent.Semaphore#tryAcquire(long, java.util.concurrent.TimeUnit)}</li>
- *   <li>{@link AdaptiveBulkheadStrategy} — {@link java.util.concurrent.locks.Condition#awaitNanos(long)}</li>
- *   <li>{@link CoDelBulkheadStrategy} — {@link java.util.concurrent.locks.Condition#awaitNanos(long)} with CoDel evaluation</li>
+ *   <li>{@code SemaphoreBulkheadStrategy} — {@link java.util.concurrent.Semaphore#tryAcquire(long, java.util.concurrent.TimeUnit)}</li>
+ *   <li>{@code AdaptiveBulkheadStrategy} — {@link java.util.concurrent.locks.Condition#awaitNanos(long)}</li>
+ *   <li>{@code CoDelBulkheadStrategy} — {@link java.util.concurrent.locks.Condition#awaitNanos(long)} with CoDel evaluation</li>
  * </ul>
  *
  * @see NonBlockingBulkheadStrategy

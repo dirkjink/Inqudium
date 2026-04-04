@@ -477,7 +477,7 @@ public final class VegasLimitAlgorithm implements InqLimitAlgorithm {
         // First, take the minimum of the current baseline and the new sample.
         long candidateNoLoad = Math.min(current.noLoadRttNanos(), rttNanos);
 
-        // If drift is enabled and we have a valid smoothed RTT, we drift the baseline
+        // If drift is enabled, and we have a valid smoothed RTT, we drift the baseline
         // slowly towards the NEW smoothed RTT using the continuous-time EWMA.
         // This prevents a single artificially low outlier from permanently poisoning
         // the baseline and causing permanent throttling.

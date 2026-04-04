@@ -67,4 +67,5 @@ module inqudium.core {
 
   uses eu.inqudium.core.context.InqContextPropagator;
   uses eu.inqudium.core.event.InqEventExporter;
+  uses eu.inqudium.core.config.compatibility.InqCompatibilityOptions;
 }

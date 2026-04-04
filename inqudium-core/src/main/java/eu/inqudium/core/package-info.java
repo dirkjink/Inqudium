@@ -34,11 +34,6 @@
  *       pinning (ADR-008).</li>
  * </ul>
  *
- * @see eu.inqudium.core.circuitbreaker
- * @see eu.inqudium.core.retry
- * @see eu.inqudium.core.ratelimiter
- * @see eu.inqudium.core.bulkhead
- * @see eu.inqudium.core.timelimiter
  * @see eu.inqudium.core.event
  * @see eu.inqudium.core.context
  * @see eu.inqudium.core.exception

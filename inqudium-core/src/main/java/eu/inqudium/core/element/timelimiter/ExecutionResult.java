@@ -58,7 +58,7 @@ public sealed interface ExecutionResult<T> {
   }
 
   /**
-   * A cancellation result — the operation was cancelled (typically after timeout).
+   * A cancellation result — the operation was canceled (typically after timeout).
    */
   record Cancelled<T>(ExecutionSnapshot snapshot) implements ExecutionResult<T> {
     public Cancelled {

@@ -74,7 +74,7 @@ import java.util.function.LongSupplier;
  * {@code lastUpdateNanos}) is bundled into a single immutable {@link AimdState} record
  * and managed via {@link AtomicReference#compareAndSet(Object, Object)}. This is the same
  * pattern used by {@link VegasLimitAlgorithm} and guarantees that every
- * {@link #update(Duration, boolean, int)} call reads and writes a consistent snapshot without
+ * {@link #update(long, boolean, int)} call reads and writes a consistent snapshot without
  * any locking or blocking.
  *
  * <p>The CAS retry loop is wait-free in practice: the compute step is pure arithmetic

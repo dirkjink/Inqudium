@@ -90,7 +90,6 @@ public final class FallbackCore {
 
   // ======================== Handler invocation ========================
 
-  @SuppressWarnings("unchecked")
   public static <T> T invokeExceptionHandler(FallbackExceptionHandler<T> handler, Throwable failure) {
     return switch (handler) {
       case FallbackExceptionHandler.ForExceptionType<T, ?> typed -> typed.apply(failure);

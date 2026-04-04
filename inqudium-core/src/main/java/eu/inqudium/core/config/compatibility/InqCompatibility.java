@@ -153,9 +153,7 @@ public final class InqCompatibility {
 
       // Layer 2: ServiceLoader providers (unless ignored)
       if (!ignoreServiceLoader) {
-        for (var entry : loadServiceLoaderFlags().entrySet()) {
-          resolved.put(entry.getKey(), entry.getValue());
-        }
+        resolved.putAll(loadServiceLoaderFlags());
       }
 
       // Layer 3: programmatic flags override per-flag

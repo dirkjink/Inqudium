@@ -228,7 +228,7 @@ public record RetryConfig(
      * Useful for retrying on specific return values (e.g. null, empty).
      *
      * <p><strong>Type safety caveat:</strong> Because {@code RetryConfig} is not
-     * type-parameterised, there is no compile-time guarantee that the predicate's
+     * type-parameterized, there is no compile-time guarantee that the predicate's
      * type parameter matches the callable's return type. A {@link ClassCastException}
      * at runtime is caught and re-thrown with a descriptive message by
      * {@link RetryConfig#shouldRetryOnResult}.

@@ -13,7 +13,7 @@
  *       {@code enrich()}. Discovered via {@link java.util.ServiceLoader} following
  *       ADR-014 conventions.</li>
  *   <li>{@code InqContextSnapshot} — opaque marker interface for captured context state.</li>
- *   <li>{@code InqContextScope} — {@link AutoCloseable} handle returned by {@code restore()}.
+ *   <li>{@code InqContextScope} — {@link java.lang.AutoCloseable} handle returned by {@code restore()}.
  *       Must be closed in a {@code try-with-resources} block to restore the previous context.</li>
  *   <li>{@code InqContextPropagation} — utility class encapsulating the capture/restore/enrich
  *       cycle. Element implementations use {@code activateFor(callId, elementName, elementType)}

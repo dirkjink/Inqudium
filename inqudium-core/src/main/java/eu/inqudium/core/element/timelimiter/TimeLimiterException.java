@@ -19,7 +19,7 @@ public class TimeLimiterException extends RuntimeException {
    *
    * @param timeLimiterName human-readable name
    * @param instanceId      unique instance identifier (UUID-based); may be {@code null}
-   *                        for exceptions created outside of an ImperativeTimeLimiter context
+   *                        for exceptions created outside an ImperativeTimeLimiter context
    * @param timeout         the timeout duration that was exceeded
    */
   public TimeLimiterException(String timeLimiterName, String instanceId, Duration timeout) {

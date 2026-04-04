@@ -41,7 +41,7 @@ public enum ExecutionState {
   TIMED_OUT,
 
   /**
-   * The execution was cancelled (typically after a timeout).
+   * The execution was canceled (typically after a timeout).
    */
   CANCELLED;
 

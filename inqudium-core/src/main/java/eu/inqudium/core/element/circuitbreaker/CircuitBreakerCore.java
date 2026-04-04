@@ -36,20 +36,6 @@ public final class CircuitBreakerCore {
     // Utility class — not instantiable
   }
 
-  // ======================== Permission ========================
-
-  /**
-   * Evaluates whether a call is permitted given the current state.
-   *
-   * <p>May trigger a state transition from OPEN → HALF_OPEN when the
-   * wait duration has expired. The returned {@link PermissionResult}
-   * contains the (possibly updated) snapshot.
-   *
-   * @param snapshot the current state snapshot
-   * @param config   the circuit breaker configuration
-   * @param now      the current timestamp
-   * @return a {@link PermissionResult} indicating whether the call is permitted
-   */
   /**
    * Evaluates whether a call is permitted given the current state.
    *

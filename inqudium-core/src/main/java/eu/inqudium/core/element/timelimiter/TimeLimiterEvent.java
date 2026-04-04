@@ -64,7 +64,7 @@ public record TimeLimiterEvent(
      */
     FAILED,
     /**
-     * A running execution was cancelled (typically after timeout).
+     * A running execution was canceled (typically after timeout).
      */
     CANCELLED
   }
