@@ -5,20 +5,36 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Abstract base class for all wrapper layers in the pipeline.
  *
- * <p>{@code BaseWrapper} provides the core chain-execution mechanism. When a public
- * functional method is invoked on the outermost wrapper, it calls {@link #initiateChain},
- * which generates a unique call ID and begins a top-down traversal through every layer
- * via {@link #execute}. Both the chain ID and the call ID are passed as primitive
- * {@code long} values for zero-allocation tracing.</p>
+ * <p>{@code BaseWrapper} provides the core chain-execution mechanism using
+ * <strong>around-semantics</strong>: each layer's behavior is defined by a
+ * {@link LayerAction} that wraps the next step in the chain, similar to a
+ * Servlet Filter or Spring AOP {@code @Around} advice.</p>
  *
  * <h3>Execution Flow</h3>
  * <pre>{@code
  * outerWrapper.run()
- *   └── initiateChain(null)                               // generates callId
- *         └── outer.execute(chainId, callId, null)         // handleLayer → forward
- *               └── inner.execute(chainId, callId, null)   // handleLayer → forward
- *                     └── coreExecution                     // calls delegate.run()
+ *   └── initiateChain(null)
+ *         └── outer.execute(chainId, callId, null)
+ *               └── outerAction.execute(chainId, callId, null, next=inner)
+ *                     // ... pre-processing ...
+ *                     └── inner.execute(chainId, callId, null)
+ *                           └── innerAction.execute(chainId, callId, null, next=core)
+ *                                 // ... pre-processing ...
+ *                                 └── coreExecution   // delegate.run()
+ *                                 // ... post-processing ...
+ *                           // ... post-processing ...
  * }</pre>
+ *
+ * <h3>Layer Composition</h3>
+ * <p>Layers are composed by wrapping one wrapper around another. Each wrapper holds
+ * a {@link LayerAction} that defines its cross-cutting concern, and a reference to
+ * the next step (either the inner wrapper or the core execution). The chain is
+ * immutable after construction.</p>
+ *
+ * <h3>Zero-Allocation Tracing</h3>
+ * <p>Both the chain ID and the call ID flow through the chain as primitive {@code long}
+ * values. Chain IDs use a global counter, call IDs use a per-chain counter — no object
+ * allocation on the hot path.</p>
  *
  * @param <T> the delegate type this wrapper wraps around
  * @param <A> the argument type flowing through the chain
@@ -35,6 +51,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   private final String name;
   private final long chainId;
   private final InternalExecutor<A, R> nextStep;
+  private final LayerAction<A, R> layerAction;
 
   /**
    * Shared call ID counter for this chain. Created once by the innermost wrapper
@@ -43,18 +60,21 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   private final AtomicLong callIdCounter;
 
   /**
-   * Constructs a new wrapper layer around the given delegate.
+   * Constructs a new wrapper layer with a custom {@link LayerAction}.
    *
-   * <p>If the delegate is itself a {@code BaseWrapper}, this layer joins the same chain
-   * by inheriting the delegate's {@link #chainId} and {@link #callIdCounter}.
-   * Otherwise, a new chain ID and counter are created.</p>
+   * <p>The {@code layerAction} defines this layer's around-advice. It receives the
+   * chain ID, call ID, argument, and a reference to the next step. The action decides
+   * when and whether to invoke the next step, enabling pre-processing, post-processing,
+   * exception handling, caching, and conditional execution.</p>
    *
    * @param name          a descriptive name for this layer (must not be {@code null})
    * @param delegate      the target to wrap (must not be {@code null})
-   * @param coreExecution the terminal execution logic when the delegate is not a wrapper
+   * @param coreExecution the terminal execution logic (used only when delegate is not a wrapper)
+   * @param layerAction   the around-advice for this layer
    */
   @SuppressWarnings("unchecked")
-  protected BaseWrapper(String name, T delegate, InternalExecutor<A, R> coreExecution) {
+  protected BaseWrapper(String name, T delegate, InternalExecutor<A, R> coreExecution,
+                        LayerAction<A, R> layerAction) {
     if (name == null) {
       throw new IllegalArgumentException("Name must not be null");
     }
@@ -63,6 +83,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
     }
     this.name = name;
     this.delegate = delegate;
+    this.layerAction = layerAction;
 
     if (delegate instanceof BaseWrapper<?,?,?,?> innerWrapper) {
       this.chainId = innerWrapper.getChainId();
@@ -76,6 +97,21 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   }
 
   /**
+   * Constructs a new wrapper layer with pass-through behavior (no around-advice).
+   *
+   * <p>Equivalent to calling the full constructor with {@link LayerAction#passThrough()}.
+   * Use this when the layer exists only for structural purposes (e.g. chain visualization)
+   * or when the behavior will be added via subclassing.</p>
+   *
+   * @param name          a descriptive name for this layer
+   * @param delegate      the target to wrap
+   * @param coreExecution the terminal execution logic
+   */
+  protected BaseWrapper(String name, T delegate, InternalExecutor<A, R> coreExecution) {
+    this(name, delegate, coreExecution, LayerAction.passThrough());
+  }
+
+  /**
    * Entry point for chain execution. Generates a fresh call ID and starts traversal,
    * passing both the chain ID and the call ID through every layer.
    */
@@ -84,31 +120,20 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   }
 
   /**
-   * Processes this layer and propagates to the next step.
+   * Delegates to this layer's {@link LayerAction}, passing the next step as a callback.
+   *
+   * <p>The layer action has full control over the execution: it can inspect or modify
+   * the argument, measure timing, catch exceptions, skip the next step entirely, or
+   * call it multiple times (e.g. for retry logic).</p>
    *
    * @param chainId  the chain identifier, shared across all layers
    * @param callId   the call identifier, unique per invocation
    * @param argument the argument flowing through the chain
-   * @return the result of the innermost delegate's execution
+   * @return the result of the chain execution
    */
   @Override
   public R execute(long chainId, long callId, A argument) {
-    handleLayer(chainId, callId, argument);
-    return nextStep.execute(chainId, callId, argument);
-  }
-
-  /**
-   * Hook for layer-specific cross-cutting logic. No-op by default.
-   *
-   * <p>Both the chain ID and call ID are available as primitives, enabling
-   * zero-allocation logging and tracing without calling {@link #getChainId()}.</p>
-   *
-   * @param chainId  the chain identifier (which wrapper chain this belongs to)
-   * @param callId   the call identifier (which invocation this is)
-   * @param argument the argument passed through the chain
-   */
-  protected void handleLayer(long chainId, long callId, A argument) {
-    // No-op by default — override in subclasses to add cross-cutting behavior
+    return layerAction.execute(chainId, callId, argument, nextStep);
   }
 
   /**
