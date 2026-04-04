@@ -3,21 +3,21 @@ package eu.inqudium.core.pipeline;
 /**
  * Internal contract for propagating a call through the wrapper chain.
  *
- * <p>Package-private. Enables the recursive delegation inside {@link BaseWrapper#executeWithId}:
- * each layer checks whether its delegate also implements {@code InternalExecutor} and,
- * if so, forwards the call with the same {@code callId}.</p>
+ * <p>Package-private. Each layer delegates to the next via {@code execute},
+ * passing both the chain ID and call ID as primitives for zero-allocation tracing.</p>
  *
  * @param <A> the argument type passed through the chain
  * @param <R> the return type produced by the chain
  */
-public interface InternalExecutor<A, R> {
+interface InternalExecutor<A, R> {
 
   /**
-   * Executes this layer's logic and propagates the call to the next inner layer.
+   * Executes this layer and propagates to the next.
    *
-   * @param callId   a unique identifier for this particular invocation (primitive, zero-allocation)
-   * @param argument the argument to pass through the chain
+   * @param chainId  identifies the wrapper chain (shared across all layers)
+   * @param callId   identifies this particular invocation (unique per call)
+   * @param argument the argument flowing through the chain
    * @return the result of the innermost delegate's execution
    */
-  R executeWithId(long callId, A argument);
+  R execute(long chainId, long callId, A argument);
 }

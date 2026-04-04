@@ -8,18 +8,17 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>{@code BaseWrapper} provides the core chain-execution mechanism. When a public
  * functional method is invoked on the outermost wrapper, it calls {@link #initiateChain},
  * which generates a unique call ID and begins a top-down traversal through every layer
- * via {@link #executeWithId}.</p>
+ * via {@link #execute}. Both the chain ID and the call ID are passed as primitive
+ * {@code long} values for zero-allocation tracing.</p>
  *
- * <h3>Zero-Allocation ID Generation</h3>
- * <p>Both chain IDs and call IDs use primitive {@code long} counters backed by
- * {@link AtomicLong}. This eliminates the overhead of {@code UUID.randomUUID().toString()}
- * (which involves {@code SecureRandom}, a 128-bit UUID object, and a 36-character String)
- * in favor of a single lock-free CAS operation with no object allocation.</p>
- *
- * <h3>Core Execution</h3>
- * <p>Subclasses provide their terminal execution logic as an {@link InternalExecutor}
- * lambda passed to the constructor. This lambda captures the delegate directly,
- * eliminating the need for a separate {@code invokeCore()} method.</p>
+ * <h3>Execution Flow</h3>
+ * <pre>{@code
+ * outerWrapper.run()
+ *   └── initiateChain(null)                               // generates callId
+ *         └── outer.execute(chainId, callId, null)         // handleLayer → forward
+ *               └── inner.execute(chainId, callId, null)   // handleLayer → forward
+ *                     └── coreExecution                     // calls delegate.run()
+ * }</pre>
  *
  * @param <T> the delegate type this wrapper wraps around
  * @param <A> the argument type flowing through the chain
@@ -40,7 +39,6 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   /**
    * Shared call ID counter for this chain. Created once by the innermost wrapper
    * and inherited by every outer wrapper, just like the {@link #chainId}.
-   * Only concurrent invocations of the same chain compete for this counter.
    */
   private final AtomicLong callIdCounter;
 
@@ -49,8 +47,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
    *
    * <p>If the delegate is itself a {@code BaseWrapper}, this layer joins the same chain
    * by inheriting the delegate's {@link #chainId} and {@link #callIdCounter}.
-   * Otherwise, a new chain ID and counter are created, marking this as the innermost
-   * wrapper in a new chain.</p>
+   * Otherwise, a new chain ID and counter are created.</p>
    *
    * @param name          a descriptive name for this layer (must not be {@code null})
    * @param delegate      the target to wrap (must not be {@code null})
@@ -79,38 +76,44 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   }
 
   /**
-   * Entry point for chain execution. Generates a fresh call ID and starts traversal.
+   * Entry point for chain execution. Generates a fresh call ID and starts traversal,
+   * passing both the chain ID and the call ID through every layer.
    */
   protected R initiateChain(A argument) {
-    return this.executeWithId(generateCallId(), argument);
+    return this.execute(chainId, generateCallId(), argument);
   }
 
   /**
-   * Processes this layer and propagates the call to the next step.
+   * Processes this layer and propagates to the next step.
+   *
+   * @param chainId  the chain identifier, shared across all layers
+   * @param callId   the call identifier, unique per invocation
+   * @param argument the argument flowing through the chain
+   * @return the result of the innermost delegate's execution
    */
   @Override
-  public R executeWithId(long callId, A argument) {
-    handleLayer(callId, argument);
-    return nextStep.executeWithId(callId, argument);
+  public R execute(long chainId, long callId, A argument) {
+    handleLayer(chainId, callId, argument);
+    return nextStep.execute(chainId, callId, argument);
   }
 
   /**
    * Hook for layer-specific cross-cutting logic. No-op by default.
    *
-   * @param callId   unique identifier for this invocation (primitive, zero-allocation)
+   * <p>Both the chain ID and call ID are available as primitives, enabling
+   * zero-allocation logging and tracing without calling {@link #getChainId()}.</p>
+   *
+   * @param chainId  the chain identifier (which wrapper chain this belongs to)
+   * @param callId   the call identifier (which invocation this is)
    * @param argument the argument passed through the chain
    */
-  protected void handleLayer(long callId, A argument) {
+  protected void handleLayer(long chainId, long callId, A argument) {
     // No-op by default — override in subclasses to add cross-cutting behavior
   }
 
   /**
-   * Creates a unique call identifier. The default implementation uses a global
-   * {@link AtomicLong} counter — a single CAS operation with no object allocation.
-   *
-   * <p>Override to supply external correlation IDs (e.g. from HTTP headers).</p>
-   *
-   * @return a unique call ID
+   * Creates a unique call identifier using the chain's shared counter.
+   * Override to supply external correlation IDs.
    */
   protected long generateCallId() {
     return callIdCounter.incrementAndGet();

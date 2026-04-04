@@ -88,7 +88,7 @@ class JoinPointWrapperDynamicProxyTest {
         }
 
         @Override
-        protected void handleLayer(long callId, Void argument) {
+        protected void handleLayer(long chainId, long callId, Void argument) {
             log.layerNames.add(getLayerDescription());
             log.callIds.add(callId);
         }

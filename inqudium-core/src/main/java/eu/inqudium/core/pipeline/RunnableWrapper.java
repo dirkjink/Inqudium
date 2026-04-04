@@ -11,7 +11,7 @@ public class RunnableWrapper
     implements Runnable {
 
   public RunnableWrapper(String name, Runnable delegate) {
-    super(name, delegate, (callId, arg) -> { delegate.run(); return null; });
+    super(name, delegate, (chainId, callId, arg) -> { delegate.run(); return null; });
   }
 
   @Override

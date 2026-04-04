@@ -12,7 +12,7 @@ public class SupplierWrapper<T>
     implements Supplier<T> {
 
   public SupplierWrapper(String name, Supplier<T> delegate) {
-    super(name, delegate, (callId, arg) -> delegate.get());
+    super(name, delegate, (chainId, callId, arg) -> delegate.get());
   }
 
   @Override

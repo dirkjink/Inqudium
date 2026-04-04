@@ -13,7 +13,7 @@ public class FunctionWrapper<I, O>
     implements Function<I, O> {
 
   public FunctionWrapper(String name, Function<I, O> delegate) {
-    super(name, delegate, (callId, input) -> delegate.apply(input));
+    super(name, delegate, (chainId, callId, input) -> delegate.apply(input));
   }
 
   @Override

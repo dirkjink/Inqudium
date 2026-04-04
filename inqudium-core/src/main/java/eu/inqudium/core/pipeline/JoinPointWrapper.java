@@ -15,7 +15,7 @@ public class JoinPointWrapper<R>
     implements ProxyExecution<R> {
 
   public JoinPointWrapper(String name, ProxyExecution<R> delegate) {
-    super(name, delegate, (callId, arg) -> {
+    super(name, delegate, (chainId, callId, arg) -> {
       try {
         return delegate.proceed();
       } catch (RuntimeException | Error e) {

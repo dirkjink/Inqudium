@@ -16,7 +16,7 @@ public class CallableWrapper<V>
     implements Callable<V> {
 
   public CallableWrapper(String name, Callable<V> delegate) {
-    super(name, delegate, (callId, arg) -> {
+    super(name, delegate, (chainId, callId, arg) -> {
       try {
         return delegate.call();
       } catch (RuntimeException | Error e) {
