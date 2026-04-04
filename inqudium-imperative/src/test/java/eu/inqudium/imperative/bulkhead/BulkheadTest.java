@@ -61,6 +61,9 @@ class BulkheadTest {
   // =========================================================================
 
   static class RealInventoryService implements InventoryService {
+    volatile CompletionStage<String> originalString;
+    volatile CompletionStage<Void> originalVoid;
+
     @Override
     public String checkStock(String sku) {
       return "in-stock:" + sku;
@@ -71,12 +74,12 @@ class BulkheadTest {
 
     @Override
     public CompletionStage<String> checkStockAsync(String sku) {
-      return CompletableFuture.completedFuture("async-in-stock:" + sku);
+      return originalString = CompletableFuture.completedFuture("async-in-stock:" + sku);
     }
 
     @Override
     public CompletionStage<Void> reorderAsync(String sku) {
-      return CompletableFuture.completedFuture(null);
+      return originalVoid = CompletableFuture.completedFuture(null);
     }
   }
 
@@ -467,14 +470,17 @@ class BulkheadTest {
     @DisplayName("should decorate an async Supplier and return the correct result on get()")
     void should_decorate_an_async_Supplier_and_return_the_correct_result_on_get() {
       // Given
+      CompletableFuture<String> originalFuture = CompletableFuture.completedFuture("async-hello");
+
       var bh = createBulkhead("async-supplier", 5);
-      Supplier<CompletionStage<String>> decorated =
-          bh.decorateAsyncSupplier(() -> CompletableFuture.completedFuture("async-hello"));
+      Supplier<CompletionStage<String>> decorated = bh.decorateAsyncSupplier(() -> originalFuture);
 
       // When
-      String result = ((CompletableFuture<String>) decorated.get()).join();
+      CompletionStage<String> stringCompletionStage = decorated.get();
+      String result = ((CompletableFuture<String>) stringCompletionStage).join();
 
       // Then
+      assertThat(stringCompletionStage).isSameAs(originalFuture);
       assertThat(result).isEqualTo("async-hello");
       assertThat(bh.getAvailablePermits()).isEqualTo(5);
     }
@@ -859,13 +865,15 @@ class BulkheadTest {
       // Given
       var bh = createBulkhead("proxy-async-void", 5);
       var factory = new BulkheadProxyFactory(bh);
-      InventoryService proxy = factory.protect(InventoryService.class, new RealInventoryService());
+      RealInventoryService target = new RealInventoryService();
+      InventoryService proxy = factory.protect(InventoryService.class, target);
 
       // When
       CompletionStage<Void> stage = proxy.reorderAsync("SKU-001");
       ((CompletableFuture<Void>) stage).join();
 
       // Then
+      assertThat(stage).isSameAs(target.originalVoid);
       assertThat(bh.getAvailablePermits()).isEqualTo(5);
     }
 

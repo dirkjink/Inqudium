@@ -186,7 +186,10 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
    * @param callId   the call identifier
    * @param argument the argument flowing through the chain
    * @param next     the next async step in the chain
-   * @return a CompletionStage enriched with permit-release on completion
+   * @return the <strong>same</strong> {@link CompletionStage} instance that the downstream
+   *         chain produced — guaranteed. Pipeline identity is preserved: callers may rely
+   *         on {@code returnedStage == originalFuture}. The permit-release callback is
+   *         attached via {@code whenComplete()} as a side-effect only.
    */
   @Override
   public CompletionStage<R> executeAsync(long chainId,
@@ -224,11 +227,21 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
       throw t;
     }
 
-    // ── End phase: release permit on completion (asynchronous) ──
-    return stage.whenComplete((result, error) -> {
+    // ── End phase: attach permit-release as side-effect, preserve pipeline identity ──
+    //
+    // GUARANTEED PROPERTY: The CompletionStage returned to the caller is the exact same
+    // object that the downstream business operation produced. This is a contract — callers
+    // may rely on reference equality (stage == originalFuture) to detect wrapping, attach
+    // dependent actions, or pass the future to APIs that require identity preservation
+    // (e.g., reactive frameworks, response pipelines).
+    //
+    // Implementation: whenComplete() attaches the release callback to the original stage
+    // as a side-effect. The new stage that whenComplete() returns is intentionally discarded.
+    stage.whenComplete((result, error) -> {
       long rttNanos = nanoTimeSource.now() - startNanos;
       releaseAndReport(chainId, callId, rttNanos, error);
     });
+    return stage;
   }
 
   // ======================== InqElement (via Bulkhead → Decorator) ========================

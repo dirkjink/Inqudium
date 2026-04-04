@@ -43,7 +43,8 @@ enum AsyncPassThrough implements AsyncLayerAction<Object, Object> {
  *         release();                                      // cleanup on sync failure
  *         throw t;
  *     }
- *     return stage.whenComplete((r, e) -> release());     // end phase — async
+ *     stage.whenComplete((r, e) -> release());     // end phase — async
+ *     return stage
  * }
  * }</pre>
  *
@@ -51,8 +52,10 @@ enum AsyncPassThrough implements AsyncLayerAction<Object, Object> {
  * <pre>{@code
  * (chainId, callId, arg, next) -> {
  *     long start = System.nanoTime();
- *     return next.executeAsync(chainId, callId, arg)
- *         .whenComplete((r, e) -> metrics.record(System.nanoTime() - start));
+ *     CompletionStage<R> stage = next.executeAsync(chainId, callId, arg)
+ *     stage.whenComplete((r, e) -> metrics.record(System.nanoTime() - start));
+ *     return stage
+ *
  * }
  * }</pre>
  *
@@ -77,7 +80,10 @@ public interface AsyncLayerAction<A, R> {
    * @param callId   identifies this particular invocation
    * @param argument the argument flowing through the chain
    * @param next     the next async step — call {@code next.execute(...)} to proceed
-   * @return a CompletionStage, optionally enriched with completion handlers
+   * @return the <strong>same</strong> {@link CompletionStage} instance that the downstream
+   *         chain produced — guaranteed. Pipeline identity is preserved: callers may rely
+   *         on {@code returnedStage == originalFuture}. The permit-release callback is
+   *         attached via {@code whenComplete()} as a side-effect only.
    */
   CompletionStage<R> executeAsync(long chainId, long callId, A argument,
                                   InternalAsyncExecutor<A, R> next);
