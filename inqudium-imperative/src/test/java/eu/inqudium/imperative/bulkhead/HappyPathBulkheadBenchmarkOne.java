@@ -186,9 +186,9 @@ public class HappyPathBulkheadBenchmarkOne {
   // ── Raw Semaphore (baseline, no metrics) ──
   private Semaphore semaphore;
   // ── Inqudium: all events enabled (fair comparison with R4j internal events) ──
-  private eu.inqudium.imperative.bulkhead.Bulkhead inqBulkheadAllEvents;
+  private eu.inqudium.imperative.bulkhead.Bulkhead<?,?> inqBulkheadAllEvents;
   // ── Inqudium: rejections only (optimized, shows ceiling) ──
-  private eu.inqudium.imperative.bulkhead.Bulkhead inqBulkheadOptimized;
+  private eu.inqudium.imperative.bulkhead.Bulkhead<?,?> inqBulkheadOptimized;
   // ── Resilience4j with Micrometer (production Spring Boot setup) ──
   private io.github.resilience4j.bulkhead.Bulkhead r4jBulkhead;
   // ── Failsafe with event listeners (only metrics mechanism available) ──

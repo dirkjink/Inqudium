@@ -2,6 +2,8 @@ package eu.inqudium.core.pipeline;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+import static eu.inqudium.core.pipeline.ChainIdGenerator.CHAIN_ID_COUNTER;
+
 /**
  * Abstract base class for all wrapper layers in the pipeline.
  *
@@ -43,11 +45,6 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
     implements Wrapper<S>, InternalExecutor<A, R> {
-
-  /**
-   * Global counter for chain IDs — unique per JVM, monotonically increasing.
-   */
-  private static final AtomicLong CHAIN_ID_COUNTER = new AtomicLong();
 
   private final T delegate;
   private final String name;
