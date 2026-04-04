@@ -14,7 +14,7 @@ import java.util.concurrent.CompletionStage;
  * @param <A> the argument type passed through the chain
  * @param <R> the result type carried by the CompletionStage
  */
-interface InternalAsyncExecutor<A, R> {
+public interface InternalAsyncExecutor<A, R> {
 
   /**
    * Executes this layer and propagates to the next.

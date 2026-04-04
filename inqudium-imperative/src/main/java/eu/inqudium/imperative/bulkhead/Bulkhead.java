@@ -8,6 +8,8 @@ import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.InqExecutor;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
+import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
+import eu.inqudium.imperative.core.pipeline.InqAsyncExecutor;
 
 /**
  * Imperative bulkhead — limits concurrent calls via pluggable strategies.
@@ -42,7 +44,11 @@ import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
  * @param <R> the return type flowing back through the chain
  * @since 0.4.0
  */
-public interface Bulkhead<A, R> extends InqDecorator<A, R>, InqExecutor<A, R> {
+public interface Bulkhead<A, R>
+    extends InqDecorator<A, R>,
+    InqExecutor<A, R>,
+    InqAsyncExecutor<A, R>,
+    InqAsyncDecorator<A, R> {
 
   /**
    * Creates a bulkhead from a general {@link InqConfig} container.

@@ -19,6 +19,8 @@ import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import eu.inqudium.imperative.core.InqAsyncExecutor;
+import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
+import eu.inqudium.imperative.core.pipeline.InternalAsyncExecutor;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -29,20 +31,27 @@ import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 /**
- * Composition-based imperative bulkhead implementing the {@link InqDecorator} interface.
+ * Composition-based imperative bulkhead implementing both {@link InqDecorator} (sync)
+ * and {@link InqAsyncDecorator} (async).
  *
- * <p>The bulkhead logic is expressed as around-advice in {@link #execute}: it acquires a
+ * <p>The sync bulkhead logic is expressed as around-advice in {@link #execute}: it acquires a
  * permit, delegates to the next step in the chain via {@code next.execute(...)}, measures
- * RTT, and releases the permit in a {@code finally} block. This replaces the previous
- * {@code decorate(InqCall)} approach with the unified pipeline execution model.</p>
+ * RTT, and releases the permit in a {@code finally} block.</p>
+ *
+ * <p>The async bulkhead logic is expressed as two-phase around-advice in {@link #executeAsync}:
+ * the start phase (acquire permit) runs synchronously on the calling thread, and the end phase
+ * (release permit) runs asynchronously when the downstream {@link CompletionStage} completes.</p>
  *
  * <h2>Usage via Decorator factory methods</h2>
  * <pre>{@code
  * ImperativeBulkhead<Void, String> bulkhead = new ImperativeBulkhead<>(config, strategy);
  *
- * // Wrap any functional interface — fully type-safe
- * Supplier<String> protected = bulkhead.decorateSupplier(() -> callApi());
- * Callable<String> protected = bulkhead.decorateCallable(() -> readFile());
+ * // Sync — via InqDecorator
+ * Supplier<String> syncProtected = bulkhead.decorateSupplier(() -> callApi());
+ *
+ * // Async — via InqAsyncDecorator
+ * Supplier<CompletionStage<String>> asyncProtected =
+ *     bulkhead.decorateAsyncSupplier(() -> callApiAsync());
  *
  * // Compose with other decorators
  * Supplier<String> resilient = retry.decorateSupplier(
@@ -54,9 +63,11 @@ import java.util.function.Supplier;
  * <ul>
  *   <li><b>Synchronous</b> (via {@link InqDecorator} factory methods): Acquire and release
  *       both happen on the calling thread.</li>
- *   <li><b>Asynchronous</b> ({@link #executeAsync}, {@link #executeFutureAsync},
- *       {@link #executeCompletionStageAsync}): Acquire is synchronous, release is
- *       asynchronous via the {@link CompletableFuture} pipeline.</li>
+ *   <li><b>Asynchronous pipeline</b> (via {@link InqAsyncDecorator} factory methods): Acquire
+ *       is synchronous (backpressure), release is asynchronous via {@code whenComplete()}.</li>
+ *   <li><b>Asynchronous standalone</b> ({@link #executeAsync}, {@link #executeFutureAsync},
+ *       {@link #executeCompletionStageAsync}): Legacy async execution via
+ *       {@link CompletableFuture} pipeline.</li>
  * </ul>
  *
  * <h2>Observability model</h2>
@@ -66,7 +77,7 @@ import java.util.function.Supplier;
  *
  * @since 0.4.0
  */
-public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncExecutor, BulkheadContext {
+public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncDecorator<A, R>, InqAsyncExecutor, BulkheadContext {
 
   private final Logger logger;
   private final String name;
@@ -121,7 +132,10 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
    * @return the result of the downstream chain execution
    */
   @Override
-  public R execute(long chainId, long callId, A argument, InternalExecutor<A, R> next) {
+  public R execute(long chainId,
+                   long callId,
+                   A argument,
+                   InternalExecutor<A, R> next) {
     String callIdStr = Long.toString(callId);
 
     // ── Acquire permit ──
@@ -159,6 +173,75 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncE
       long rttNanos = nanoTimeSource.now() - startNanos;
       releaseAndReport(chainId, callId, rttNanos, businessError);
     }
+  }
+
+  // ======================== Async Decorator (two-phase around-advice) ========================
+
+  /**
+   * Async bulkhead logic as two-phase around-advice for the async wrapper pipeline.
+   *
+   * <p>The async counterpart to {@link #execute}. The execution flow is split into
+   * two phases:</p>
+   *
+   * <ul>
+   *   <li><strong>Start phase</strong> (synchronous, on the calling thread): acquire a permit
+   *       from the {@link BlockingBulkheadStrategy}, publish diagnostic acquire events, and
+   *       start RTT measurement. This provides backpressure — the calling thread blocks if
+   *       permits are exhausted.</li>
+   *   <li><strong>End phase</strong> (asynchronous, on the completing thread): release the permit,
+   *       feed the adaptive algorithm with RTT data, and publish diagnostic release events.
+   *       Attached via {@code whenComplete()} to the downstream {@link CompletionStage}.</li>
+   * </ul>
+   *
+   * @param chainId  the chain identifier
+   * @param callId   the call identifier
+   * @param argument the argument flowing through the chain
+   * @param next     the next async step in the chain
+   * @return a CompletionStage enriched with permit-release on completion
+   */
+  @Override
+  public CompletionStage<R> executeAsync(long chainId,
+                                         long callId,
+                                         A argument,
+                                         InternalAsyncExecutor<A, R> next) {
+    String callIdStr = Long.toString(callId);
+
+    // ── Start phase: acquire permit (synchronous) ──
+    long startWait = eventConfig.isTraceEnabled() ? nanoTimeSource.now() : 0L;
+
+    RejectionContext rejection;
+    try {
+      rejection = strategy.tryAcquire(maxWaitDuration);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      handleAcquireFailure(chainId, callId, startWait, null);
+      throw new InqBulkheadInterruptedException(callIdStr, name, enableExceptionOptimization);
+    }
+
+    if (rejection != null) {
+      handleAcquireFailure(chainId, callId, startWait, rejection);
+      throw new InqBulkheadFullException(callIdStr, name, rejection, enableExceptionOptimization);
+    }
+
+    handleAcquireSuccess(chainId, callId, startWait);
+
+    // ── Invoke downstream async chain ──
+    long startNanos = nanoTimeSource.now();
+    CompletionStage<R> stage;
+    try {
+      stage = next.executeAsync(chainId, callId, argument);
+    } catch (Throwable t) {
+      // Sync failure during stage creation — release immediately
+      long rttNanos = nanoTimeSource.now() - startNanos;
+      releaseAndReport(chainId, callId, rttNanos, t);
+      throw t;
+    }
+
+    // ── End phase: release permit on completion (asynchronous) ──
+    return stage.whenComplete((result, error) -> {
+      long rttNanos = nanoTimeSource.now() - startNanos;
+      releaseAndReport(chainId, callId, rttNanos, error);
+    });
   }
 
   // ======================== InqElement (via Bulkhead → Decorator) ========================
