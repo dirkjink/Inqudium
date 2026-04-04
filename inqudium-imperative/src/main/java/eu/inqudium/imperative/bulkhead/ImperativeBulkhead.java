@@ -18,17 +18,12 @@ import eu.inqudium.core.pipeline.InternalExecutor;
 import eu.inqudium.core.time.InqClock;
 import eu.inqudium.core.time.InqNanoTimeSource;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
-import eu.inqudium.imperative.core.InqAsyncExecutor;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
 import eu.inqudium.imperative.core.pipeline.InternalAsyncExecutor;
 
 import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.Future;
-import java.util.function.Supplier;
 
 /**
  * Composition-based imperative bulkhead implementing both {@link InqDecorator} (sync)
@@ -65,9 +60,6 @@ import java.util.function.Supplier;
  *       both happen on the calling thread.</li>
  *   <li><b>Asynchronous pipeline</b> (via {@link InqAsyncDecorator} factory methods): Acquire
  *       is synchronous (backpressure), release is asynchronous via {@code whenComplete()}.</li>
- *   <li><b>Asynchronous standalone</b> ({@link #executeAsync}, {@link #executeFutureAsync},
- *       {@link #executeCompletionStageAsync}): Legacy async execution via
- *       {@link CompletableFuture} pipeline.</li>
  * </ul>
  *
  * <h2>Observability model</h2>
@@ -77,7 +69,7 @@ import java.util.function.Supplier;
  *
  * @since 0.4.0
  */
-public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncDecorator<A, R>, InqAsyncExecutor, BulkheadContext {
+public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
 
   private final Logger logger;
   private final String name;
@@ -88,7 +80,6 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncD
   private final Duration maxWaitDuration;
   private final InqNanoTimeSource nanoTimeSource;
   private final InqClock clock;
-  private final CompletableFutureAsyncExecutor asyncExecutor;
   private final boolean enableExceptionOptimization;
 
   public ImperativeBulkhead(InqImperativeBulkheadConfig config, BlockingBulkheadStrategy strategy) {
@@ -103,7 +94,6 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncD
     this.nanoTimeSource = config.general().nanoTimesource();
     this.eventPublisher = InqEventPublisher.create(name, InqElementType.BULKHEAD);
     this.clock = config.general().clock();
-    this.asyncExecutor = new CompletableFutureAsyncExecutor(this);
     this.enableExceptionOptimization = config.enableExceptionOptimization();
   }
 
@@ -256,16 +246,9 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncD
     return eventPublisher;
   }
 
-  // ======================== Bulkhead facade ========================
-
   @Override
   public InqImperativeBulkheadConfig getConfig() {
     return config;
-  }
-
-  @Override
-  public boolean isEnableExceptionOptimization() {
-    return enableExceptionOptimization;
   }
 
   @Override
@@ -285,77 +268,6 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncD
   public BlockingBulkheadStrategy getStrategy() {
     return strategy;
   }
-
-  // ======================== BulkheadContext (package-private SPI) ========================
-
-  @Override
-  public String bulkheadName() {
-    return name;
-  }
-
-  @Override
-  public BlockingBulkheadStrategy strategy() {
-    return strategy;
-  }
-
-  @Override
-  public Duration maxWaitDuration() {
-    return maxWaitDuration;
-  }
-
-  @Override
-  public InqNanoTimeSource nanoTimeSource() {
-    return nanoTimeSource;
-  }
-
-  @Override
-  public BulkheadEventConfig eventConfig() {
-    return eventConfig;
-  }
-
-  @Override
-  public InqEventPublisher eventPublisher() {
-    return eventPublisher;
-  }
-
-  @Override
-  public InqClock clock() {
-    return clock;
-  }
-
-  @Override
-  public Logger logger() {
-    return logger;
-  }
-
-  // ======================== Async execution (InqAsyncExecutor) ========================
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public <T> CompletableFuture<T> executeAsync(Callable<T> callable) {
-    return asyncExecutor.executeAsync(callable);
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public <T> CompletableFuture<T> executeFutureAsync(Supplier<Future<T>> futureSupplier) {
-    return asyncExecutor.executeFutureAsync(futureSupplier);
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public <T> CompletableFuture<T> executeCompletionStageAsync(
-      Supplier<CompletionStage<T>> stageSupplier) {
-    return asyncExecutor.executeCompletionStageAsync(stageSupplier);
-  }
-
-  // ======================== Diagnostic events — acquire ========================
 
   /**
    * Publishes diagnostic acquire events. In standard mode, this is a complete no-op.
@@ -422,8 +334,6 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncD
     }
   }
 
-  // ======================== Release + diagnostic events ========================
-
   /**
    * Releases the permit, feeds the adaptive algorithm, and publishes diagnostic events.
    */
@@ -466,8 +376,6 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R>, InqAsyncD
       }
     }
   }
-
-  // ======================== Internal ========================
 
   private void publishWaitTrace(long chainId, long callId, long startWait, boolean acquired) {
     if (eventPublisher.isTraceEnabled()) {
