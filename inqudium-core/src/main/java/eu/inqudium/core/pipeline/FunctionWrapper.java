@@ -16,8 +16,8 @@ public class FunctionWrapper<I, O>
     return (chainId, callId, input) -> delegate.apply(input);
   }
 
-  /** Creates a wrapper with a {@link Decorator} providing name and around-advice. */
-  public FunctionWrapper(Decorator<I, O> decorator, Function<I, O> delegate) {
+  /** Creates a wrapper with a {@link InqDecorator} providing name and around-advice. */
+  public FunctionWrapper(InqDecorator<I, O> decorator, Function<I, O> delegate) {
     super(decorator, delegate, coreFor(delegate));
   }
 

@@ -1,248 +1,126 @@
 package eu.inqudium.core.pipeline;
 
-import eu.inqudium.core.callid.InqCallIdGenerator;
-import eu.inqudium.core.config.InqElementConfig;
 import eu.inqudium.core.element.InqElement;
-import eu.inqudium.core.exception.InqException;
-import eu.inqudium.core.exception.InqRuntimeException;
-import eu.inqudium.core.invoke.InqCall;
-import eu.inqudium.core.invoke.InqExecutor;
-import eu.inqudium.core.invoke.Invocation;
-import eu.inqudium.core.invoke.Invocation2;
-import eu.inqudium.core.invoke.Invocation3;
-import eu.inqudium.core.invoke.InvocationArray;
-import eu.inqudium.core.invoke.InvocationVarargs;
 
 import java.util.concurrent.Callable;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * Decoration contract for resilience elements.
+ * A self-describing, pluggable pipeline element with around-semantics.
  *
- * <p>Provides two decoration modes:
+ * <p>{@code Decorator} unifies two concerns into a single interface:</p>
  * <ul>
- *   <li><strong>Pipeline mode</strong> ({@link #decorate(InqCall)}): For composing multiple
- *       elements into a single decoration chain via {@link InqPipeline}. The pipeline
- *       generates a callId and passes it through all decorators via {@link InqCall}
- *       (ADR-022). <strong>This is the only supported way to compose multiple elements.</strong></li>
- *   <li><strong>Standalone mode</strong> ({@link #decorateCallable}, {@link #decorateSupplier},
- *       {@link #decorateRunnable}): For using a single element without a pipeline.
- *       No callId is generated — standalone calls are not pipeline-correlated.</li>
+ *   <li>{@link InqElement} — provides metadata: name, element type, and event publisher</li>
+ *   <li>{@link LayerAction} — provides the around-advice for chain interception</li>
  * </ul>
  *
- * <h2>Composition: use InqPipeline, not manual nesting</h2>
+ * <h3>Factory Methods</h3>
+ * <p>Every decorator comes with factory methods that wrap a delegate directly,
+ * without requiring the caller to know about wrapper constructors:</p>
  * <pre>{@code
- * // ✓ Correct — pipeline generates one shared callId
- * Supplier<Result> resilient = InqPipeline.of(() -> service.call())
- *     .shield(circuitBreaker)
- *     .shield(retry)
- *     .decorate();
+ * BulkheadDecorator<Void, String> bulkhead = new BulkheadDecorator<>("pool", 10);
  *
- * // ✗ UNSUPPORTED — each element has no callId, no correlation
- * Supplier<Result> broken = cb.decorateSupplier(
- *     () -> retry.executeSupplier(
- *         () -> service.call()));
+ * // Factory methods — one line per wrapper type
+ * Runnable       protectedRun  = bulkhead.decorateRunnable(() -> sendEmail());
+ * Supplier<String> protectedGet  = bulkhead.decorateSupplier(() -> fetchData());
+ * Callable<String> protectedCall = bulkhead.decorateCallable(() -> readFile());
+ * Function<String, Integer> protectedFn = bulkhead.decorateFunction(Integer::parseInt);
  * }</pre>
  *
- * <h2>Implementation contract</h2>
- * <p>Element implementations must provide only two methods:
- * <ul>
- *   <li>{@link #decorate(InqCall)} — the element-specific resilience logic</li>
- *   <li>{@link #getConfig()} — configuration access for logging</li>
- * </ul>
- * <p>All standalone methods ({@code decorateCallable}, {@code decorateSupplier},
- * {@code decorateRunnable}) and all execute methods are provided as defaults.
+ * <h3>Chaining Multiple Decorators</h3>
+ * <pre>{@code
+ * BulkheadDecorator<Void, String> bulkhead = new BulkheadDecorator<>("bulkhead", 10);
+ * RetryDecorator<Void, String> retry = new RetryDecorator<>("retry", 3);
  *
- * @since 0.1.0
+ * // Compose: retry wraps bulkhead wraps core
+ * Supplier<String> protected = retry.decorateSupplier(
+ *     bulkhead.decorateSupplier(() -> callApi())
+ * );
+ * }</pre>
+ *
+ * <h3>Type Safety</h3>
+ * <p>The factory methods use the decorator's type parameters where possible.
+ * {@link #decorateFunction} is fully type-safe. The Void-argument methods
+ * ({@link #decorateRunnable}, {@link #decorateSupplier}, {@link #decorateCallable},
+ * {@link #decorateJoinPoint}) work correctly when the decorator's argument type
+ * is {@code Void}, which is the case for all standard resilience decorators.</p>
+ *
+ * @param <A> the argument type flowing through the chain
+ * @param <R> the return type flowing back through the chain
  */
-public interface InqDecorator extends InqElement {
-
-  // ── Configuration access ──
+public interface InqDecorator<A, R> extends InqElement, LayerAction<A, R> {
 
   /**
-   * Returns the element's configuration.
+   * Wraps a {@link Runnable} in a {@link RunnableWrapper} using this decorator's
+   * name and around-advice.
    *
-   * <p>Used by the default {@link #decorateCallable(Callable)} to access
-   * the SLF4J logger for error logging.
+   * <p>Intended for decorators with type parameters {@code <Void, Void>}.</p>
    *
-   * @return the element configuration
+   * @param delegate the runnable to protect
+   * @return a decorated runnable that applies this decorator's logic on every {@code run()}
    */
-  InqElementConfig getConfig();
-
-  // ── Pipeline mode ──
-
-  /**
-   * Wraps a call with this element's resilience logic, preserving the callId.
-   *
-   * <p>Used by {@link InqPipeline} to compose multiple elements into a single
-   * decoration chain. The {@link InqCall} carries the shared callId — each
-   * element reads {@code call.callId()} for event correlation.
-   *
-   * <p>This is the only method that element implementations must provide.
-   * All standalone decoration methods delegate to this method.
-   *
-   * @param call the call to decorate (carries the shared callId)
-   * @param <T>  the result type
-   * @return a decorated call with the same callId
-   */
-  <T> InqCall<T> decorate(InqCall<T> call);
-
-  // ── Standalone mode — single element only ──
-
-  /**
-   * Decorates a callable for standalone (single-element) use.
-   *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements — it generates a shared callId
-   * and passes it through the decoration chain. Standalone decoration does not
-   * generate a callId.
-   *
-   * <p>This is the Supplier boundary — checked exceptions from the {@link Callable}
-   * are wrapped in {@link InqRuntimeException}. Runtime exceptions are logged with
-   * element context before being rethrown. {@link InqException} subclasses (circuit
-   * breaker open, bulkhead full, etc.) are rethrown without logging because they
-   * represent expected element behavior.
-   *
-   * @param callable the callable to decorate
-   * @param <T>      the result type
-   * @return a decorated supplier (checked exceptions wrapped in InqRuntimeException)
-   */
-  default <T> Supplier<T> decorateCallable(Callable<T> callable) {
-    return () -> InqExecutor.executeInqCall(InqCall.standalone(callable),
-        getName(),
-        getElementType(),
-        InqCallIdGenerator.NONE);
+  @SuppressWarnings("unchecked")
+  default Runnable decorateRunnable(Runnable delegate) {
+    return new RunnableWrapper((InqDecorator<Void, Void>) this, delegate);
   }
 
   /**
-   * Decorates a supplier for standalone (single-element) use.
+   * Wraps a {@link Supplier} in a {@link SupplierWrapper} using this decorator's
+   * name and around-advice.
    *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
+   * <p>Intended for decorators with type parameters {@code <Void, T>}.</p>
    *
-   * @param supplier the supplier to decorate
-   * @param <T>      the result type
-   * @return a decorated supplier
+   * @param delegate the supplier to protect
+   * @param <T>      the return type of the supplier
+   * @return a decorated supplier that applies this decorator's logic on every {@code get()}
    */
-  default <T> Supplier<T> decorateSupplier(Supplier<T> supplier) {
-    return decorateCallable(supplier::get);
+  @SuppressWarnings("unchecked")
+  default <T> Supplier<T> decorateSupplier(Supplier<T> delegate) {
+    return new SupplierWrapper<>((InqDecorator<Void, T>) this, delegate);
   }
 
   /**
-   * Decorates a runnable for standalone (single-element) use.
+   * Wraps a {@link Callable} in a {@link CallableWrapper} using this decorator's
+   * name and around-advice.
    *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
+   * <p>Intended for decorators with type parameters {@code <Void, V>}.</p>
    *
-   * @param runnable the runnable to decorate
-   * @return a decorated runnable
+   * @param delegate the callable to protect
+   * @param <V>      the return type of the callable
+   * @return a decorated callable that applies this decorator's logic on every {@code call()}
    */
-  default Runnable decorateRunnable(Runnable runnable) {
-    Supplier<Void> decorated = decorateCallable(() -> {
-      runnable.run();
-      return null;
-    });
-    return decorated::get;
-  }
-
-  // ── Invocation methods — decorate once, call with different arguments ──
-
-  /**
-   * Decorates a single-argument invocation for standalone use.
-   *
-   * <p>This is the <strong>recommended pattern</strong> for operations that take
-   * arguments at runtime. Decorate once, then call with different arguments:
-   * <pre>{@code
-   * Invocation<String, Payment> resilientCharge =
-   *     cb.decorateInvocation(paymentService::charge);
-   *
-   * Payment p1 = resilientCharge.invoke("order-1");
-   * Payment p2 = resilientCharge.invoke("order-2");
-   * }</pre>
-   *
-   * <p>Optimized path — no array allocation per call.
-   *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param invocation the operation to decorate
-   * @param <A>        the argument type
-   * @param <T>        the result type
-   * @return a decorated invocation
-   */
-  default <A, T> Invocation<A, T> decorateInvocation(Invocation<A, T> invocation) {
-    return arg -> decorateCallable(() -> invocation.invoke(arg)).get();
+  @SuppressWarnings("unchecked")
+  default <V> Callable<V> decorateCallable(Callable<V> delegate) {
+    return new CallableWrapper<>((InqDecorator<Void, V>) this, delegate);
   }
 
   /**
-   * Decorates a two-argument invocation for standalone use.
+   * Wraps a {@link Function} in a {@link FunctionWrapper} using this decorator's
+   * name and around-advice.
    *
-   * <p>Optimized path — no array allocation per call.
+   * <p>This method is fully type-safe — the decorator's type parameters {@code <A, R>}
+   * naturally match the function's input and output types.</p>
    *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param invocation the operation to decorate
-   * @param <A1>       the first argument type
-   * @param <A2>       the second argument type
-   * @param <T>        the result type
-   * @return a decorated invocation
+   * @param delegate the function to protect
+   * @return a decorated function that applies this decorator's logic on every {@code apply()}
    */
-  default <A1, A2, T> Invocation2<A1, A2, T> decorateInvocation(Invocation2<A1, A2, T> invocation) {
-    return (arg1, arg2) -> decorateCallable(() -> invocation.invoke(arg1, arg2)).get();
+  default Function<A, R> decorateFunction(Function<A, R> delegate) {
+    return new FunctionWrapper<>(this, delegate);
   }
 
   /**
-   * Decorates a three-argument invocation for standalone use.
+   * Wraps a {@link ProxyExecution} (e.g. a Spring AOP join point) in a
+   * {@link JoinPointWrapper} using this decorator's name and around-advice.
    *
-   * <p>Optimized path — no array allocation per call.
+   * <p>Intended for decorators with type parameters {@code <Void, T>}.</p>
    *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param invocation the operation to decorate
-   * @param <A1>       the first argument type
-   * @param <A2>       the second argument type
-   * @param <A3>       the third argument type
-   * @param <T>        the result type
-   * @return a decorated invocation
+   * @param delegate the proxy execution to protect
+   * @param <T>      the return type of the proxy execution
+   * @return a decorated join point that applies this decorator's logic on every {@code proceed()}
    */
-  default <A1, A2, A3, T> Invocation3<A1, A2, A3, T> decorateInvocation(Invocation3<A1, A2, A3, T> invocation) {
-    return (arg1, arg2, arg3) -> decorateCallable(() -> invocation.invoke(arg1, arg2, arg3)).get();
-  }
-
-  /**
-   * Decorates an array-based invocation for standalone use.
-   *
-   * <p>This is the base decoration — all other invocation types can delegate
-   * to this via their {@code toArray()} / {@code asArray()} conversion methods.
-   *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param invocation the operation to decorate
-   * @param <T>        the result type
-   * @return a decorated invocation
-   */
-  default <T> InvocationArray<T> decorateInvocation(InvocationArray<T> invocation) {
-    return args -> decorateCallable(() -> invocation.invoke(args)).get();
-  }
-
-  /**
-   * Decorates a varargs invocation for standalone use.
-   *
-   * <p>Delegates to {@link #decorateInvocation(InvocationArray)} via
-   * {@link InvocationVarargs#asArray()}.
-   *
-   * <p><strong>Composition of multiple elements is not supported via this method.</strong>
-   * Use {@link InqPipeline} to compose elements.
-   *
-   * @param invocation the operation to decorate
-   * @param <T>        the result type
-   * @return a decorated invocation
-   */
-  default <T> InvocationVarargs<T> decorateInvocation(InvocationVarargs<T> invocation) {
-    InvocationArray<T> decorated = decorateInvocation(invocation.asArray());
-    return InvocationVarargs.fromArray(decorated);
+  @SuppressWarnings("unchecked")
+  default <T> ProxyExecution<T> decorateJoinPoint(ProxyExecution<T> delegate) {
+    return new JoinPointWrapper<>((InqDecorator<Void, T>) this, delegate);
   }
 }

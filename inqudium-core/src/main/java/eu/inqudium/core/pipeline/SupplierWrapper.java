@@ -21,8 +21,8 @@ public class SupplierWrapper<T>
     return (chainId, callId, arg) -> delegate.get();
   }
 
-  /** Creates a wrapper with a {@link Decorator} providing name and around-advice. */
-  public SupplierWrapper(Decorator<Void, T> decorator, Supplier<T> delegate) {
+  /** Creates a wrapper with a {@link InqDecorator} providing name and around-advice. */
+  public SupplierWrapper(InqDecorator<Void, T> decorator, Supplier<T> delegate) {
     super(decorator, delegate, coreFor(delegate));
   }
 

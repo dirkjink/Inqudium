@@ -110,9 +110,9 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
   }
 
   /**
-   * Constructs a new wrapper layer using a {@link Decorator} for both name and around-advice.
+   * Constructs a new wrapper layer using a {@link InqDecorator} for both name and around-advice.
    *
-   * <p>The decorator provides its name via {@link Decorator#getName()} and its
+   * <p>The decorator provides its name via {@link InqDecorator#getName()} and its
    * around-advice via its {@link LayerAction#execute} implementation. This is the
    * preferred constructor when plugging reusable resilience elements (bulkhead,
    * circuit breaker, retry, etc.) into the chain.</p>
@@ -121,7 +121,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
    * @param delegate      the target to wrap
    * @param coreExecution the terminal execution logic
    */
-  protected BaseWrapper(Decorator<A, R> decorator, T delegate, InternalExecutor<A, R> coreExecution) {
+  protected BaseWrapper(InqDecorator<A, R> decorator, T delegate, InternalExecutor<A, R> coreExecution) {
     this(decorator.getName(), delegate, coreExecution, decorator);
   }
 

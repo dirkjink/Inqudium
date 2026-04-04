@@ -27,8 +27,8 @@ public class CallableWrapper<V>
     };
   }
 
-  /** Creates a wrapper with a {@link Decorator} providing name and around-advice. */
-  public CallableWrapper(Decorator<Void, V> decorator, Callable<V> delegate) {
+  /** Creates a wrapper with a {@link InqDecorator} providing name and around-advice. */
+  public CallableWrapper(InqDecorator<Void, V> decorator, Callable<V> delegate) {
     super(decorator, delegate, coreFor(delegate));
   }
 

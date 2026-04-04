@@ -4,17 +4,18 @@ import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.bulkhead.BulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
-import eu.inqudium.core.pipeline.Decorator;
+import eu.inqudium.core.pipeline.InqDecorator;
+import eu.inqudium.core.pipeline.InqExecutor;
 import eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfig;
 import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
 
 /**
  * Imperative bulkhead — limits concurrent calls via pluggable strategies.
  *
- * <p>Extends {@link Decorator} to participate directly in the wrapper pipeline.
+ * <p>Extends {@link InqDecorator} to participate directly in the wrapper pipeline.
  * The bulkhead's around-advice (acquire → execute → release) is defined by the
- * {@link Decorator#execute} method, and the factory methods inherited from
- * {@link Decorator} allow wrapping any functional interface in one line:</p>
+ * {@link InqDecorator#execute} method, and the factory methods inherited from
+ * {@link InqDecorator} allow wrapping any functional interface in one line:</p>
  *
  * <h2>Usage</h2>
  * <pre>{@code
@@ -41,7 +42,7 @@ import eu.inqudium.imperative.bulkhead.strategy.SemaphoreBulkheadStrategy;
  * @param <R> the return type flowing back through the chain
  * @since 0.4.0
  */
-public interface Bulkhead<A, R> extends Decorator<A, R> {
+public interface Bulkhead<A, R> extends InqDecorator<A, R>, InqExecutor<A, R> {
 
   /**
    * Creates a bulkhead from a general {@link InqConfig} container.

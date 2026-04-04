@@ -26,8 +26,8 @@ public class JoinPointWrapper<R>
     };
   }
 
-  /** Creates a wrapper with a {@link Decorator} providing name and around-advice. */
-  public JoinPointWrapper(Decorator<Void, R> decorator, ProxyExecution<R> delegate) {
+  /** Creates a wrapper with a {@link InqDecorator} providing name and around-advice. */
+  public JoinPointWrapper(InqDecorator<Void, R> decorator, ProxyExecution<R> delegate) {
     super(decorator, delegate, coreFor(delegate));
   }
 

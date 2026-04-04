@@ -57,7 +57,6 @@ module inqudium.core {
   exports eu.inqudium.core.element.retry.strategy;
   exports eu.inqudium.core.element.bulkhead.strategy;
   exports eu.inqudium.core.element.bulkhead.algo;
-  exports eu.inqudium.core.invoke;
   exports eu.inqudium.core.config;
   exports eu.inqudium.core.element;
   exports eu.inqudium.core.time;

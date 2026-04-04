@@ -9,7 +9,7 @@ import java.util.function.Supplier;
 /**
  * Direct executor for functional interfaces through a {@link LayerAction}.
  *
- * <p>While the {@code decorateXxx} factory methods on {@link Decorator} create wrapper
+ * <p>While the {@code decorateXxx} factory methods on {@link InqDecorator} create wrapper
  * objects for deferred execution, the {@code executeXxx} methods on this interface
  * invoke the {@link LayerAction} <strong>immediately</strong> without creating any
  * wrapper infrastructure. The only allocation per call is the single

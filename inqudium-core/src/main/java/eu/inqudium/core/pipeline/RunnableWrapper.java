@@ -18,8 +18,8 @@ public class RunnableWrapper
     return (chainId, callId, arg) -> { delegate.run(); return null; };
   }
 
-  /** Creates a wrapper with a {@link Decorator} providing name and around-advice. */
-  public RunnableWrapper(Decorator<Void, Void> decorator, Runnable delegate) {
+  /** Creates a wrapper with a {@link InqDecorator} providing name and around-advice. */
+  public RunnableWrapper(InqDecorator<Void, Void> decorator, Runnable delegate) {
     super(decorator, delegate, coreFor(delegate));
   }
 
