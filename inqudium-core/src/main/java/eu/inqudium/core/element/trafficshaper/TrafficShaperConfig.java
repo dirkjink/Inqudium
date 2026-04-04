@@ -75,7 +75,7 @@ public record TrafficShaperConfig<S extends SchedulingState>(
     private Duration maxWaitDuration = Duration.ofSeconds(10);
     private ThrottleMode throttleMode = ThrottleMode.SHAPE_AND_REJECT_OVERFLOW;
     private Duration unboundedWarnAfter = Duration.ofMinutes(1);
-    private SchedulingStrategy<S> strategy;
+    private final SchedulingStrategy<S> strategy;
     private Integer rawCount = null;
     private Duration rawPeriod = null;
 

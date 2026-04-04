@@ -572,7 +572,7 @@ class FallbackCoreTest {
     @DisplayName("Should reject a configuration with no handlers via builder")
     void should_reject_a_configuration_with_no_handlers_via_builder() {
       // Given
-      FallbackConfig.Builder<String> builder = FallbackConfig.<String>builder("test");
+      FallbackConfig.Builder<String> builder = FallbackConfig.builder("test");
 
       // When / Then — Building without any handler should fail
       assertThatThrownBy(builder::build)

@@ -21,7 +21,7 @@ class AdaptiveRateStrategyTest {
   void setUp() {
     // Decrease by 10% after 3 successes, double on failure. Min: 50ms, Max: 1000ms
     strategy = new AdaptiveRateStrategy(0.9, 2.0, 50_000_000L, 1_000_000_000L, 3);
-    config = TrafficShaperConfig.<AdaptiveRateState>builder("adaptive-test")
+    config = TrafficShaperConfig.builder("adaptive-test")
         .withStrategy(strategy)
         .ratePerSecond(10.0) // initial interval: 100ms
         .build();

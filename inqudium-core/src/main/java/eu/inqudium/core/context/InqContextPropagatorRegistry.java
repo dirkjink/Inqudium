@@ -140,8 +140,8 @@ public final class InqContextPropagatorRegistry {
     long parkNanos = PARK_INITIAL_NANOS;
     while (true) {
       var current = state.get();
-      if (current instanceof Open open) {
-        var updated = new ArrayList<>(open.programmatic);
+      if (current instanceof Open(List<InqContextPropagator> programmatic)) {
+        var updated = new ArrayList<>(programmatic);
         updated.add(propagator);
         var next = new Open(List.copyOf(updated));
         if (state.compareAndSet(current, next)) {
@@ -181,19 +181,19 @@ public final class InqContextPropagatorRegistry {
     while (true) {
       var current = state.get();
 
-      if (current instanceof Frozen frozen) {
-        return frozen.resolved;
+      if (current instanceof Frozen(List<InqContextPropagator> resolved1)) {
+        return resolved1;
       }
 
-      if (current instanceof Open open) {
-        var resolving = new Resolving(open.programmatic);
+      if (current instanceof Open(List<InqContextPropagator> programmatic)) {
+        var resolving = new Resolving(programmatic);
         if (state.compareAndSet(current, resolving)) {
           try {
-            var resolved = discoverAndMerge(open.programmatic, spiClassLoader);
+            var resolved = discoverAndMerge(programmatic, spiClassLoader);
             state.set(new Frozen(resolved));
             return resolved;
           } catch (Throwable t) {
-            state.set(new Open(List.copyOf(open.programmatic)));
+            state.set(new Open(List.copyOf(programmatic)));
             InqException.rethrowIfFatal(t);
             LOGGER.error("ServiceLoader discovery failed — registry reset to Open", t);
             return List.of();

@@ -1,6 +1,5 @@
 package eu.inqudium.core.exception;
 
-import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.element.InqElementType;
 
 import java.util.Locale;
@@ -58,12 +57,13 @@ public class InqRuntimeException extends InqException {
    * @param enableExceptionOptimization whether suppression is enabled or disabled, and whether the stack trace
    *                                    should be writable.
    */
-  public InqRuntimeException(String callId,
+  public InqRuntimeException(long chainId,
+                             long callId,
                              String elementName,
                              InqElementType elementType,
                              Throwable cause,
                              boolean enableExceptionOptimization) {
-    super(callId,
+    super(chainId, callId,
         (elementType != null ? elementType : InqElementType.NO_ELEMENT).errorCode(0),
         elementName,
         elementType != null ? elementType : InqElementType.NO_ELEMENT,
@@ -84,7 +84,7 @@ public class InqRuntimeException extends InqException {
    *                                    should be writable.
    */
   InqRuntimeException(Throwable cause, boolean enableExceptionOptimization) {
-    super(InqCallIdGenerator.NONE, InqElementType.NO_ELEMENT.errorCode(0),
+    super(-1, -1, InqElementType.NO_ELEMENT.errorCode(0),
         null, InqElementType.NO_ELEMENT,
         formatCauseMessage(null, null, InqFailure.unwrap(cause)),
         InqFailure.unwrap(cause),

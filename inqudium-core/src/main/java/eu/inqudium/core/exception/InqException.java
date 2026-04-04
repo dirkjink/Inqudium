@@ -1,6 +1,5 @@
 package eu.inqudium.core.exception;
 
-import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.element.InqElementType;
 
 /**
@@ -29,7 +28,8 @@ import eu.inqudium.core.element.InqElementType;
  */
 public abstract class InqException extends RuntimeException {
 
-  private final String callId;
+  private final long chainId;
+  private final long callId;
   private final String code;
   private final String elementName;
   private final InqElementType elementType;
@@ -38,7 +38,7 @@ public abstract class InqException extends RuntimeException {
   /**
    * Creates a new exception with call identity, error code, element context, and a cause.
    *
-   * @param callId                      the unique call identifier, or {@link InqCallIdGenerator#NONE} for standalone use
+   * @param callId                      the unique call identifier
    * @param code                        the structured error code
    * @param elementName                 the name of the element instance
    * @param elementType                 the type of the element
@@ -47,14 +47,16 @@ public abstract class InqException extends RuntimeException {
    * @param enableExceptionOptimization whether suppression is enabled or disabled, and whether the stack trace
    *                                    should be writable.
    */
-  protected InqException(String callId,
+  protected InqException(long chainId,
+                         long callId,
                          String code,
                          String elementName,
                          InqElementType elementType,
                          String message,
                          Throwable cause,
                          boolean enableExceptionOptimization) {
-    super(formatMessage(callId, code, message), cause, enableExceptionOptimization, !enableExceptionOptimization);
+    super(formatMessage(chainId, callId, code, message), cause, enableExceptionOptimization, !enableExceptionOptimization);
+    this.chainId = chainId;
     this.callId = callId;
     this.code = code;
     this.elementName = elementName;
@@ -62,8 +64,8 @@ public abstract class InqException extends RuntimeException {
     this.enableExceptionOptimization = enableExceptionOptimization;
   }
 
-  private static String formatMessage(String callId, String code, String message) {
-    return "[" + callId + "] " + code + ": " + message;
+  private static String formatMessage(long chainId, long callId, String code, String message) {
+    return "[" + chainId + "-" + callId + "] " + code + ": " + message;
   }
 
   public static void rethrowIfFatal(Throwable t) {
@@ -76,16 +78,16 @@ public abstract class InqException extends RuntimeException {
     return enableExceptionOptimization;
   }
 
+  public long getChainId() {
+    return chainId;
+  }
+
   /**
    * Returns the unique call identifier.
    *
-   * <p>All events and exceptions from the same pipeline invocation share
-   * this callId (ADR-022). Returns {@link InqCallIdGenerator#NONE} for standalone calls that
-   * are not pipeline-correlated.
-   *
    * @return the callId, or null
    */
-  public String getCallId() {
+  public long getCallId() {
     return callId;
   }
 

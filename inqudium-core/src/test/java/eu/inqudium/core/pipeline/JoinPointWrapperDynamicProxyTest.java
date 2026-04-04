@@ -197,7 +197,7 @@ class JoinPointWrapperDynamicProxyTest {
       InterceptionLog log = new InterceptionLog();
       DefaultGreetingService target = new DefaultGreetingService();
       JoinPointWrapper<Object> wrapper = new JoinPointWrapper<>(
-          "greet()", (ProxyExecution<Object>) () -> target.greet("test"),
+          "greet()", () -> target.greet("test"),
           trackingAction("greet()", log)
       );
 

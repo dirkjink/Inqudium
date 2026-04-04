@@ -22,7 +22,7 @@ class FixedWindowStrategyTest {
   void setUp() {
     // Window size 1 second, max 3 requests per window
     strategy = new FixedWindowStrategy(Duration.ofSeconds(1), 3);
-    config = TrafficShaperConfig.<FixedWindowState>builder("fixed-window-test")
+    config = TrafficShaperConfig.builder("fixed-window-test")
         .withStrategy(strategy)
         .build();
     now = Instant.parse("2026-04-02T10:00:00Z");

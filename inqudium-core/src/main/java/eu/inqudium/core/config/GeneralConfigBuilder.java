@@ -1,6 +1,5 @@
 package eu.inqudium.core.config;
 
-import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.config.compatibility.InqCompatibility;
 import eu.inqudium.core.log.LoggerFactory;
 import eu.inqudium.core.time.CachedInqClock;
@@ -23,7 +22,6 @@ public class GeneralConfigBuilder {
   private InqClock clock = CachedInqClock.getDefault();
   private InqNanoTimeSource nanoTimeSource = InqNanoTimeSource.system();
   private InqCompatibility compatibility = InqCompatibility.ofDefaults();
-  private InqCallIdGenerator callIdGenerator = InqCallIdGenerator.uuid();
   private LoggerFactory loggerFactory = LoggerFactory.NO_OP_LOGGER_FACTORY;
 
   public GeneralConfigBuilder clock(InqClock clock) {
@@ -49,12 +47,6 @@ public class GeneralConfigBuilder {
     return this;
   }
 
-  public GeneralConfigBuilder callIdGenerator(InqCallIdGenerator callIdGenerator) {
-    this.callIdGenerator = Objects.requireNonNull(callIdGenerator,
-        "callIdGenerator must not be null");
-    return this;
-  }
-
   /**
    * Builds the {@link GeneralConfig} with the given extension map.
    *
@@ -71,7 +63,6 @@ public class GeneralConfigBuilder {
         clock,
         nanoTimeSource,
         compatibility,
-        callIdGenerator,
         loggerFactory,
         extensions
     );

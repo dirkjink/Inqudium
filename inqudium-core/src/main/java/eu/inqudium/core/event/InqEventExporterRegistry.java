@@ -266,8 +266,8 @@ public final class InqEventExporterRegistry {
     long parkNanos = PARK_INITIAL_NANOS;
     while (true) {
       var current = state.get();
-      if (current instanceof Open open) {
-        var updated = new ArrayList<>(open.programmatic);
+      if (current instanceof Open(List<InqEventExporter> programmatic)) {
+        var updated = new ArrayList<>(programmatic);
         updated.add(exporter);
         var next = new Open(List.copyOf(updated));
         if (state.compareAndSet(current, next)) {
@@ -325,24 +325,24 @@ public final class InqEventExporterRegistry {
     while (true) {
       var current = state.get();
 
-      if (current instanceof Frozen frozen) {
-        return frozen.exporters;
+      if (current instanceof Frozen(List<CachedExporter> exporters1)) {
+        return exporters1;
       }
 
-      if (current instanceof Open open) {
-        var resolving = new Resolving(open.programmatic);
+      if (current instanceof Open(List<InqEventExporter> programmatic)) {
+        var resolving = new Resolving(programmatic);
         if (state.compareAndSet(current, resolving)) {
           // Separate try-blocks so that a replay failure does not
           // reset the successfully frozen registry back to Open.
           List<CachedExporter> exporters;
           List<InqProviderErrorEvent> providerErrors;
           try {
-            var result = discoverAndMerge(open.programmatic, getClassLoader());
+            var result = discoverAndMerge(programmatic, getClassLoader());
             exporters = result.exporters;
             providerErrors = result.providerErrors;
           } catch (Throwable t) {
             // Discovery itself failed — reset to Open so next caller can retry
-            state.compareAndSet(resolving, new Open(List.copyOf(open.programmatic)));
+            state.compareAndSet(resolving, new Open(List.copyOf(programmatic)));
             rethrowIfFatal(t);
             LOGGER.error("ServiceLoader discovery failed — registry reset to Open", t);
             return List.of();

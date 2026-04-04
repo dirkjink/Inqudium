@@ -170,7 +170,7 @@ class ImperativeTimeLimiterTest {
       ImperativeTimeLimiter limiter = new ImperativeTimeLimiter(fastConfig());
 
       // When / Then
-      assertThatThrownBy(() -> limiter.execute((Runnable) () -> {
+      assertThatThrownBy(() -> limiter.execute(() -> {
         try {
           Thread.sleep(1000);
         } catch (InterruptedException e) {

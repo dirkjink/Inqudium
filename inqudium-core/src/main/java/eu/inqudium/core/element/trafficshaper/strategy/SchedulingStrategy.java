@@ -83,11 +83,8 @@ public interface SchedulingStrategy<S extends SchedulingState> {
     if (config.hasQueueDepthLimit() && state.queueDepth() >= config.maxQueueDepth()) {
       return true;
     }
-    if (config.hasMaxWaitDurationLimit()
-        && waitDuration.compareTo(config.maxWaitDuration()) > 0) {
-      return true;
-    }
-    return false;
+    return config.hasMaxWaitDurationLimit()
+        && waitDuration.compareTo(config.maxWaitDuration()) > 0;
   }
 
   /**

@@ -1,6 +1,5 @@
 package eu.inqudium.imperative.bulkhead;
 
-import eu.inqudium.core.callid.InqCallIdGenerator;
 import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.config.compatibility.InqCompatibility;
 import eu.inqudium.core.element.InqElementType;
@@ -36,7 +35,6 @@ class InqBulkheadConfigTest {
       InqClock customClock = InqClock.system();
       InqNanoTimeSource customNanoTimeSource = InqNanoTimeSource.system();
       InqCompatibility customCompatibility = InqCompatibility.ofDefaults();
-      InqCallIdGenerator customCallIdGenerator = InqCallIdGenerator.uuid();
       LoggerFactory customLoggerFactory = LoggerFactory.NO_OP_LOGGER_FACTORY;
 
       // When building the configuration with all custom general settings
@@ -45,7 +43,6 @@ class InqBulkheadConfigTest {
               .clock(customClock)
               .nanoTimeSource(customNanoTimeSource)
               .compatibility(customCompatibility)
-              .callIdGenerator(customCallIdGenerator)
               .loggerFactory(customLoggerFactory))
           .build();
 
@@ -54,7 +51,6 @@ class InqBulkheadConfigTest {
       assertThat(config.general().clock()).isSameAs(customClock);
       assertThat(config.general().nanoTimesource()).isSameAs(customNanoTimeSource);
       assertThat(config.general().compatibility()).isSameAs(customCompatibility);
-      assertThat(config.general().callIdGenerator()).isSameAs(customCallIdGenerator);
       assertThat(config.general().loggerFactory()).isSameAs(customLoggerFactory);
     }
   }
@@ -163,7 +159,6 @@ class InqBulkheadConfigTest {
       // Assuming strategy could be an Enum, we pass null to test the setter without needing mockito.
       InqLimitAlgorithm customLimitAlgorithm = VegasLimitAlgorithm.balanced();
       InqEventPublisher customEventPublisher = InqEventPublisher.create("name", InqElementType.BULKHEAD);
-      ;
 
       // When appending a bulkhead extension to the configuration
       InqConfig config = InqConfig.configure()

@@ -41,11 +41,13 @@ public class InqBulkheadFullException extends InqException {
    * @param enableExceptionOptimization whether suppression is enabled or disabled, and whether the stack trace
    *                                    should be writable.
    */
-  public InqBulkheadFullException(String callId,
+  public InqBulkheadFullException(long chainId,
+                                  long callId,
                                   String elementName,
                                   RejectionContext rejectionContext,
                                   boolean enableExceptionOptimization) {
-    super(callId,
+    super(chainId,
+        callId,
         CODE,
         elementName,
         InqElementType.BULKHEAD,

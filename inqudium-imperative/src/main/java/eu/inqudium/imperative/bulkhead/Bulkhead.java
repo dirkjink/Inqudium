@@ -2,7 +2,6 @@ package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.element.bulkhead.BulkheadConfig;
 import eu.inqudium.core.element.bulkhead.strategy.BlockingBulkheadStrategy;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.InqExecutor;
@@ -35,10 +34,6 @@ import eu.inqudium.imperative.core.pipeline.InqAsyncExecutor;
  *     bh.decorateSupplier(() -> callApi())
  * );
  * }</pre>
- *
- * <p>The strategy is selected automatically by {@link BulkheadConfig.Builder#build()}.
- * All auto-selected strategies are {@link BlockingBulkheadStrategy} instances.
- * For custom non-blocking strategies, use the reactive bulkhead facade.</p>
  *
  * @param <A> the argument type flowing through the chain
  * @param <R> the return type flowing back through the chain

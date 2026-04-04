@@ -171,7 +171,7 @@ class FinalWrapperHierarchyTest {
     void chainIdMustBeStable(WrapperTestBridge bridge) {
       // Given
       BaseWrapper<?, ?, ?, ?> root = bridge.getWrapper();
-      BaseWrapper<?, ?, ?, ?> inner = (BaseWrapper<?, ?, ?, ?>) root.getInner();
+      BaseWrapper<?, ?, ?, ?> inner = root.getInner();
 
       // When & Then
       assertThat(root.getChainId())

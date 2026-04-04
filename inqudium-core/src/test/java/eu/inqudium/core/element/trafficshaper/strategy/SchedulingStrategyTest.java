@@ -116,7 +116,7 @@ class SchedulingStrategyTest {
     @DisplayName("Requests within limits should not be rejected")
     void requestsWithinLimitsShouldNotBeRejected() {
       // Given: Limit is queue depth 10, wait 5s
-      TrafficShaperConfig<TestState> config = TrafficShaperConfig.<TestState>builder("test")
+      TrafficShaperConfig<TestState> config = TrafficShaperConfig.builder("test")
           .withStrategy(strategy)
           .maxQueueDepth(10)
           .maxWaitDuration(Duration.ofSeconds(5))
@@ -134,7 +134,7 @@ class SchedulingStrategyTest {
     @DisplayName("Requests exceeding the queue depth limit should be rejected")
     void requestsExceedingQueueDepthShouldBeRejected() {
       // Given: Limit is queue depth 10
-      TrafficShaperConfig<TestState> config = TrafficShaperConfig.<TestState>builder("test")
+      TrafficShaperConfig<TestState> config = TrafficShaperConfig.builder("test")
           .withStrategy(strategy)
           .maxQueueDepth(10)
           .build();
@@ -151,7 +151,7 @@ class SchedulingStrategyTest {
     @DisplayName("Requests exceeding the maximum wait duration should be rejected")
     void requestsExceedingWaitDurationShouldBeRejected() {
       // Given: Limit is wait 5s
-      TrafficShaperConfig<TestState> config = TrafficShaperConfig.<TestState>builder("test")
+      TrafficShaperConfig<TestState> config = TrafficShaperConfig.builder("test")
           .withStrategy(strategy)
           .maxQueueDepth(100)
           .maxWaitDuration(Duration.ofSeconds(5))
@@ -174,7 +174,7 @@ class SchedulingStrategyTest {
     @DisplayName("Warning should not trigger if the throttle mode is not unbounded")
     void warningShouldNotTriggerInStandardMode() {
       // Given
-      TrafficShaperConfig<TestState> config = TrafficShaperConfig.<TestState>builder("test")
+      TrafficShaperConfig<TestState> config = TrafficShaperConfig.builder("test")
           .withStrategy(strategy)
           .throttleMode(ThrottleMode.SHAPE_AND_REJECT_OVERFLOW)
           .unboundedWarnAfter(Duration.ofSeconds(10))
@@ -194,7 +194,7 @@ class SchedulingStrategyTest {
     @DisplayName("Warning should trigger if the projected tail wait exceeds the warning threshold in unbounded mode")
     void warningShouldTriggerWhenThresholdExceeded() {
       // Given
-      TrafficShaperConfig<TestState> config = TrafficShaperConfig.<TestState>builder("test")
+      TrafficShaperConfig<TestState> config = TrafficShaperConfig.builder("test")
           .withStrategy(strategy)
           .throttleMode(ThrottleMode.SHAPE_UNBOUNDED)
           .unboundedWarnAfter(Duration.ofSeconds(10))
@@ -214,7 +214,7 @@ class SchedulingStrategyTest {
     @DisplayName("Warning should not trigger if the projected tail wait is within the warning threshold")
     void warningShouldNotTriggerWhenWithinThreshold() {
       // Given
-      TrafficShaperConfig<TestState> config = TrafficShaperConfig.<TestState>builder("test")
+      TrafficShaperConfig<TestState> config = TrafficShaperConfig.builder("test")
           .withStrategy(strategy)
           .throttleMode(ThrottleMode.SHAPE_UNBOUNDED)
           .unboundedWarnAfter(Duration.ofSeconds(10))

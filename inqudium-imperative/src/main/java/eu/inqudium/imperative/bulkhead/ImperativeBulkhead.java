@@ -126,7 +126,6 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
                    long callId,
                    A argument,
                    InternalExecutor<A, R> next) {
-    String callIdStr = Long.toString(callId);
 
     // ── Acquire permit ──
     // startWait is only needed for trace events (wait duration measurement).
@@ -139,12 +138,12 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       handleAcquireFailure(chainId, callId, startWait, null);
-      throw new InqBulkheadInterruptedException(callIdStr, name, enableExceptionOptimization);
+      throw new InqBulkheadInterruptedException(chainId, callId, name, enableExceptionOptimization);
     }
 
     if (rejection != null) {
       handleAcquireFailure(chainId, callId, startWait, rejection);
-      throw new InqBulkheadFullException(callIdStr, name, rejection, enableExceptionOptimization);
+      throw new InqBulkheadFullException(chainId, callId, name, rejection, enableExceptionOptimization);
     }
 
     // Diagnostic events (acquire) — no-op in standard mode
@@ -205,12 +204,12 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       handleAcquireFailure(chainId, callId, startWait, null);
-      throw new InqBulkheadInterruptedException(callIdStr, name, enableExceptionOptimization);
+      throw new InqBulkheadInterruptedException(chainId, callId, name, enableExceptionOptimization);
     }
 
     if (rejection != null) {
       handleAcquireFailure(chainId, callId, startWait, rejection);
-      throw new InqBulkheadFullException(callIdStr, name, rejection, enableExceptionOptimization);
+      throw new InqBulkheadFullException(chainId, callId, name, rejection, enableExceptionOptimization);
     }
 
     handleAcquireSuccess(chainId, callId, startWait);

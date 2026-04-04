@@ -23,7 +23,7 @@ class SlidingWindowStrategyTest {
   void setUp() {
     // Window of 5 seconds, max 10 requests allowed
     strategy = new SlidingWindowStrategy(5, 10);
-    config = TrafficShaperConfig.<SlidingWindowState>builder("sliding-window-test")
+    config = TrafficShaperConfig.builder("sliding-window-test")
         .withStrategy(strategy)
         .maxQueueDepth(50)
         .throttleMode(ThrottleMode.SHAPE_AND_REJECT_OVERFLOW)

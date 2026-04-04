@@ -64,12 +64,14 @@ public record TimeBasedErrorRateMetrics(
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (!(o instanceof TimeBasedErrorRateMetrics that)) return false;
-    return windowSizeInSeconds == that.windowSizeInSeconds
-        && minimumNumberOfCalls == that.minimumNumberOfCalls
-        && lastUpdatedEpochSecond == that.lastUpdatedEpochSecond
-        && Arrays.equals(successBuckets, that.successBuckets)
-        && Arrays.equals(failureBuckets, that.failureBuckets);
+    if (!(o instanceof TimeBasedErrorRateMetrics(
+        int sizeInSeconds, int numberOfCalls, int[] buckets, int[] failureBuckets1, long updatedEpochSecond
+    ))) return false;
+    return windowSizeInSeconds == sizeInSeconds
+        && minimumNumberOfCalls == numberOfCalls
+        && lastUpdatedEpochSecond == updatedEpochSecond
+        && Arrays.equals(successBuckets, buckets)
+        && Arrays.equals(failureBuckets, failureBuckets1);
   }
 
   // ======================== Factory ========================

@@ -135,15 +135,18 @@ public record SlidingWindowState(
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (!(o instanceof SlidingWindowState that)) return false;
-    return windowSizeSeconds == that.windowSizeSeconds
-        && lastUpdatedEpochSecond == that.lastUpdatedEpochSecond
-        && queueDepth == that.queueDepth
-        && totalAdmitted == that.totalAdmitted
-        && totalRejected == that.totalRejected
-        && epoch == that.epoch
-        && Objects.equals(nextFreeSlot, that.nextFreeSlot)
-        && Arrays.equals(buckets, that.buckets);
+    if (!(o instanceof SlidingWindowState(
+        int[] buckets1, int sizeSeconds, long updatedEpochSecond, Instant freeSlot, int depth, long admitted,
+        long rejected, long epoch1
+    ))) return false;
+    return windowSizeSeconds == sizeSeconds
+        && lastUpdatedEpochSecond == updatedEpochSecond
+        && queueDepth == depth
+        && totalAdmitted == admitted
+        && totalRejected == rejected
+        && epoch == epoch1
+        && Objects.equals(nextFreeSlot, freeSlot)
+        && Arrays.equals(buckets, buckets1);
   }
 
   @Override

@@ -14,32 +14,24 @@ package eu.inqudium.core.algo;
  * <p>The mathematical decay formula is:
  * {@code newRate = oldRate * (1 - alpha) + sample * alpha}
  *
+ * @param alpha The EWMA smoothing factor (alpha).
+ *              Controls how much weight each new sample carries in the running average.
  * @since 0.2.0
  */
-public final class RequestBasedEwma {
-
-  /**
-   * The EWMA smoothing factor (alpha).
-   * Controls how much weight each new sample carries in the running average.
-   */
-  public final double alpha;
+public record RequestBasedEwma(double alpha) {
 
   /**
    * Creates a new Request-Based EWMA calculator.
    *
-   * @param smoothingFactor The EWMA alpha factor. Clamped to [0.01, 1.0].
-   *                        Lower values mean the average reacts more slowly to new samples.
-   *                        A value of 1.0 disables smoothing entirely (each sample fully
-   *                        overwrites the previous rate).
+   * @param alpha The EWMA alpha factor. Clamped to [0.01, 1.0].
+   *              Lower values mean the average reacts more slowly to new samples.
+   *              A value of 1.0 disables smoothing entirely (each sample fully
+   *              overwrites the previous rate).
    */
-  public RequestBasedEwma(double smoothingFactor) {
+  public RequestBasedEwma(double alpha) {
     // Clamping to [0.01, 1.0] to prevent degenerate states like 0.0 (permanently frozen)
     // or > 1.0 (mathematically invalid for EWMA).
-    this.alpha = Math.max(0.01, Math.min(1.0, smoothingFactor));
-  }
-
-  public double alpha() {
-    return alpha;
+    this.alpha = Math.max(0.01, Math.min(1.0, alpha));
   }
 
   /**

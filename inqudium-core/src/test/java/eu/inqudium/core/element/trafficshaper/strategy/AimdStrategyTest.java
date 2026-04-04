@@ -21,7 +21,7 @@ class AimdStrategyTest {
   void setUp() {
     // Decrement 10ms per success, multiply by 2.0 on failure. Min: 20ms, Max: 500ms
     strategy = new AimdStrategy(10_000_000L, 2.0, 20_000_000L, 500_000_000L);
-    config = TrafficShaperConfig.<AimdState>builder("aimd-test")
+    config = TrafficShaperConfig.builder("aimd-test")
         .withStrategy(strategy)
         .ratePerSecond(10.0) // initial interval: 100ms
         .build();

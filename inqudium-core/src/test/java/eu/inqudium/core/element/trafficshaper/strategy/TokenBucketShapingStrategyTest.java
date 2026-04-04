@@ -24,7 +24,7 @@ class TokenBucketShapingStrategyTest {
     // Burst capacity of 3
     strategy = new TokenBucketShapingStrategy(3);
     // 10 requests per second = 100ms interval
-    config = TrafficShaperConfig.<TokenBucketShapingState>builder("token-bucket-shaping-test")
+    config = TrafficShaperConfig.builder("token-bucket-shaping-test")
         .withStrategy(strategy)
         .ratePerSecond(10.0)
         .maxQueueDepth(5)
