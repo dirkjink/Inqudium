@@ -17,11 +17,11 @@ import java.util.Objects;
  * know which paradigm a service method uses; this check is the
  * proxy's responsibility.</p>
  *
- * <p>The sync counterpart {@link SyncParadigmValidator} (sub-step
- * 3.8) lives in a separate class to keep the
- * {@code inqudium-imperative} class-literal reference (the
- * {@code instanceof InqAsyncDecorator} test) off the sync class-
- * loading path. See ARCHITECTURE.md §13 — split-class structure.</p>
+ * <p>The sync counterpart {@link SyncParadigmValidator} lives in a
+ * separate class to keep the {@code inqudium-imperative}
+ * class-literal reference (the {@code instanceof InqAsyncDecorator}
+ * test) off the sync class-loading path. See ARCHITECTURE.md §13 —
+ * split-class structure.</p>
  *
  * <p><strong>Class-loading discipline</strong> (ADR-037 §6): this
  * class must be loaded only via the async branch of

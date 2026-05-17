@@ -1,8 +1,8 @@
 # ADR-037 §6 module-loading discipline finding
 
 **Status:** Resolved
-**Surfaced:** 2026-05-17 (sub-step 3.13 of REFACTORING_PROXY_REWRITE.md)
-**Resolved:** 2026-05-17 (sub-step 3.13a of REFACTORING_PROXY_REWRITE.md, PR #75)
+**Surfaced:** 2026-05-17 (PR #74)
+**Resolved:** 2026-05-17 (PR #75)
 **Severity:** Architectural violation; deployment-breaking when
 inqudium-imperative is intentionally absent.
 
@@ -10,9 +10,10 @@ inqudium-imperative is intentionally absent.
 
 The proxy module promises in ADR-037 §6 and `ARCHITECTURE.md` §13 that
 a deployment without `inqudium-imperative` on the classpath remains
-functional for **sync-only** services. Sub-step 3.13's
-`ModuleLoadingDisciplineTest` empirically verifies this contract and
-finds it broken: building a sync-only proxy loads
+functional for **sync-only** services. The
+`ModuleLoadingDisciplineTest` introduced in PR #74 empirically
+verifies this contract and finds it broken: building a sync-only
+proxy loads
 `eu.inqudium.imperative.core.pipeline.AsyncLayerAction`, and a
 classpath that excludes `inqudium-imperative` fails with
 
@@ -101,9 +102,9 @@ separate class that lives only on the async branch. Concretely:
    `ModuleLoadingDisciplineTest`.
 
 This is purely a refactor of private static helpers; no public API,
-no behavioural change. It belongs in a follow-up sub-step (suggested
-3.13a) because sub-step 3.13's prompt explicitly forbids production-
-code changes.
+no behavioural change. The work was deferred to a follow-up PR
+because the original investigation PR's scope explicitly forbade
+production-code changes.
 
 ## Why this matters
 
@@ -118,7 +119,7 @@ of test.
 
 ## Resolution
 
-Sub-step 3.13a extracted the async-build flow out of
+PR #75 extracted the async-build flow out of
 `MethodDispatchEntryFactory` into a new
 `eu.inqudium.proxy.construction.AsyncEntryBuilder` class. Because
 `MethodDispatchEntryFactory.buildAsyncDecorated(...)` now reaches the

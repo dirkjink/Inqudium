@@ -743,9 +743,9 @@ Commit subject: `chore: complete proxy polish, delete plan`
 
 ## Completion log
 
-* [ ] P.0 — Audit (no commit)
-* [ ] P.1 — Polish pass: bundled small fixes
-* [ ] P.2 — Documentation sweep
+* [x] P.0 — Audit (no commit) (2026-05-17)
+* [x] P.1 — Polish pass: bundled small fixes (2026-05-17, PR #79)
+* [x] P.2 — Documentation sweep (2026-05-17, PR #TBD)
 * [ ] P.3 — `ElementResolver` name-uniqueness — ADR + fix
 * [ ] P.4 — Folder lambda hoisting (JMH-validated decision)
 * [ ] P.5 — Test-infrastructure hardening (optional)

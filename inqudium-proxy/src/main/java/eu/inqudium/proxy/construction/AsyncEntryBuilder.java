@@ -23,7 +23,7 @@ import java.util.Map;
  * <h2>Why this class exists</h2>
  *
  * <p>Per the finding documented in
- * {@code ADR-037-DISCIPLINE-FINDING.md} (sub-step 3.13's PR), the
+ * {@code ADR-037-DISCIPLINE-FINDING.md} (PR #74), the
  * HotSpot bytecode verifier resolves the return type of every
  * {@code MethodHandle} in a class's {@code BootstrapMethods}
  * attribute as soon as the class's first {@code invokedynamic} site

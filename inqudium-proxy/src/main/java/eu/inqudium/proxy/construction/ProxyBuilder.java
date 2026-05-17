@@ -20,16 +20,14 @@ import java.util.Objects;
  * <ol>
  *   <li>Validate inputs.</li>
  *   <li>Call the annotation evaluator via the
- *       {@link InqPipelineAnnotationEvaluator} bridge (ADR-036 plus
- *       the transitional bridge from sub-step 3.3).</li>
+ *       {@link InqPipelineAnnotationEvaluator} bridge (ADR-036).</li>
  *   <li>For each method in the evaluator's plan, classify and build
  *       a {@link MethodDispatchEntry} via
  *       {@link MethodDispatchEntryFactory}.</li>
  * </ol>
  *
- * <p>Returns the per-proxy entries map. Sub-step 3.9's
- * {@code ProxyDispatcher} wires this into an
- * {@code InqInvocationHandler} and a JDK proxy.</p>
+ * <p>Returns the per-proxy entries map. {@code ProxyDispatcher}
+ * wires this into an {@code InqInvocationHandler} and a JDK proxy.</p>
  *
  * <p><strong>Construction-time errors:</strong></p>
  * <ul>
@@ -47,8 +45,8 @@ import java.util.Objects;
  * </ul>
  *
  * <p><strong>Internal API.</strong> Public for cross-package
- * reference from sub-step 3.9's {@code ProxyDispatcher}; not part
- * of the stable public surface.</p>
+ * reference from {@code ProxyDispatcher}; not part of the stable
+ * public surface.</p>
  */
 public final class ProxyBuilder {
 

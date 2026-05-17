@@ -17,10 +17,9 @@ import java.util.Objects;
  * proxy's responsibility.</p>
  *
  * <p>Async validation (requiring {@code InqAsyncDecorator}) is
- * implemented separately in sub-step 3.11 as
- * {@code AsyncParadigmValidator} — split-class structure keeps the
- * {@code inqudium-imperative} reference off the sync class-loading
- * path (ARCHITECTURE.md §13).</p>
+ * implemented separately as {@link AsyncParadigmValidator} — the
+ * split-class structure keeps the {@code inqudium-imperative}
+ * reference off the sync class-loading path (ARCHITECTURE.md §13).</p>
  */
 final class SyncParadigmValidator {
 
