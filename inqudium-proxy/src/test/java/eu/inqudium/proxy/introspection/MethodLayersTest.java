@@ -99,6 +99,18 @@ class MethodLayersTest {
     }
 
     @Test
+    void should_reject_null_layer_descriptions_with_npe() throws NoSuchMethodException {
+        // Given
+        Method m = helloMethod();
+
+        // When / Then
+        assertThatNullPointerException()
+                .isThrownBy(() -> new MethodLayers(
+                        "SomeService.hello(String)", null, Optional.of(m)))
+                .withMessage("layerDescriptions");
+    }
+
+    @Test
     void should_accept_an_empty_layer_descriptions_list() throws NoSuchMethodException {
         // Given
         Method m = helloMethod();

@@ -106,6 +106,15 @@ public final class ObjectMethodHandler {
     }
 
     private static String toStringImpl(Object proxy, Object realTarget) {
-        return proxy.getClass().getSimpleName() + "[" + realTarget + "]";
+        String prefix;
+        if (Proxy.isProxyClass(proxy.getClass())) {
+            InvocationHandler handler = Proxy.getInvocationHandler(proxy);
+            prefix = (handler instanceof InqInvocationHandler ih)
+                    ? ih.serviceInterface().getSimpleName()
+                    : proxy.getClass().getSimpleName();
+        } else {
+            prefix = proxy.getClass().getSimpleName();
+        }
+        return prefix + "[" + realTarget + "]";
     }
 }

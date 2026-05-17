@@ -60,10 +60,8 @@ public sealed interface MethodDispatchEntry
     /**
      * Returns the layer descriptions for this entry in outer-to-inner
      * order. {@link SyncCacheEntry} and {@link AsyncCacheEntry}
-     * override via their package-private accessor (record component
-     * for {@code AsyncCacheEntry}, declared method for
-     * {@code SyncCacheEntry}); the other three entry types inherit
-     * the empty-list default.
+     * override via their package-private record-component accessor;
+     * the other three entry types inherit the empty-list default.
      *
      * <p>Used by
      * {@link eu.inqudium.proxy.handler.InqInvocationHandler#methodLayers()}

@@ -14,6 +14,7 @@ import eu.inqudium.proxy.invocation.MethodInvoker;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -43,9 +44,8 @@ import java.util.Objects;
  * ARCHITECTURE.md §13). This class carries <strong>no</strong>
  * compile-time references to {@code inqudium-imperative} types.
  * The entire async-build flow lives in {@link AsyncEntryBuilder};
- * {@link #buildAsyncDecorated(Method, MethodPlan.Decorated,
- * InqPipeline, Object)} reaches it via a plain {@code invokestatic}
- * call, which is lazy per JVMS §5.4 — the JVM resolves
+ * {@code buildAsyncDecorated(...)} reaches it via a plain
+ * {@code invokestatic} call, which is lazy per JVMS §5.4 — the JVM resolves
  * {@code AsyncEntryBuilder} (and through it
  * {@code AsyncLayerAction}, {@code InqAsyncDecorator},
  * {@code AsyncChainFolder}, {@code FoldedAsyncChain},
@@ -55,8 +55,8 @@ import java.util.Objects;
  * {@code AsyncLayerAction} via this class's {@code BootstrapMethods}
  * attribute — see {@code ADR-037-DISCIPLINE-FINDING.md} for the full
  * diagnosis. The entry point
- * {@link #buildDecorated(Method, MethodPlan.Decorated, InqPipeline, Object)}
- * gates the async branch on {@link DetectionAsync#isPresent()}, which
+ * {@code buildDecorated(...)} gates the async branch on
+ * {@link DetectionAsync#isPresent()}, which
  * itself touches no async type literals.</p>
  *
  * <p><strong>Internal API.</strong> Public for cross-package
@@ -70,15 +70,10 @@ public final class MethodDispatchEntryFactory {
     }
 
     /**
-     * Builds the entry for one service method.
-     *
-     * @param method    the service-interface method
-     * @param plan      the evaluator's plan for this method
-     * @param pipeline  the pipeline (for element resolution)
-     * @param target    the real target (for binding the
-     *                  {@link MethodInvoker})
-     * @param implClass the implementation class (for the
-     *                  "overridden default" check)
+     * Convenience overload that builds the name index internally.
+     * Internal callers in {@code ProxyBuilder} pass a pre-built
+     * index via {@link #createEntry(Method, MethodPlan, InqPipeline,
+     * Object, Class, Map)} to avoid rebuilding it per method.
      */
     public static MethodDispatchEntry createEntry(
             Method method,
@@ -86,18 +81,44 @@ public final class MethodDispatchEntryFactory {
             InqPipeline pipeline,
             Object target,
             Class<?> implClass) {
+        return createEntry(method, plan, pipeline, target, implClass,
+                ElementResolver.indexByName(pipeline));
+    }
+
+    /**
+     * Builds the entry for one service method.
+     *
+     * @param method          the service-interface method
+     * @param plan            the evaluator's plan for this method
+     * @param pipeline        the pipeline (for element resolution)
+     * @param target          the real target (for binding the
+     *                        {@link MethodInvoker})
+     * @param implClass       the implementation class (for the
+     *                        "overridden default" check)
+     * @param elementsByName  pre-built name→element index for
+     *                        {@code pipeline}; see
+     *                        {@link ElementResolver#indexByName(InqPipeline)}
+     */
+    public static MethodDispatchEntry createEntry(
+            Method method,
+            MethodPlan plan,
+            InqPipeline pipeline,
+            Object target,
+            Class<?> implClass,
+            Map<String, InqElement> elementsByName) {
 
         Objects.requireNonNull(method, "method");
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(pipeline, "pipeline");
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(implClass, "implClass");
+        Objects.requireNonNull(elementsByName, "elementsByName");
 
         return switch (plan) {
             case MethodPlan.PassThrough passThrough ->
                     buildPassThrough(method, target, implClass);
             case MethodPlan.Decorated decorated ->
-                    buildDecorated(method, decorated, pipeline, target);
+                    buildDecorated(method, decorated, pipeline, target, elementsByName);
         };
     }
 
@@ -114,7 +135,8 @@ public final class MethodDispatchEntryFactory {
             Method method,
             MethodPlan.Decorated plan,
             InqPipeline pipeline,
-            Object target) {
+            Object target,
+            Map<String, InqElement> elementsByName) {
 
         if (ParadigmDetector.isAsyncMethod(method)) {
             if (!DetectionAsync.isPresent()) {
@@ -130,19 +152,20 @@ public final class MethodDispatchEntryFactory {
             // JVM resolves AsyncEntryBuilder (and the imperative types
             // it touches) lazily per JVMS §5.4 — only when this branch
             // is first executed.
-            return buildAsyncDecorated(method, plan, pipeline, target);
+            return buildAsyncDecorated(method, plan, pipeline, target, elementsByName);
         }
-        return buildSyncDecorated(method, plan, pipeline, target);
+        return buildSyncDecorated(method, plan, pipeline, target, elementsByName);
     }
 
     private static MethodDispatchEntry buildSyncDecorated(
             Method method,
             MethodPlan.Decorated plan,
             InqPipeline pipeline,
-            Object target) {
+            Object target,
+            Map<String, InqElement> elementsByName) {
 
-        List<InqElement> elements = ElementResolver.resolveNames(
-                plan.elementNamesOuterToInner(), pipeline);
+        List<InqElement> elements = ElementResolver.resolve(
+                plan.elementNamesOuterToInner(), elementsByName);
         SyncParadigmValidator.validate(elements, method);
 
         List<LayerAction<Void, Object>> layerActions = elements.stream()
@@ -163,8 +186,9 @@ public final class MethodDispatchEntryFactory {
             Method method,
             MethodPlan.Decorated plan,
             InqPipeline pipeline,
-            Object target) {
-        return AsyncEntryBuilder.build(method, plan, pipeline, target);
+            Object target,
+            Map<String, InqElement> elementsByName) {
+        return AsyncEntryBuilder.build(method, plan, pipeline, target, elementsByName);
     }
 
     /**

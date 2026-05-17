@@ -12,6 +12,7 @@ import eu.inqudium.proxy.invocation.MethodInvoker;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Builds a {@link MethodDispatchEntry} for a service method that
@@ -73,10 +74,11 @@ public final class AsyncEntryBuilder {
             Method method,
             MethodPlan.Decorated decorated,
             InqPipeline pipeline,
-            Object target) {
+            Object target,
+            Map<String, InqElement> elementsByName) {
 
-        List<InqElement> elements = ElementResolver.resolveNames(
-                decorated.elementNamesOuterToInner(), pipeline);
+        List<InqElement> elements = ElementResolver.resolve(
+                decorated.elementNamesOuterToInner(), elementsByName);
         AsyncParadigmValidator.validate(elements, method);
 
         List<AsyncLayerAction<Void, Object>> asyncLayers = elements.stream()

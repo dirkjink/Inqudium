@@ -641,7 +641,7 @@ public sealed interface MethodInvoker permits MethodHandleInvoker, ReflectiveInv
 
 Default choice: `MethodHandleInvoker`. The JVM property `inqudium.proxy.invoker=mh|reflective` lets us run side-by-side benchmarks without code changes. The two implementations differ in exception propagation: `MethodHandleInvoker` propagates the underlying throwable unwrapped, while `ReflectiveInvoker` wraps in `InvocationTargetException` per JDK convention — both routes are correctly handled by `ExceptionClassifier` / `ThrowableUnwrap` in §9.
 
-Async invocation does not use a separate `invokeAsync(...)` method on `MethodInvoker`; the same synchronous `invoke(...)` returns a `CompletionStage` for async methods (the return type is decided by the target's method signature, not the invoker). The async dispatch logic lives in `AsyncCacheEntry` (sub-step 3.11), which calls `invoke(...)` via the folder's terminal and chains on the resulting `CompletionStage`.
+Async invocation does not use a separate async-only invoker method on `MethodInvoker`; the same synchronous `invoke(...)` returns a `CompletionStage` for async methods (the return type is decided by the target's method signature, not the invoker). The async dispatch logic lives in `AsyncCacheEntry` (sub-step 3.11), which calls `invoke(...)` via the folder's terminal and chains on the resulting `CompletionStage`.
 
 Arity-specialised invokers (one cached `MethodHandle` per arity) are deferred until benchmarks identify the array-unpack cost.
 

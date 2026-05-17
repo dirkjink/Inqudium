@@ -39,20 +39,26 @@ public sealed interface MethodInvoker permits MethodHandleInvoker, ReflectiveInv
     Object invoke(Object[] args) throws Throwable;
 
     /**
-     * Async-context invocation. At sub-step 3.5 the implementation is
-     * identical to {@link #invoke}; sub-step 3.11 (async dispatch) may
-     * specialise it.
-     *
-     * <p>Only meaningful when {@code DetectionAsync.isPresent()}. The
-     * synchronous loading path never calls this method, so async
-     * machinery from {@code inqudium-imperative} stays unloaded.</p>
+     * Cached value of the JVM property {@code inqudium.proxy.invoker},
+     * read once at class init. The value is validated per-call by
+     * {@link #create(Object, Method)} — a malformed value surfaces
+     * as {@link IllegalArgumentException} the first time the factory
+     * is touched (rather than as {@code ExceptionInInitializerError}
+     * at class load).
      */
-    Object invokeAsync(Object[] args) throws Throwable;
+    String CACHED_INVOKER_PROPERTY =
+            System.getProperty("inqudium.proxy.invoker", "mh");
 
     /**
      * Creates a {@code MethodInvoker} bound to {@code (target,
      * method)}, picking the implementation strategy from the JVM
      * property {@code inqudium.proxy.invoker}.
+     *
+     * <p>The property value is captured once at class init in
+     * {@link #CACHED_INVOKER_PROPERTY}; the switch below validates
+     * it on every call. Per-call work is one cached-field read plus
+     * a {@code String} switch — no {@code System.getProperty(...)}
+     * map lookup per call.</p>
      *
      * @param target the receiver instance; must not be {@code null}
      * @param method the method to invoke; must not be {@code null}
@@ -63,14 +69,13 @@ public sealed interface MethodInvoker permits MethodHandleInvoker, ReflectiveInv
     static MethodInvoker create(Object target, Method method) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(method, "method");
-        String type = System.getProperty("inqudium.proxy.invoker", "mh");
-        return switch (type) {
+        return switch (CACHED_INVOKER_PROPERTY) {
             case "mh" -> new MethodHandleInvoker(target, method);
             case "reflective" -> new ReflectiveInvoker(target, method);
             default -> throw new IllegalArgumentException(
-                    "Unknown invoker type '" + type + "' for property "
-                            + "inqudium.proxy.invoker (expected 'mh' or "
-                            + "'reflective')");
+                    "Unknown invoker type '" + CACHED_INVOKER_PROPERTY
+                            + "' for property inqudium.proxy.invoker "
+                            + "(expected 'mh' or 'reflective')");
         };
     }
 }

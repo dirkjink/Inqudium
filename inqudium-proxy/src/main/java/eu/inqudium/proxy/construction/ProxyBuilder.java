@@ -2,6 +2,7 @@ package eu.inqudium.proxy.construction;
 
 import eu.inqudium.annotation.evaluator.EvaluationResult;
 import eu.inqudium.annotation.evaluator.MethodPlan;
+import eu.inqudium.core.element.InqElement;
 import eu.inqudium.pipeline.InqPipeline;
 import eu.inqudium.pipeline.InqPipelineAnnotationEvaluator;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
@@ -101,13 +102,15 @@ public final class ProxyBuilder {
                 .evaluate(pipeline, serviceInterface, implClass);
 
         Map<Method, MethodPlan> plans = evaluation.plans();
-        Map<Method, MethodDispatchEntry> entries = new HashMap<>(plans.size());
+        Map<Method, MethodDispatchEntry> entries =
+                new HashMap<>(plans.size() + OBJECT_METHOD_KINDS.size());
 
+        Map<String, InqElement> elementsByName = ElementResolver.indexByName(pipeline);
         for (Map.Entry<Method, MethodPlan> entry : plans.entrySet()) {
             Method method = entry.getKey();
             MethodPlan plan = entry.getValue();
             MethodDispatchEntry dispatchEntry = MethodDispatchEntryFactory.createEntry(
-                    method, plan, pipeline, target, implClass);
+                    method, plan, pipeline, target, implClass, elementsByName);
             entries.put(method, dispatchEntry);
         }
 

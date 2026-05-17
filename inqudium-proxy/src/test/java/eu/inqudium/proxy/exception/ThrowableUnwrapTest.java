@@ -166,4 +166,70 @@ class ThrowableUnwrapTest {
                     .withMessage("t");
         }
     }
+
+    @Nested
+    class CycleGuard {
+
+        /**
+         * Test fixture that extends {@link InvocationTargetException}
+         * and overrides {@link #getCause()} to return a configurable
+         * target. {@code Throwable.initCause} rejects self-reference,
+         * so the only portable way to construct a cyclic cause chain
+         * is to override {@code getCause()} on a subclass — that's
+         * exactly the pathological shape the depth guard exists for.
+         */
+        static final class CyclicITE extends InvocationTargetException {
+            Throwable fakeCause;
+            CyclicITE() {
+                super(new RuntimeException("placeholder"));
+            }
+            @Override
+            public Throwable getCause() {
+                return fakeCause;
+            }
+        }
+
+        static final class CyclicUTE extends UndeclaredThrowableException {
+            Throwable fakeCause;
+            CyclicUTE() {
+                super(new RuntimeException("placeholder"));
+            }
+            @Override
+            public Throwable getCause() {
+                return fakeCause;
+            }
+        }
+
+        @Test
+        void should_terminate_on_circular_cause_chain() {
+            // What is to be tested?
+            //   Two reflective-wrapper exceptions whose causes form a
+            //   cycle (a → b → a). Throwable.initCause rejects
+            //   self-reference, so we build the cycle via subclasses
+            //   that override getCause(). This is exactly the
+            //   pathological case the depth guard exists for.
+            // How will the test case be deemed successful and why?
+            //   The call terminates (does not loop) and returns a
+            //   non-null throwable. The exact identity is
+            //   implementation-defined; the property under test is
+            //   "no infinite loop".
+            // Why is it important to test this test case?
+            //   Defence-in-depth: without the guard, a pathological
+            //   cause chain would hang the dispatcher's exception
+            //   classification step. The guard converts a hang into a
+            //   bounded walk.
+
+            // Given: two reflective-wrapper exceptions whose causes form a cycle.
+            CyclicITE a = new CyclicITE();
+            CyclicUTE b = new CyclicUTE();
+            a.fakeCause = b;
+            b.fakeCause = a;
+
+            // When: unwrap the cycle
+            Throwable result = ThrowableUnwrap.unwrap(a);
+
+            // Then: the call terminates and returns something
+            assertThat(result).isNotNull();
+        }
+    }
 }

@@ -41,9 +41,4 @@ final class ReflectiveInvoker implements MethodInvoker {
         // InvocationTargetException is left unwrapped here; the caller
         // (typically ExceptionClassifier via ThrowableUnwrap) unwraps it.
     }
-
-    @Override
-    public Object invokeAsync(Object[] args) throws Throwable {
-        return invoke(args);
-    }
 }
