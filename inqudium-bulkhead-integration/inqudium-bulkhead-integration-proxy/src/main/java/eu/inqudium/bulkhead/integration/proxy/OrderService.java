@@ -11,7 +11,10 @@ import java.util.concurrent.CountDownLatch;
  * example splits the service into an interface plus an implementation. JDK dynamic proxies
  * substitute for an interface type, so the structural separation is what enables the proxy
  * style: callers depend on the interface, the proxy implements the interface, and the bulkhead
- * sits between caller and implementation transparently.
+ * sits between caller and implementation transparently. The proxy is produced by
+ * {@code pipeline.protect(...)} (the new
+ * {@code eu.inqudium.pipeline.InqPipeline.protect(Class, Object)} default method) using the
+ * per-method annotations on the implementation as the dispatch plan.
  *
  * <p>Both call shapes appear on the same interface — synchronous methods that return a value
  * directly, and asynchronous methods that return a {@link CompletionStage}. The proxy routes

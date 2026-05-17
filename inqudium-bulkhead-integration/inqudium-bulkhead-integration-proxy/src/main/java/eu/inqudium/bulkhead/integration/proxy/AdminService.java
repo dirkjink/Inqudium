@@ -25,7 +25,7 @@ import java.util.Objects;
  * <p>The patches are issued through the standard {@link InqRuntime#update(java.util.function.Consumer)
  * runtime.update(...)} entry point. The proxy's pipeline need not be rebuilt — the bulkhead
  * component is the same instance before and after the patch, only its snapshot changes. The
- * proxy holds a reference to the {@link eu.inqudium.core.pipeline.InqPipeline} that holds a
+ * proxy holds a reference to the {@link eu.inqudium.pipeline.InqPipeline} that holds a
  * reference to the bulkhead handle, so the live strategy switch is observed transparently at
  * the proxy's call sites.
  */
