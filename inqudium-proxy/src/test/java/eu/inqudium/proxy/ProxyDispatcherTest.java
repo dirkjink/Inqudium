@@ -519,19 +519,21 @@ class ProxyDispatcherTest {
         }
 
         @Test
-        void should_render_to_string_as_proxy_class_name_plus_target_string() {
+        void should_render_to_string_as_service_interface_name_plus_target_string() {
             // What is to be tested?
-            //   toString is descriptive — the proxy's class simple name
-            //   followed by the real target's toString in square brackets.
+            //   toString is descriptive — the service-interface simple
+            //   name followed by the real target's toString in square
+            //   brackets. The prefix is the service interface (e.g.
+            //   "OrderService"), NOT the JDK's synthetic proxy class
+            //   name (e.g. "$Proxy12"), so logs remain readable across
+            //   JDK versions.
             // How will the test case be deemed successful and why?
-            //   proxy.toString() equals "<ProxySimpleName>[<target>]".
-            //   The proxy's class simple name is JDK-generated and looks
-            //   like "$Proxy12"; we assert structural shape rather than
-            //   pinning the exact generated name.
+            //   proxy.toString() equals "OrderService[<target>]".
             // Why is it important to test this test case?
             //   Documents the toString contract from §10 — readable
-            //   diagnostics, never the raw JDK default that hides what
-            //   the proxy wraps.
+            //   diagnostics anchored on the service interface, never
+            //   the raw JDK default that hides what the proxy wraps
+            //   and varies across runs.
 
             // Given
             InqPipeline pipeline = pipelineWithBulkhead();
@@ -543,8 +545,7 @@ class ProxyDispatcherTest {
             String rendered = proxy.toString();
 
             // Then
-            assertThat(rendered).isEqualTo(
-                    proxy.getClass().getSimpleName() + "[" + target + "]");
+            assertThat(rendered).isEqualTo("OrderService[" + target + "]");
             assertThat(rendered).contains(target.toString());
         }
     }

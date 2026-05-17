@@ -37,6 +37,7 @@ public record MethodLayers(
     public MethodLayers {
         Objects.requireNonNull(methodSignature, "methodSignature");
         Objects.requireNonNull(method, "method");
-        layerDescriptions = List.copyOf(layerDescriptions);
+        layerDescriptions = List.copyOf(
+                Objects.requireNonNull(layerDescriptions, "layerDescriptions"));
     }
 }

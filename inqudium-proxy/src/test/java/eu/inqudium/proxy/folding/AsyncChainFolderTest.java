@@ -54,6 +54,12 @@ class AsyncChainFolderTest {
             return fut;
         }
 
+        public CompletionStage<Object> returnsNull(String arg) {
+            callCount.incrementAndGet();
+            lastArg.set(arg);
+            return null;
+        }
+
         public int callCount() {
             return callCount.get();
         }
@@ -482,6 +488,45 @@ class AsyncChainFolderTest {
 
             // And the target must not have run.
             assertThat(target.callCount()).isZero();
+        }
+
+        @Test
+        void should_fail_the_stage_when_target_returns_null() throws NoSuchMethodException {
+            // What is to be tested?
+            //   An async-typed target method that returns null instead
+            //   of a CompletionStage. Without a guard, the folder's
+            //   unchecked cast (Object → CompletionStage) succeeds on
+            //   null and the folder returns a null stage, NPE'ing
+            //   somewhere upstream where the failure is harder to
+            //   diagnose.
+            // How will the test case be deemed successful and why?
+            //   The folder produces a non-null stage that completes
+            //   exceptionally with a NullPointerException whose message
+            //   identifies the cause ("null instead of a
+            //   CompletionStage"). This converts a latent crash-far-from-cause
+            //   into an explicit error at the call site.
+            // Why is it important to test this test case?
+            //   Pins the contract that the folder always returns a
+            //   non-null stage even when the target violates its return
+            //   type. ADR-035 §10 mandates that all async failures
+            //   surface through the stage's error channel; a null
+            //   return would bypass that channel entirely.
+
+            // Given
+            CountingTarget target = new CountingTarget();
+            MethodInvoker invoker = MethodInvoker.create(target, method("returnsNull", String.class));
+
+            // When
+            FoldedAsyncChain chain = AsyncChainFolder.fold(List.of(), invoker);
+            CompletionStage<Object> stage = chain.run(1L, 1L, new Object[]{"x"});
+
+            // Then
+            assertThat(stage).isNotNull();
+            CompletableFuture<Object> fut = stage.toCompletableFuture();
+            assertThat(fut.isCompletedExceptionally()).isTrue();
+            assertThatThrownBy(fut::get)
+                    .hasCauseInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("null instead of a CompletionStage");
         }
 
         @Test

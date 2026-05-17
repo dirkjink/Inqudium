@@ -145,12 +145,14 @@ class ProxyStackAdapterTest {
 
         @Test
         void should_throw_illegal_argument_for_null() {
-            // When / Then — null fails the requireNonNull guard before
-            // reaching the supports() check; the NPE message names
-            // the parameter.
+            // When / Then — null flows through supports(null) == false
+            // into the IllegalArgumentException branch, symmetric with
+            // supports() returning false for null. The message names
+            // the input as "null" so the failure is self-explanatory.
             assertThatThrownBy(() -> ProxyStackAdapter.inspect(null))
-                    .isInstanceOf(NullPointerException.class)
-                    .hasMessage("instance");
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("not a proxy produced by ProxyDispatcher")
+                    .hasMessageContaining("null");
         }
 
         @Test

@@ -228,9 +228,22 @@ class ObjectMethodHandlerTest {
     class ToStringKind {
 
         @Test
-        void should_render_as_proxy_class_simple_name_plus_target_to_string() {
-            // Given — a real JDK proxy gives the dispatcher a non-empty
-            // proxy class with a recognisable simple name shape
+        void should_render_as_service_interface_simple_name_plus_target_to_string() {
+            // What is to be tested?
+            //   The prefix of the toString is the service-interface
+            //   simple name (e.g. "SomeIface") rather than the JDK's
+            //   synthetic proxy class name (e.g. "$Proxy12"). The
+            //   handler reaches into the InqInvocationHandler to find
+            //   the bound serviceInterface; the JDK proxy class is no
+            //   longer the source.
+            // How will the test case be deemed successful and why?
+            //   The result equals "SomeIface[Target#99]" exactly.
+            // Why is it important to test this test case?
+            //   $ProxyN class names are non-deterministic across JDK
+            //   versions and noise in logs. The interface name is the
+            //   meaningful identity from the user's perspective.
+
+            // Given
             Target a = new Target(99);
             Object proxy = proxyAround(a);
 
@@ -239,8 +252,7 @@ class ObjectMethodHandlerTest {
                     ObjectMethodHandler.Kind.TO_STRING, proxy, a, new Object[0]);
 
             // Then
-            assertThat(result).isEqualTo(
-                    proxy.getClass().getSimpleName() + "[Target#99]");
+            assertThat(result).isEqualTo("SomeIface[Target#99]");
         }
 
         @Test
@@ -253,10 +265,46 @@ class ObjectMethodHandlerTest {
             String result = (String) ObjectMethodHandler.dispatch(
                     ObjectMethodHandler.Kind.TO_STRING, proxy, a, new Object[0]);
 
-            // Then — the target's own toString output is embedded
+            // Then — the target's own toString output is embedded;
+            // the prefix is the service interface simple name.
             assertThat(result).contains("Target#5");
-            assertThat(result).startsWith(proxy.getClass().getSimpleName() + "[");
+            assertThat(result).startsWith("SomeIface[");
             assertThat(result).endsWith("]");
+        }
+
+        @Test
+        void should_fall_back_to_proxy_class_simple_name_when_handler_is_not_inq() {
+            // What is to be tested?
+            //   When toStringImpl is dispatched against a proxy whose
+            //   invocation handler is NOT an InqInvocationHandler, the
+            //   handler falls back to the proxy class's simple name
+            //   rather than reaching for serviceInterface() (which it
+            //   cannot get). This keeps the helper safe for callers
+            //   outside the proxy-construction flow.
+            // How will the test case be deemed successful and why?
+            //   The result starts with the JDK proxy class's simple
+            //   name (typically "$ProxyN") rather than crashing or
+            //   returning an empty prefix.
+            // Why is it important to test this test case?
+            //   ObjectMethodHandler is package-private but reachable
+            //   in tests. Pins the fallback path so a foreign
+            //   InvocationHandler does not crash toString.
+
+            // Given — a proxy with a non-Inq invocation handler.
+            Target a = new Target(5);
+            InvocationHandler foreign = (p, m, args) -> null;
+            Object proxy = Proxy.newProxyInstance(
+                    SomeIface.class.getClassLoader(),
+                    new Class<?>[]{SomeIface.class},
+                    foreign);
+
+            // When
+            String result = (String) ObjectMethodHandler.dispatch(
+                    ObjectMethodHandler.Kind.TO_STRING, proxy, a, new Object[0]);
+
+            // Then
+            assertThat(result).startsWith(proxy.getClass().getSimpleName() + "[");
+            assertThat(result).contains("Target#5");
         }
     }
 

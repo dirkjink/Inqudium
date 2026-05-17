@@ -121,6 +121,24 @@ class ProxyStackInfoTest {
     }
 
     @Test
+    void should_reject_null_elements_with_npe() {
+        // Given / When / Then
+        assertThatNullPointerException()
+                .isThrownBy(() -> new ProxyStackInfo(
+                        1L, Optional.of(SomeService.class), null, List.of()))
+                .withMessage("elements");
+    }
+
+    @Test
+    void should_reject_null_method_layers_with_npe() {
+        // Given / When / Then
+        assertThatNullPointerException()
+                .isThrownBy(() -> new ProxyStackInfo(
+                        1L, Optional.of(SomeService.class), List.of(), null))
+                .withMessage("methodLayers");
+    }
+
+    @Test
     void should_accept_target_type_as_empty_optional() {
         // What is to be tested?
         //   The DTO's targetType is declared Optional<Class<?>> per

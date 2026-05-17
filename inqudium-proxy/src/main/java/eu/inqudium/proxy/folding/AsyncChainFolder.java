@@ -94,14 +94,21 @@ public final class AsyncChainFolder {
 
         if (idx == layers.size()) {
             return (stackId, callId, args) -> {
+                Object result;
                 try {
-                    @SuppressWarnings("unchecked")
-                    CompletionStage<Object> stage =
-                            (CompletionStage<Object>) invoker.invoke(args);
-                    return stage;
+                    result = invoker.invoke(args);
                 } catch (Throwable t) {
                     return CompletableFuture.failedFuture(t);
                 }
+                if (result == null) {
+                    return CompletableFuture.failedFuture(
+                            new NullPointerException(
+                                    "Target method returned null instead of "
+                                            + "a CompletionStage"));
+                }
+                @SuppressWarnings("unchecked")
+                CompletionStage<Object> stage = (CompletionStage<Object>) result;
+                return stage;
             };
         }
 

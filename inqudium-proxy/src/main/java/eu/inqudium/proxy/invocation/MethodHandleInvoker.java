@@ -34,9 +34,4 @@ final class MethodHandleInvoker implements MethodInvoker {
     public Object invoke(Object[] args) throws Throwable {
         return handle.invokeWithArguments(args);
     }
-
-    @Override
-    public Object invokeAsync(Object[] args) throws Throwable {
-        return invoke(args);
-    }
 }

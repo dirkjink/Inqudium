@@ -2,6 +2,7 @@ package eu.inqudium.proxy.exception;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.UndeclaredThrowableException;
+import java.util.Objects;
 
 /**
  * Recursively unwraps reflective wrapper exceptions
@@ -19,6 +20,13 @@ final class ThrowableUnwrap {
     }
 
     /**
+     * Maximum unwrap depth. Real-world wrapper chains never exceed
+     * two or three layers; the bound is purely defensive against a
+     * pathological cyclic cause chain.
+     */
+    private static final int MAX_UNWRAP_DEPTH = 10;
+
+    /**
      * Walks the cause chain through any sequence of
      * {@code InvocationTargetException} and
      * {@code UndeclaredThrowableException} wrappers, returning the
@@ -28,16 +36,23 @@ final class ThrowableUnwrap {
      * possible, practically rare), the wrapper itself is returned —
      * there is nothing further to unwrap.</p>
      *
+     * <p>The walk terminates after {@link #MAX_UNWRAP_DEPTH} steps
+     * to defend against a cyclic cause chain. A standard
+     * {@link Throwable#initCause(Throwable)} rejects self-reference,
+     * so a cycle can only arise via reflective field manipulation;
+     * the guard exists for defence-in-depth, not for any expected
+     * input shape.</p>
+     *
      * @param t the throwable to unwrap; must not be {@code null}
      * @throws NullPointerException if {@code t} is {@code null}
      */
     static Throwable unwrap(Throwable t) {
-        if (t == null) {
-            throw new NullPointerException("t");
-        }
+        Objects.requireNonNull(t, "t");
         Throwable current = t;
-        while (current instanceof InvocationTargetException
-                || current instanceof UndeclaredThrowableException) {
+        int depth = 0;
+        while (depth++ < MAX_UNWRAP_DEPTH
+                && (current instanceof InvocationTargetException
+                || current instanceof UndeclaredThrowableException)) {
             Throwable cause = current.getCause();
             if (cause == null) {
                 return current;
