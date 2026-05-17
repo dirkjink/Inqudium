@@ -748,7 +748,7 @@ Commit subject: `chore: complete proxy polish, delete plan`
 * [x] P.2 — Documentation sweep (2026-05-17, PR #80)
 * [ ] P.3 — `ElementResolver` name-uniqueness — ADR + fix
 * [ ] P.4 — Folder lambda hoisting (JMH-validated decision)
-* [x] P.5 — Test-infrastructure hardening (2026-05-17, PR #TBD)
+* [x] P.5 — Test-infrastructure hardening (2026-05-17, PR #81)
 * [ ] P.6 — Plan deletion + final architecture polish
 
 ---
