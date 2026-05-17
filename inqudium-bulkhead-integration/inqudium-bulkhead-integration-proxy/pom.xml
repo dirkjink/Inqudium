@@ -41,13 +41,11 @@
         <dependency>
             <groupId>eu.inqudium</groupId>
             <artifactId>inqudium-pipeline</artifactId>
-            <version>${revision}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>eu.inqudium</groupId>
             <artifactId>inqudium-proxy</artifactId>
-            <version>${revision}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
