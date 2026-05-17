@@ -8,18 +8,17 @@ import eu.inqudium.config.event.RuntimeComponentVetoedEvent;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.event.InqEventPublisher;
-import eu.inqudium.core.pipeline.InqPipeline;
-import eu.inqudium.core.pipeline.Wrapper;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;
-import eu.inqudium.imperative.core.pipeline.proxy.InqAsyncProxyFactory;
+import eu.inqudium.pipeline.InqPipeline;
+import eu.inqudium.proxy.introspection.MethodLayers;
+import eu.inqudium.proxy.introspection.ProxyStackAdapter;
+import eu.inqudium.proxy.introspection.ProxyStackInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Method;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
-import java.util.stream.Collectors;
 
 /**
  * End-to-end demonstration of the proxy-based integration style with practice-grade logging
@@ -32,12 +31,13 @@ import java.util.stream.Collectors;
  *   <li>install a bootstrap-side lifecycle-event subscriber on the runtime's event publisher
  *       so topology changes (added / patched / removed / vetoed / became-hot) appear in the
  *       log,</li>
- *   <li>compose an {@link InqPipeline} containing the bulkhead, lift it through
- *       {@link InqAsyncProxyFactory#of(InqPipeline)}, and {@code protect(...)} a
- *       {@link DefaultOrderService} instance — that constructor pulls the bulkhead from the
+ *   <li>compose an {@link InqPipeline} containing the bulkhead and call
+ *       {@link InqPipeline#protect(Class, Object)} to wrap a {@link DefaultOrderService}
+ *       instance behind a JDK dynamic proxy — that constructor pulls the bulkhead from the
  *       runtime and subscribes per-component bulkhead-event handlers,</li>
- *   <li>log topology lines for every method on the {@link OrderService} interface — all
- *       four routes through the same proxy share one {@code chainId},</li>
+ *   <li>log topology lines for every method on the {@link OrderService} interface, sourced
+ *       from {@link ProxyStackAdapter#inspect(Object)} — every protected method shares the
+ *       proxy's one {@code stackId},</li>
  *   <li>build {@link AdminService} — the operator surface for the runtime patch demo,</li>
  *   <li>run the three-phase demo: normal operation → sell promotion (patched) → after
  *       promotion (patched back).</li>
@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
  * cannot self-log topology, and putting topology logging in {@link DefaultOrderService} would
  * violate the proxy pattern's principle that the implementation knows nothing about being
  * proxied. Topology logging therefore lives here in {@link Main}, immediately after the proxy
- * is constructed.
+ * is constructed; {@link ProxyStackAdapter#inspect(Object)} is the data source.
  */
 public final class Main {
 
@@ -66,16 +66,10 @@ public final class Main {
             InqPipeline pipeline = InqPipeline.builder()
                     .shield(bulkhead)
                     .build();
-            OrderService service = InqAsyncProxyFactory.of(pipeline)
-                    .protect(OrderService.class, new DefaultOrderService(runtime));
+            OrderService service = pipeline.protect(
+                    OrderService.class, new DefaultOrderService(runtime));
 
-            // Topology logging — happens once per service method. The proxy implements both
-            // OrderService and Wrapper, so the cast is safe (ProxyWrapper.createProxy adds
-            // Wrapper.class to the implemented-interfaces array). The pipeline's elements are
-            // read directly to surface the bulkhead's element-type and name; the proxy's own
-            // layerDescription would only return "InqHybridPipelineProxy" — the wrapper-layer
-            // name, not the pipeline content.
-            logTopology(pipeline, (Wrapper<?>) service);
+            logTopology(service);
 
             AdminService admin = new AdminService(runtime);
 
@@ -125,22 +119,34 @@ public final class Main {
     }
 
     /**
-     * Log one topology line per service-interface method. All four methods route through the
-     * same proxy — the format is
-     * {@code "{methodName} protected by {layers} (chain-id {N})"} where {@code {layers}}
-     * is the comma-joined element-description list from {@link InqPipeline#elements()}
-     * formatted as {@code ELEMENT_TYPE(name)}. A reader inspecting the log sees four lines
-     * that share one {@code chain-id}, accurately reflecting the proxy pattern's "all methods
-     * on this proxy share one protection topology".
+     * Log one topology line per service-interface method that the proxy actually protects.
+     * The data source is {@link ProxyStackAdapter#inspect(Object)}: the returned
+     * {@link ProxyStackInfo} carries the proxy's {@code stackId} and a {@link MethodLayers}
+     * entry per service method, listing the outer-to-inner resilience layers wrapping that
+     * method. The line format is
+     * {@code "{methodSignature} protected by {layerDescriptions} (stack-id {N})"}.
+     *
+     * <p>The "all methods on this proxy share one protection topology" property is preserved:
+     * the {@code stackId} appears identical on every emitted line. The improvement over the
+     * legacy per-proxy chain-id reading is that each method now carries its own per-method
+     * layer list, so a service with mixed protected and unprotected methods would produce a
+     * heterogeneous log instead of N identical lines.
+     *
+     * <p>Entries with empty {@code layerDescriptions} are filtered out — those are the
+     * {@code PassThroughEntry}, {@code DefaultMethodEntry}, and {@code ObjectMethodEntry}
+     * routes (Object methods like {@code toString}/{@code equals}/{@code hashCode}, interface
+     * default methods, and any annotation-free service methods that bypass resilience).
+     * For this example all four service methods are decorated, so the filter has no effect;
+     * for a real service with mixed surfaces it produces a clean log.
      */
-    private static void logTopology(InqPipeline pipeline, Wrapper<?> proxy) {
-        String layers = pipeline.elements().stream()
-                .map(e -> e.elementType() + "(" + e.name() + ")")
-                .collect(Collectors.joining(", "));
-        long chainId = proxy.chainId();
-        for (Method m : OrderService.class.getDeclaredMethods()) {
-            LOG.info("{} protected by {} (chain-id {})",
-                    m.getName(), layers, chainId);
+    private static void logTopology(OrderService proxy) {
+        ProxyStackInfo info = ProxyStackAdapter.inspect(proxy);
+        for (MethodLayers ml : info.methodLayers()) {
+            if (ml.layerDescriptions().isEmpty()) {
+                continue;
+            }
+            LOG.info("{} protected by {} (stack-id {})",
+                    ml.methodSignature(), ml.layerDescriptions(), info.stackId());
         }
     }
 
@@ -229,8 +235,8 @@ public final class Main {
 
     /**
      * Look up the example bulkhead by name and cast to the typed surface so it can be fed to
-     * {@link InqPipeline.Builder#shield(eu.inqudium.core.element.InqElement)}. The cast is
-     * safe because the runtime registry stores the same instance under both views.
+     * {@code InqPipelineBuilder.shield(InqElement)}. The cast is safe because the runtime
+     * registry stores the same instance under both views.
      *
      * <p>The proxy style does not need a per-call-site type witness — the proxy dispatches
      * by method return type. A single {@code <Object, Object>} witness is enough to wire the

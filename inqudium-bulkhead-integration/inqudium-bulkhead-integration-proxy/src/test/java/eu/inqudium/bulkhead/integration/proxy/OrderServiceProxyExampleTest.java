@@ -4,9 +4,8 @@ import eu.inqudium.config.runtime.BulkheadHandle;
 import eu.inqudium.config.runtime.ImperativeTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
-import eu.inqudium.core.pipeline.InqPipeline;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;
-import eu.inqudium.imperative.core.pipeline.proxy.InqAsyncProxyFactory;
+import eu.inqudium.pipeline.InqPipeline;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -31,10 +29,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>The tests exercise the example application — they use the same {@link OrderService}
  * interface, the same {@link DefaultOrderService} implementation, the same
  * {@link BulkheadConfig#newRuntime()} entry point, and the same
- * {@link InqAsyncProxyFactory#of(eu.inqudium.core.pipeline.InqPipeline) hybrid proxy factory}
- * pattern that {@link Main} demonstrates. The tests do not reach into bulkhead internals:
- * assertions read {@link InqBulkhead#availablePermits()}, the public handle accessor an
- * application could also consult.
+ * {@link InqPipeline#protect(Class, Object) pipeline.protect(...)} pattern that {@link Main}
+ * demonstrates. The tests do not reach into bulkhead internals: assertions read
+ * {@link InqBulkhead#availablePermits()}, the public handle accessor an application could
+ * also consult.
  *
  * <p>The fixture is per-test: each {@code @Test} builds a fresh runtime, pipeline, factory,
  * and proxy in {@link #setUp()} and tears the runtime down in {@link #tearDown()}. The
@@ -60,8 +58,7 @@ class OrderServiceProxyExampleTest {
         runtime = BulkheadConfig.newRuntime();
         bulkhead = orderBulkhead(runtime);
         InqPipeline pipeline = InqPipeline.builder().shield(bulkhead).build();
-        service = InqAsyncProxyFactory.of(pipeline)
-                .protect(OrderService.class, new DefaultOrderService(runtime));
+        service = pipeline.protect(OrderService.class, new DefaultOrderService(runtime));
     }
 
     @AfterEach
@@ -226,25 +223,32 @@ class OrderServiceProxyExampleTest {
         }
 
         @Test
-        void concurrent_async_calls_above_the_limit_are_rejected_through_a_failed_stage() {
+        void concurrent_async_calls_above_the_limit_are_rejected_synchronously_with_InqBulkheadFullException() {
             // What is to be tested: when both permits are held by in-flight async calls (the
             // permits were acquired synchronously on the calling thread when the proxied
             // async method returned its still-pending stage), a third async call cannot
-            // acquire a permit and is rejected with InqBulkheadFullException. Channel
-            // detail: the hybrid proxy's documented uniform-error-channel policy on the
-            // async dispatch path (AsyncPipelineDispatchExtension.executeChain) captures any
-            // synchronous throw into a failed CompletionStage rather than letting it
-            // propagate to the caller. The exception is the same; the surface differs from
-            // the function-based decoration path, where the throw propagates synchronously.
+            // acquire a permit and is rejected with InqBulkheadFullException.
+            //
+            // Channel detail (new-proxy behaviour, ADR-035 §10 / AsyncChainFolder Javadoc):
+            // the new proxy propagates synchronous layer rejections — such as a permit-acquire
+            // failure raised before the inner layer's executeAsync is reached — as plain
+            // exceptions out of the dispatch path, rather than wrapping them in a failed
+            // CompletionStage. This is a deliberate departure from the legacy hybrid proxy's
+            // uniform-error-channel policy: the new model only wraps synchronous throws
+            // from the target method body (where the caller already expects a stage) and
+            // leaves layer-level rejections on the same channel they would take through
+            // function-based decoration. The exception class — InqBulkheadFullException —
+            // is unchanged across both proxies.
             // How will the test be deemed successful and why: two stage holders each consume
-            // a permit; the third proxied async call returns a CompletionStage that, when
-            // joined, throws CompletionException whose cause is InqBulkheadFullException.
-            // After releasing the holders, both permits return to the pool.
+            // a permit; the third proxied async call throws InqBulkheadFullException
+            // synchronously from placeOrderAsync(...) before returning any stage. After
+            // releasing the holders, both permits return to the pool.
             // Why is it important: this test pins both halves of the proxy's async-saturation
             // contract — that the bulkhead actually rejects, and that the rejection surfaces
-            // through the failed-stage channel. A regression to either half (no rejection, or
-            // a synchronous throw escaping the proxy's error normalization) would break the
-            // proxy's documented contract.
+            // on the same channel the function-based decoration path uses. A regression to
+            // either half (no rejection, or a wrapped-stage surface that would re-introduce
+            // the legacy hybrid proxy's uniform-error-channel semantics) would break the
+            // new proxy's documented contract.
             InqBulkhead<Object, Object> bh = bulkhead;
 
             CompletableFuture<Void> release = new CompletableFuture<>();
@@ -260,13 +264,10 @@ class OrderServiceProxyExampleTest {
             assertThat(bh.availablePermits()).isZero();
 
             try {
-                // When: a third async call attempts to acquire
-                CompletionStage<String> rejected = service.placeOrderAsync("Saturated");
-
-                // Then: the rejection arrives through the failed-stage channel
-                assertThatThrownBy(() -> rejected.toCompletableFuture().join())
-                        .isInstanceOf(CompletionException.class)
-                        .hasCauseInstanceOf(InqBulkheadFullException.class);
+                // When / Then: a third async call attempts to acquire — the bulkhead's
+                // permit-acquire failure surfaces synchronously, not through a failed stage
+                assertThatThrownBy(() -> service.placeOrderAsync("Saturated"))
+                        .isInstanceOf(InqBulkheadFullException.class);
             } finally {
                 release.complete(null);
                 holder1.toCompletableFuture().join();
@@ -330,8 +331,7 @@ class OrderServiceProxyExampleTest {
 
             try (InqRuntime first = BulkheadConfig.newRuntime()) {
                 InqBulkhead<Object, Object> bh = orderBulkhead(first);
-                OrderService firstProxy = InqAsyncProxyFactory
-                        .of(InqPipeline.builder().shield(bh).build())
+                OrderService firstProxy = InqPipeline.builder().shield(bh).build()
                         .protect(OrderService.class, new DefaultOrderService(first));
 
                 String firstResult = firstProxy.placeOrderAsync("First")
@@ -342,8 +342,7 @@ class OrderServiceProxyExampleTest {
 
             try (InqRuntime second = BulkheadConfig.newRuntime()) {
                 InqBulkhead<Object, Object> bh = orderBulkhead(second);
-                OrderService secondProxy = InqAsyncProxyFactory
-                        .of(InqPipeline.builder().shield(bh).build())
+                OrderService secondProxy = InqPipeline.builder().shield(bh).build()
                         .protect(OrderService.class, new DefaultOrderService(second));
 
                 String secondResult = secondProxy.placeOrderAsync("Second")
@@ -468,8 +467,8 @@ class OrderServiceProxyExampleTest {
             try (InqRuntime localRuntime = BulkheadConfig.newRuntime()) {
                 InqBulkhead<Object, Object> localBulkhead = orderBulkhead(localRuntime);
                 InqPipeline pipeline = InqPipeline.builder().shield(localBulkhead).build();
-                OrderService localService = InqAsyncProxyFactory.of(pipeline)
-                        .protect(OrderService.class, new DefaultOrderService(localRuntime));
+                OrderService localService = pipeline.protect(
+                        OrderService.class, new DefaultOrderService(localRuntime));
                 AdminService admin = new AdminService(localRuntime);
 
                 // === Phase 1: balanced/2 — third call rejected ===
@@ -509,8 +508,8 @@ class OrderServiceProxyExampleTest {
             try (InqRuntime localRuntime = BulkheadConfig.newRuntime()) {
                 InqBulkhead<Object, Object> localBulkhead = orderBulkhead(localRuntime);
                 InqPipeline pipeline = InqPipeline.builder().shield(localBulkhead).build();
-                OrderService localService = InqAsyncProxyFactory.of(pipeline)
-                        .protect(OrderService.class, new DefaultOrderService(localRuntime));
+                OrderService localService = pipeline.protect(
+                        OrderService.class, new DefaultOrderService(localRuntime));
                 AdminService admin = new AdminService(localRuntime);
                 forceHotPhase(localService);
 
