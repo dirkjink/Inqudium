@@ -24,8 +24,8 @@ import java.util.Objects;
  * {@code equals}, and {@code toString} from {@link Object} to the
  * invocation handler. {@code wait}, {@code notify}, {@code notifyAll},
  * and {@code getClass} are handled by the JVM directly on the proxy
- * instance and never reach our handler. ARCHITECTURE.md §10's older
- * seven-value enumeration is corrected as part of sub-step 3.10.</p>
+ * instance and never reach our handler. ARCHITECTURE.md §10 documents
+ * the corrected three-value enumeration.</p>
  *
  * <p><strong>Internal API.</strong> Public for cross-package
  * reference from {@code entries/}; not part of the stable public
