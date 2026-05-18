@@ -79,6 +79,32 @@ public final class AsyncEntryBuilder {
 
         List<InqElement> elements = ElementResolver.resolve(
                 decorated.elementNamesOuterToInner(), elementsByName);
+        return finishBuild(method, target, elements);
+    }
+
+    /**
+     * Stamped-plan overload mirroring
+     * {@link #build(Method, MethodPlan.Decorated, InqPipeline, Object, Map)}.
+     * Resolves elements via
+     * {@link ElementResolver#resolveTriples(List, Map)} so the
+     * triple-keyed index from ADR-046 is honoured.
+     *
+     * @since 0.9.0
+     */
+    public static MethodDispatchEntry build(
+            Method method,
+            MethodPlan.StampedDecorated stamped,
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
+
+        List<InqElement> elements = ElementResolver.resolveTriples(
+                stamped.elementsOuterToInner(), elementsByTypeAndName);
+        return finishBuild(method, target, elements);
+    }
+
+    private static MethodDispatchEntry finishBuild(
+            Method method, Object target, List<InqElement> elements) {
+
         AsyncParadigmValidator.validate(elements, method);
 
         List<AsyncLayerAction<Void, Object>> asyncLayers = elements.stream()

@@ -701,7 +701,7 @@ any remaining drift.
 * [x] Q.1 — New `ParadigmTag` hierarchy in `inqudium-core` (2026-05-18, PR #82)
 * [x] Q.2 — `ParadigmClassifier` + lazy-class probes (2026-05-18, PR #83)
 * [x] Q.3 — `ElementRef` + new `MethodPlan` shape (parallel) (2026-05-18, PR #84)
-* [ ] Q.4 — Proxy consumes the new plan shape
+* [x] Q.4 — Proxy consumes the new plan shape (2026-05-18, PR #85)
 * [ ] Q.5 — `inqudium-imperative`: async-imperative lights up
 * [ ] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names
 * [ ] Q.7 — Final cleanup: remove legacy types

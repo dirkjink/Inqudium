@@ -97,18 +97,19 @@ public final class ProxyBuilder {
         Class<? extends T> implClass = (Class<? extends T>) target.getClass();
 
         EvaluationResult evaluation = InqPipelineAnnotationEvaluator
-                .evaluate(pipeline, serviceInterface, implClass);
+                .evaluateStamped(pipeline, serviceInterface, implClass);
 
         Map<Method, MethodPlan> plans = evaluation.plans();
         Map<Method, MethodDispatchEntry> entries =
                 new HashMap<>(plans.size() + OBJECT_METHOD_KINDS.size());
 
-        Map<String, InqElement> elementsByName = ElementResolver.indexByName(pipeline);
+        Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName =
+                ElementResolver.indexByTypeAndName(pipeline);
         for (Map.Entry<Method, MethodPlan> entry : plans.entrySet()) {
             Method method = entry.getKey();
             MethodPlan plan = entry.getValue();
-            MethodDispatchEntry dispatchEntry = MethodDispatchEntryFactory.createEntry(
-                    method, plan, pipeline, target, implClass, elementsByName);
+            MethodDispatchEntry dispatchEntry = MethodDispatchEntryFactory.createStampedEntry(
+                    method, plan, pipeline, target, implClass, elementsByTypeAndName);
             entries.put(method, dispatchEntry);
         }
 
