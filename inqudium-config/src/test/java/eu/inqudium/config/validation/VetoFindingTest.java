@@ -2,7 +2,7 @@ package eu.inqudium.config.validation;
 
 import eu.inqudium.config.lifecycle.ComponentField;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.ImperativeTag;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

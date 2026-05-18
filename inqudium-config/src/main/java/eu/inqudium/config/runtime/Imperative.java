@@ -1,5 +1,7 @@
 package eu.inqudium.config.runtime;
 
+import eu.inqudium.core.element.paradigm.ImperativeTag;
+
 import java.util.Optional;
 import java.util.Set;
 
@@ -20,6 +22,7 @@ import java.util.Set;
  * Read-only diagnostics (snapshot, permits, listener registration) are available directly on the
  * handle.
  */
+@Deprecated(since = "0.9.0")
 public interface Imperative extends ParadigmContainer<ImperativeTag> {
 
     /**

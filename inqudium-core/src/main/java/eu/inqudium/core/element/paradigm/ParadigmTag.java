@@ -38,5 +38,6 @@ package eu.inqudium.core.element.paradigm;
  * <p>See ADR-046 for the rationale.</p>
  */
 public sealed interface ParadigmTag
-        permits SyncTag, AsyncTag, ReactiveTag, RxJava3Tag, CoroutinesTag {
+        permits SyncTag, AsyncTag, ReactiveTag, RxJava3Tag, CoroutinesTag,
+                ImperativeTag {
 }

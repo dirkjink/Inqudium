@@ -2,10 +2,10 @@ package eu.inqudium.config.dsl;
 
 import eu.inqudium.config.ConfigurationException;
 import eu.inqudium.config.runtime.DefaultInqRuntime;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.ImperativeTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.runtime.ParadigmContainer;
-import eu.inqudium.config.runtime.ParadigmTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.runtime.ParadigmUnavailableException;
 import eu.inqudium.config.snapshot.ComponentSnapshot;
 import eu.inqudium.config.snapshot.GeneralSnapshot;

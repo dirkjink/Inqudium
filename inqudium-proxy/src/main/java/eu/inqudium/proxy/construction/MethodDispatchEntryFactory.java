@@ -322,6 +322,19 @@ public final class MethodDispatchEntryFactory {
             case CoroutinesTag c ->
                     throw unsupportedParadigm(method, "CoroutinesTag",
                             "Kotlin coroutines", plan);
+            case eu.inqudium.core.element.paradigm.ImperativeTag i ->
+                    // The classifier never produces ImperativeTag — it returns
+                    // SyncTag/AsyncTag for imperative methods. Reaching this
+                    // case would indicate the legacy ImperativeTag was injected
+                    // by a hand-built plan; reject it loudly so the call site
+                    // surfaces. The branch goes away in Q.7 when ImperativeTag
+                    // is removed from ParadigmTag's permits.
+                    throw new IllegalStateException(
+                            "Method " + method + " is stamped with the deprecated "
+                                    + "ImperativeTag. The ParadigmClassifier produces "
+                                    + "SyncTag or AsyncTag for imperative methods; "
+                                    + "ImperativeTag must not reach the stamped dispatch "
+                                    + "path.");
         };
     }
 

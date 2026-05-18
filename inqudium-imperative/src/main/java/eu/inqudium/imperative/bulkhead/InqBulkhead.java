@@ -2,7 +2,7 @@ package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.config.live.LiveContainer;
 import eu.inqudium.config.runtime.BulkheadHandle;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.ImperativeTag;
 import eu.inqudium.config.snapshot.AdaptiveInstantStrategyConfig;
 import eu.inqudium.config.snapshot.AdaptiveStrategyConfig;
 import eu.inqudium.config.snapshot.AimdLimitAlgorithmConfig;

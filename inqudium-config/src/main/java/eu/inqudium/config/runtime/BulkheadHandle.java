@@ -5,6 +5,7 @@ import eu.inqudium.config.lifecycle.LifecycleAware;
 import eu.inqudium.config.lifecycle.ListenerRegistry;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.core.element.InqElement;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 
 /**
  * Paradigm-agnostic read surface for a live bulkhead.
