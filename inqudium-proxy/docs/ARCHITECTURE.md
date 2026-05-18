@@ -328,15 +328,17 @@ The evaluator handles entirely:
 
 ### 6.2 What the proxy must add on top
 
-The evaluator does not know about:
+The proxy calls `InqPipelineAnnotationEvaluator.evaluateStamped(...)` (ADR-046) so each per-method plan arrives with a `ParadigmTag` already attached. The evaluator does not know about:
 
 | Concern                                            | Why the proxy handles it                                                                                  |
 |----------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
 | `Object` methods (`equals`, `hashCode`, `toString`) | The evaluator iterates `serviceInterface.getMethods()`, which on an **interface** excludes `Object` methods (a JDK reflection quirk: `getMethods()` on an interface returns the interface's own methods and inherited superinterface methods, but not `Object`'s methods). The evaluator therefore never returns a plan for `equals`, `hashCode`, or `toString`. `ProxyBuilder` seeds entries for these three Object methods after the evaluator pass, routing them directly to `ObjectMethodEntry`. |
-| Default-method routing                             | An unoverridden default method receives `PassThrough` from the evaluator. The proxy must distinguish this from a normal pass-through to call `InvocationHandler.invokeDefault(...)` rather than `realTarget.method(...)`. |
-| Sync vs. async dispatch mode                       | The evaluator returns only names; the proxy decides sync/async from the return type (`isAsyncMethod`).    |
-| Async-decorator paradigm compatibility (§6 of ADR-035) | The evaluator does not know whether the resolved elements support async. Async methods whose referenced elements lack `InqAsyncDecorator` must fail at construction. |
-| Element-name → `InqElement` resolution             | The evaluator returns names; the proxy looks them up by `name()` from `pipeline.elements()`.              |
+| Default-method routing                             | An unoverridden default method receives `StampedPassThrough` from the evaluator. The proxy must distinguish this from a normal pass-through to call `InvocationHandler.invokeDefault(...)` rather than `realTarget.method(...)`. |
+| Sync vs. async dispatch path                       | The plan's `paradigm()` decides the dispatch path — `SyncTag` → sync chain folder, `AsyncTag` → async chain folder. No per-call paradigm detection is needed; the proxy reads the tag the evaluator stamped. |
+| Async-runtime presence check                       | For `StampedDecorated` plans tagged `AsyncTag`, the proxy verifies `inqudium-imperative` is on the classpath via `DetectionAsync.isPresent()` before building an async chain (ADR-037 §3). |
+| Fail-fast for unsupported paradigms                | For `StampedDecorated` plans tagged `ReactiveTag`, `RxJava3Tag`, or `CoroutinesTag`, the proxy throws `InqAnnotationConfigurationException` at construction time. The corresponding `StampedPassThrough` plans on those paradigms dispatch as plain pass-through. |
+| Async-decorator paradigm compatibility (§6 of ADR-035) | For `AsyncTag` `StampedDecorated` plans, the proxy still checks that every resolved element implements `InqAsyncDecorator` — the evaluator only stamps the method's paradigm, not the elements' capabilities. |
+| Element resolution by `(elementType, name)` pair   | The evaluator returns `ElementRef(elementType, name)` for each layer; the proxy looks elements up via the triple-keyed `ElementResolver.indexByTypeAndName(...)`. Elements sharing a name across element types are inherently safe. |
 | Build a `LayerAction<Void, Object>` chain          | The proxy folds the resolved elements into the per-method dispatcher.                                     |
 
 Each of these is straightforward, but they all happen at proxy-construction time, never at dispatch.
@@ -345,59 +347,68 @@ Each of these is straightforward, but they all happen at proxy-construction time
 
 ## 7. Phase 2 — Per-method materialisation
 
-For each `Method` in the keyset of `plans`, the proxy produces exactly one `MethodDispatchEntry`. Classification is a small decision table:
+For each `Method` in the keyset of `plans`, the proxy produces exactly one `MethodDispatchEntry` via `MethodDispatchEntryFactory.createStampedEntry(...)`. Classification is a small decision table driven by the plan's variant and, for decorated plans, by the plan's stamped paradigm:
 
 ```
 classify(method, plan, implClass):
-    if method.declaringClass == Object.class                       → ObjectMethodEntry
-    elif plan instanceof PassThrough:
+    if plan instanceof StampedPassThrough:
         if method.isDefault() && !overriddenByImpl(method, implClass) → DefaultMethodEntry
-        else                                                       → PassThroughEntry
-    else (plan instanceof Decorated):
-        elements   = resolveNames(plan.elementNamesOuterToInner)
-        mode       = isAsyncMethod(method) ? ASYNC : SYNC
-        validate paradigm compatibility (mode, elements)
-        fold and produce SyncCacheEntry or AsyncCacheEntry
+        else                                                          → PassThroughEntry
+    else (plan instanceof StampedDecorated sd):
+        elements = resolveTriples(sd.elementsOuterToInner, byTypeAndName)
+        switch (sd.paradigm):
+            case SyncTag      → validate sync paradigm   → SyncCacheEntry
+            case AsyncTag     → require DetectionAsync.isPresent()
+                                validate async paradigm  → AsyncCacheEntry
+            case ReactiveTag,
+                 RxJava3Tag,
+                 CoroutinesTag → throw InqAnnotationConfigurationException
+                                 (resilience-element implementation not yet provided)
 ```
 
-`overriddenByImpl(method, implClass)` is a small reflective check on whether the implementation class declares the same signature as a non-default method. The evaluator already does the same check internally for its own purposes; the proxy repeats it because it consumes `MethodPlan.PassThrough` opaquely and needs the bit independently.
+`Object`-declared methods are not handled by the factory: `serviceInterface.getMethods()` on an interface excludes them, so the evaluator never returns a plan for `equals`/`hashCode`/`toString`. `ProxyBuilder` seeds `ObjectMethodEntry` instances for those three directly after the evaluator pass.
 
-### 7.1 Element name resolution
+`overriddenByImpl(method, implClass)` is a small reflective check on whether the implementation class declares the same signature as a non-default method. The evaluator already does the same check internally for its own purposes; the proxy repeats it because it consumes `MethodPlan.StampedPassThrough` opaquely and needs the bit independently.
+
+The legacy `createEntry(...)` overloads (consuming `MethodPlan.PassThrough` / `Decorated`) remain in place for backward compatibility and route through `ParadigmDetector.isAsyncMethod(method)` for the sync-vs-async decision. They are slated for removal alongside the legacy plan permits — see `REFACTORING_PARADIGM_TAGGING.md` sub-step Q.6.
+
+### 7.1 Element resolution by `(elementType, name)` pair
 
 ```java
-List<InqElement> resolveNames(List<String> names, InqPipeline pipeline, ...) {
-    Map<String, InqElement> byName = pipeline.elements().stream()
-            .collect(Collectors.toMap(InqElement::name, Function.identity()));
-    // The evaluator already validated existence; this lookup will not miss.
-    return names.stream().map(byName::get).toList();
+Map<ElementTypeAndName, InqElement> byTypeAndName =
+        ElementResolver.indexByTypeAndName(pipeline);
+
+List<InqElement> resolveTriples(List<ElementRef> refs,
+                                Map<ElementTypeAndName, InqElement> byTypeAndName) {
+    return refs.stream()
+            .map(ref -> {
+                InqElement element = byTypeAndName.get(
+                        new ElementTypeAndName(ref.elementType(), ref.name()));
+                // The evaluator already validated existence; this lookup will not miss.
+                return element;
+            })
+            .toList();
 }
 ```
 
-The pipeline-elements list is small (typically ≤ 6 per ADR-040/041), so the `Map` construction is acceptable per proxy. The lookup is on cold-path code; no optimisation needed.
+The triple-keyed index dissolves the cross-type name-collision crash mode (finding 1.1 in `REFACTORING_PROXY_POLISH.md`, sub-step P.3) by construction: two elements with the same name but different element types coexist legally under their distinct keys. The pipeline-elements list is small (typically ≤ 6 per ADR-040/041), so the `Map` construction is acceptable per proxy. The lookup is on cold-path code; no optimisation needed.
 
 ### 7.2 Paradigm validation
 
-```java
-void validateParadigm(DispatchMode mode, List<InqElement> elements, Method method) {
-    for (InqElement element : elements) {
-        switch (mode) {
-            case SYNC -> requireDecorator(element, method);
-            case ASYNC -> requireAsyncDecorator(element, method);
-        }
-    }
-}
+The paradigm classification itself is performed by the annotation evaluator (ADR-046) and read from `plan.paradigm()`. The proxy adds one additional check the evaluator does not perform: every element resolved into a decorated chain must implement the dispatch interface the paradigm expects.
 
+```java
 void requireAsyncDecorator(InqElement element, Method method) {
     // No class-literal reference here unless DetectionAsync.isPresent() — see §13.
     if (!(element instanceof InqAsyncDecorator<?, ?>)) {
         throw new IllegalStateException(
-            "Method " + method + " returns CompletionStage but element '" + element.name()
+            "Method " + method + " is classified as AsyncTag but element '" + element.name()
             + "' (type " + element.elementType() + ") does not implement InqAsyncDecorator");
     }
 }
 ```
 
-This is the §6/ADR-035 check the evaluator does not perform.
+`SyncParadigmValidator` does the corresponding check for sync chains (every element must implement `InqDecorator`). The `ReactiveTag`/`RxJava3Tag`/`CoroutinesTag` paradigms are rejected one step earlier in `MethodDispatchEntryFactory.createStampedEntry(...)` — those paradigms have no resilience-element implementation yet, so element-level validation never runs.
 
 ### 7.3 Storage vs. call-time typing — the corrected story
 

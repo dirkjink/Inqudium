@@ -1,7 +1,15 @@
 package eu.inqudium.proxy.construction;
 
+import eu.inqudium.annotation.evaluator.ElementRef;
+import eu.inqudium.annotation.evaluator.InqAnnotationConfigurationException;
 import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElement;
+import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.element.paradigm.CoroutinesTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.ReactiveTag;
+import eu.inqudium.core.element.paradigm.RxJava3Tag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerAction;
 import eu.inqudium.pipeline.InqPipeline;
@@ -119,6 +127,16 @@ public final class MethodDispatchEntryFactory {
                     buildPassThrough(method, target, implClass);
             case MethodPlan.Decorated decorated ->
                     buildDecorated(method, decorated, pipeline, target, elementsByName);
+            case MethodPlan.StampedPassThrough spt ->
+                    throw new IllegalStateException(
+                            "Stamped MethodPlan.StampedPassThrough passed to "
+                                    + "createEntry (legacy). Use createStampedEntry(...) "
+                                    + "for stamped permits.");
+            case MethodPlan.StampedDecorated sd ->
+                    throw new IllegalStateException(
+                            "Stamped MethodPlan.StampedDecorated passed to "
+                                    + "createEntry (legacy). Use createStampedEntry(...) "
+                                    + "for stamped permits.");
         };
     }
 
@@ -189,6 +207,179 @@ public final class MethodDispatchEntryFactory {
             Object target,
             Map<String, InqElement> elementsByName) {
         return AsyncEntryBuilder.build(method, plan, pipeline, target, elementsByName);
+    }
+
+    /**
+     * Stamped-plan convenience overload that builds the type-and-name
+     * index internally. Prefer
+     * {@link #createStampedEntry(Method, MethodPlan, InqPipeline, Object,
+     * Class, Map)} when constructing entries for multiple methods
+     * against the same pipeline — that form lets the caller share the
+     * index across calls.
+     *
+     * @since 0.9.0
+     */
+    public static MethodDispatchEntry createStampedEntry(
+            Method method,
+            MethodPlan plan,
+            InqPipeline pipeline,
+            Object target,
+            Class<?> implClass) {
+        return createStampedEntry(method, plan, pipeline, target, implClass,
+                ElementResolver.indexByTypeAndName(pipeline));
+    }
+
+    /**
+     * Builds the entry for one service method from a paradigm-stamped
+     * plan (ADR-046). The paradigm is read directly from the plan; no
+     * per-call detection is performed.
+     *
+     * <p>For {@link MethodPlan.StampedDecorated} plans classified as a
+     * paradigm without a resilience-element implementation
+     * ({@link ReactiveTag}, {@link RxJava3Tag}, {@link CoroutinesTag}),
+     * throws {@link InqAnnotationConfigurationException} at construction
+     * time with a specific, actionable error message naming the method,
+     * the paradigm, and the annotated elements. The corresponding
+     * {@link MethodPlan.StampedPassThrough} plans (same paradigms but
+     * no resilience annotation in effect) dispatch normally as
+     * pass-through.</p>
+     *
+     * <p>Legacy plan permits ({@link MethodPlan.PassThrough},
+     * {@link MethodPlan.Decorated}) are rejected with
+     * {@link IllegalStateException} — use the legacy
+     * {@link #createEntry(Method, MethodPlan, InqPipeline, Object, Class, Map)}
+     * for those, or migrate the producer to
+     * {@code AnnotationEvaluator.evaluateStamped(...)}.</p>
+     *
+     * @since 0.9.0
+     */
+    public static MethodDispatchEntry createStampedEntry(
+            Method method,
+            MethodPlan plan,
+            InqPipeline pipeline,
+            Object target,
+            Class<?> implClass,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
+
+        Objects.requireNonNull(method, "method");
+        Objects.requireNonNull(plan, "plan");
+        Objects.requireNonNull(pipeline, "pipeline");
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(implClass, "implClass");
+        Objects.requireNonNull(elementsByTypeAndName, "elementsByTypeAndName");
+
+        return switch (plan) {
+            case MethodPlan.StampedPassThrough spt ->
+                    buildPassThrough(method, target, implClass);
+            case MethodPlan.StampedDecorated sd ->
+                    buildStampedDecorated(method, sd, target, elementsByTypeAndName);
+            case MethodPlan.PassThrough pt ->
+                    throw new IllegalStateException(
+                            "Legacy MethodPlan.PassThrough passed to "
+                                    + "createStampedEntry. Use createEntry(...) "
+                                    + "for legacy permits, or migrate the producer "
+                                    + "to AnnotationEvaluator.evaluateStamped(...).");
+            case MethodPlan.Decorated d ->
+                    throw new IllegalStateException(
+                            "Legacy MethodPlan.Decorated passed to "
+                                    + "createStampedEntry. Use createEntry(...) "
+                                    + "for legacy permits, or migrate the producer "
+                                    + "to AnnotationEvaluator.evaluateStamped(...).");
+        };
+    }
+
+    private static MethodDispatchEntry buildStampedDecorated(
+            Method method,
+            MethodPlan.StampedDecorated plan,
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
+
+        ParadigmTag paradigm = plan.paradigm();
+        return switch (paradigm) {
+            case SyncTag s ->
+                    buildSyncStampedEntry(method, plan, target, elementsByTypeAndName);
+            case AsyncTag a -> {
+                if (!DetectionAsync.isPresent()) {
+                    throw new IllegalStateException(
+                            "Method " + method + " is classified as AsyncTag "
+                                    + "but inqudium-imperative is not on the "
+                                    + "classpath. Add inqudium-imperative as a "
+                                    + "runtime dependency to enable async "
+                                    + "dispatch (ADR-037 §3).");
+                }
+                // Class-loading discipline: AsyncEntryBuilder is reached
+                // via a plain invokestatic, which the JVM resolves lazily
+                // per JVMS §5.4. No imperative type literal appears in
+                // this class.
+                yield buildAsyncStampedEntry(method, plan, target, elementsByTypeAndName);
+            }
+            case ReactiveTag r ->
+                    throw unsupportedParadigm(method, "ReactiveTag",
+                            "reactive (Mono/Flux)", plan);
+            case RxJava3Tag rx ->
+                    throw unsupportedParadigm(method, "RxJava3Tag",
+                            "RxJava 3", plan);
+            case CoroutinesTag c ->
+                    throw unsupportedParadigm(method, "CoroutinesTag",
+                            "Kotlin coroutines", plan);
+        };
+    }
+
+    private static MethodDispatchEntry buildSyncStampedEntry(
+            Method method,
+            MethodPlan.StampedDecorated plan,
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
+
+        List<InqElement> elements = ElementResolver.resolveTriples(
+                plan.elementsOuterToInner(), elementsByTypeAndName);
+        SyncParadigmValidator.validate(elements, method);
+
+        List<LayerAction<Void, Object>> layerActions = elements.stream()
+                .map(MethodDispatchEntryFactory::toLayerAction)
+                .toList();
+
+        MethodInvoker invoker = MethodInvoker.create(target, method);
+        FoldedSyncChain chain = SyncChainFolder.fold(layerActions, invoker);
+
+        List<String> layerDescriptions = elements.stream()
+                .map(InqElement::name)
+                .toList();
+
+        return MethodDispatchEntry.syncCache(chain, layerDescriptions);
+    }
+
+    private static MethodDispatchEntry buildAsyncStampedEntry(
+            Method method,
+            MethodPlan.StampedDecorated plan,
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
+        return AsyncEntryBuilder.build(method, plan, target, elementsByTypeAndName);
+    }
+
+    private static InqAnnotationConfigurationException unsupportedParadigm(
+            Method method,
+            String tagFamily,
+            String paradigmDescription,
+            MethodPlan.StampedDecorated plan) {
+
+        String elementSummary = plan.elementsOuterToInner().stream()
+                .map(ref -> ref.elementType() + " '" + ref.name() + "'")
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("(none)");
+
+        return new InqAnnotationConfigurationException(
+                "Method " + method.getDeclaringClass().getSimpleName() + "#"
+                        + method.getName() + "(...) is classified as "
+                        + tagFamily + " (" + paradigmDescription + ") but the "
+                        + "resilience-element implementation for this paradigm "
+                        + "is not yet available. The library currently "
+                        + "implements resilience elements only for the sync "
+                        + "(SyncTag) and async (AsyncTag) paradigms. "
+                        + "Annotated elements on this method: " + elementSummary
+                        + ". Either remove the resilience annotation(s) from "
+                        + "this method, or restrict the method's return type "
+                        + "to a sync or async imperative shape.");
     }
 
     /**
