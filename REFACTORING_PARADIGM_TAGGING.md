@@ -492,26 +492,19 @@ correctly for all paradigms — the proxy just passes through.
 
 ---
 
-### Q.5 — `inqudium-imperative`: async-imperative bulkhead lights up
+### Q.5a — Runtime: `Sync` / `Async` accessors and typed handles
 
-**Goal:** Wire the `AsyncTag` paradigm through the imperative
-module. The bulkhead already implements both sync and async
-contracts (`InqDecorator` + `InqAsyncDecorator`); this sub-step
-exposes both as paradigm-tagged handles in the runtime.
+**Goal:** Land the `Sync` and `Async` paradigm-container
+interfaces in `inqudium-config`, add corresponding
+`InqRuntime.sync()` / `runtime.async()` accessors, and split
+`inqudium-imperative`'s `DefaultImperative` into a pair of
+typed views that share a single backing `InqBulkhead` instance
+per name. `Imperative` and `runtime.imperative()` remain as
+deprecated aliases until Q.7's cleanup.
 
 **Tasks:**
 
-1. **Add a parallel typed handle path for async-imperative.**
-   Today the runtime exposes:
-
-   ```java
-   public interface Imperative extends ParadigmContainer<ImperativeTag> {
-       BulkheadHandle<ImperativeTag> bulkhead(String name);
-       // ...
-   }
-   ```
-
-   Restructure as two siblings:
+1. **`inqudium-config/runtime`** — two new interfaces:
 
    ```java
    public interface Sync extends ParadigmContainer<SyncTag> {
@@ -527,56 +520,161 @@ exposes both as paradigm-tagged handles in the runtime.
    }
    ```
 
-   The `Imperative` interface remains as a **deprecated alias**
-   that delegates to `Sync` (the previous default behaviour of
-   `imperative().bulkhead(...)`).
+2. **`InqRuntime`** gains `sync()` and `async()` accessor
+   methods. `imperative()` is annotated `@Deprecated` and
+   documented as delegating to `sync()`; left in place for
+   one release cycle.
 
-2. **`InqRuntime`** gains two new accessors `sync()` and
-   `async()` returning the new typed containers.
-   `imperative()` is kept as a deprecated alias for `sync()`.
+3. **`DefaultInqRuntime`** — the containers Map gains
+   `SyncTag.INSTANCE` and `AsyncTag.INSTANCE` keys.
+   `imperative()` delegates to `sync()`. The
+   `ImperativeTag.INSTANCE` key is retained alongside (Q.7
+   removes it), so a runtime built via the legacy path still
+   works.
 
-3. **The underlying registry is shared.** Each bulkhead
-   instance is stored once; the `sync()` and `async()` views
-   over it are thin façades that return typed handles of the
-   appropriate paradigm. No bulkhead is registered twice — the
-   same `InqBulkhead<A, R>` instance backs both
-   `BulkheadHandle<SyncTag>` and `BulkheadHandle<AsyncTag>`
-   views.
+4. **`inqudium-imperative`** — replace `DefaultImperative`
+   with `DefaultSync` and `DefaultAsync`, each backed by the
+   **same underlying** `InqBulkhead<A, R>` instance map.
+   Two typed views over one registry. The bulkhead instance
+   already implements both `InqDecorator` and
+   `InqAsyncDecorator`; the views just project the right
+   typed handle.
 
-4. **Update `ComponentKey`** to use the new `ParadigmTag` from
-   `inqudium-core`. The legacy
-   `eu.inqudium.config.runtime.ParadigmTag` is kept as a
-   deprecated type alias / re-export that points at the new
-   location, so consumers of the old import path continue to
-   compile until Q.7.
+5. **`ComponentKey`** — update to use the new `ParadigmTag`
+   from `inqudium-core`. Imports flip across approximately
+   six call sites in `inqudium-config` and
+   `inqudium-imperative` (Audit Q.0). The legacy
+   `eu.inqudium.config.runtime.ParadigmTag` is retained as a
+   deprecated alias / re-export until Q.7.
 
-5. Tests:
-   - `runtime.sync().bulkhead("foo")` returns a
+6. Tests:
+   - `runtime.sync().bulkhead("foo")` returns a typed
      `BulkheadHandle<SyncTag>`.
-   - `runtime.async().bulkhead("foo")` returns a
-     `BulkheadHandle<AsyncTag>` over the same backing instance.
-   - Deprecated `runtime.imperative()` still works and returns
+   - `runtime.async().bulkhead("foo")` returns a typed
+     `BulkheadHandle<AsyncTag>` over the **same backing
+     instance** (verify by identity check on the underlying
+     `InqBulkhead`).
+   - Deprecated `runtime.imperative()` still works, returns
      the sync view.
-   - End-to-end: a `@InqBulkhead`-annotated service method with
-     `CompletionStage<T>` return type routes through the async
-     handle; permit release on stage completion.
+   - Runtime updates propagate to both views (tune one,
+     observe the change via the other).
 
 **Verification gates:**
 
-- [ ] `mvn verify` green.
-- [ ] `runtime.sync()` and `runtime.async()` available.
+- [ ] `mvn -pl inqudium-imperative -am verify` green.
+- [ ] Full `mvn verify` green.
+- [ ] `runtime.sync()` and `runtime.async()` work.
 - [ ] `runtime.imperative()` still works (deprecated).
-- [ ] Test count delta: +15 to +30 in `inqudium-imperative` +
-      `inqudium-config`.
+- [ ] Test count delta: +15 to +25 in `inqudium-config` +
+      `inqudium-imperative`.
 - [ ] No new `@SuppressWarnings` introduced.
+- [ ] Audit baselines unchanged: 126 `ImperativeTag` hits,
+      44 legacy `ParadigmTag` hits — Q.5a does not yet remove
+      any.
 
-**Branch:** `feat/sync-async-paradigm-handles`.
+**Branch:** `feat/sync-async-runtime-accessors`.
+
+---
+
+### Q.5b — DSL + Integration Examples migrate to `sync()` / `async()`
+
+**Goal:** Migrate the user-facing DSL (`BulkheadBuilder<P>`,
+`BulkheadBuilderBase<P>`, builder hierarchy) to expose paradigm
+choice via `.sync(...)` / `.async(...)` rather than
+`.imperative(...)`. Migrate both bulkhead-integration examples
+(`inqudium-bulkhead-integration-proxy`,
+`inqudium-bulkhead-integration-function`) to demonstrate
+end-to-end usage of both paradigms. Establish end-to-end
+coverage of async-imperative dispatch via an annotated
+`CompletionStage<T>` method.
+
+**Tasks:**
+
+1. **`inqudium-config/dsl`** — the builder hierarchy.
+   `BulkheadBuilder<P extends ParadigmTag>` and
+   `BulkheadBuilderBase<P extends ParadigmTag>` stay
+   parameterised, but the user-facing entry points become
+   `.sync(s -> s.bulkhead("foo", b -> ...))` and
+   `.async(a -> a.bulkhead("foo", b -> ...))`.
+
+   Approximately five files in the DSL package will be
+   touched (per Q.0 Audit finding 1 — surface them now):
+
+   - `BulkheadBuilder.java` — parameter-update
+   - `BulkheadBuilderBase.java` — parameter-update
+   - `ImperativeBulkheadBuilder.java` — split into
+     `SyncBulkheadBuilder` + `AsyncBulkheadBuilder`, with
+     `ImperativeBulkheadBuilder` as deprecated alias
+   - `DefaultImperativeBulkheadBuilder.java` — split
+     analogously
+   - `DefaultInqudiumBuilder.java` and
+     `DefaultInqudiumUpdateBuilder.java` — gain `.sync(...)`
+     and `.async(...)` entry methods; `.imperative(...)`
+     deprecated alias to `.sync(...)`
+
+2. **`inqudium-bulkhead-integration-proxy`** — migrate test
+   code from `runtime.imperative()` to `runtime.sync()` /
+   `runtime.async()`. The example may need to demonstrate
+   both paradigms in a single end-to-end run; the
+   `OrderService` interface can grow an
+   `placeOrderAsync()`-returning `CompletionStage<String>`
+   method protected by the same `@InqBulkhead("orderBh")`
+   annotation — both views (`sync` and `async`) hand back
+   handles to the **same backing bulkhead**.
+
+3. **`inqudium-bulkhead-integration-function`** — analogous
+   migration. Per Q.0 Audit finding 3, this example was not
+   in the original Q.5 plan but uses the same patterns.
+
+4. **End-to-end test for async-imperative dispatch.**
+   A new test in one of the two examples (preferably
+   `inqudium-bulkhead-integration-proxy`) exercises the full
+   path: proxy → stamped plan → AsyncTag → async chain →
+   permit release on stage completion. The test confirms:
+   - A `@InqBulkhead`-annotated method returning
+     `CompletionStage<T>` works without code change to the
+     proxy (Q.4 wired this).
+   - Permit-release happens at stage completion, not at
+     method return — verify by saturating, attempting a
+     blocked subscribe, completing the in-flight stage, and
+     observing the previously-blocked attempt succeed.
+
+5. Test updates in `inqudium-config` for the DSL builder
+   parameter-types. Existing tests that use the
+   `ImperativeBulkheadBuilder` form via the deprecated path
+   continue to work — backward compatibility is the
+   migration's promise.
+
+**Verification gates:**
+
+- [ ] `mvn verify` green (full reactor — both examples plus
+      core/config/imperative).
+- [ ] User-facing API: `Inqudium.configure().sync(...)`,
+      `.async(...)`, plus deprecated `.imperative(...)` all
+      work.
+- [ ] End-to-end async-imperative test passes — annotated
+      `CompletionStage<T>` method correctly limits concurrency.
+- [ ] Test count delta: +20 to +40 across
+      `inqudium-config`, both integration examples, and
+      `inqudium-imperative`.
+- [ ] No new `@SuppressWarnings` introduced.
+- [ ] Audit baselines: `ImperativeTag` hits **decrease**
+      (the DSL builders previously had `<ImperativeTag>`
+      parameters that now flip to `<SyncTag>` /
+      `<AsyncTag>`; the integration examples previously had
+      `BulkheadHandle<ImperativeTag>` declarations that flip
+      similarly). The legacy `ImperativeTag` type itself
+      remains in place until Q.7; only the parameter use
+      shifts. Expect the count to drop by approximately
+      15-30, not to zero.
+
+**Branch:** `feat/sync-async-dsl-and-examples`.
 
 ---
 
 ### Q.6 — `MethodPlan` rename: `Stamped*` becomes the canonical names
 
-**Goal:** After Q.4 migrated the proxy and Q.5 added the
+**Goal:** After Q.4 migrated the proxy and Q.5a/Q.5b added the
 async-imperative path, **every internal consumer uses the
 `Stamped*` plan shape**. This sub-step renames `Stamped*` back
 to `PassThrough` / `Decorated`, removing the temporary
@@ -702,7 +800,8 @@ any remaining drift.
 * [x] Q.2 — `ParadigmClassifier` + lazy-class probes (2026-05-18, PR #83)
 * [x] Q.3 — `ElementRef` + new `MethodPlan` shape (parallel) (2026-05-18, PR #84)
 * [x] Q.4 — Proxy consumes the new plan shape (2026-05-18, PR #85)
-* [ ] Q.5 — `inqudium-imperative`: async-imperative lights up
+* [ ] Q.5a — Runtime: `Sync` / `Async` accessors and typed handles
+* [ ] Q.5b — DSL + Integration Examples migrate to `sync()` / `async()`
 * [ ] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names
 * [ ] Q.7 — Final cleanup: remove legacy types
 * [ ] Q.8 — Plan deletion + final consistency
@@ -720,12 +819,13 @@ Rough numbers for someone familiar with the codebase:
 | Q.2 | 1 day (classifier + 3 probes + discipline test) |
 | Q.3 | half a day |
 | Q.4 | 1 day (proxy migration + ParadigmDetector removal + tests) |
-| Q.5 | 1-2 days (runtime restructure, deprecated alias paths) |
+| Q.5a | 1 day (runtime API + DefaultImperative split) |
+| Q.5b | 1 day (DSL + 2 integration examples + e2e tests) |
 | Q.6 | 1 hour (mechanical rename) |
 | Q.7 | 2 hours (cleanup + ADR updates) |
 | Q.8 | 15 minutes |
 
-Total range: about **5-7 days** for the full sequence at a
+Total range: about **6-8 days** for the full sequence at a
 sustainable pace.
 
 ## When unsure
