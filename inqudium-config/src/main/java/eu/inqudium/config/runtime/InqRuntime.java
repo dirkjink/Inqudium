@@ -34,9 +34,32 @@ public interface InqRuntime extends AutoCloseable {
     InqConfigView config();
 
     /**
+     * @return the synchronous-imperative paradigm container.
+     * @throws ParadigmUnavailableException if no imperative provider is on the classpath.
+     *
+     * @since 0.9.0
+     */
+    Sync sync();
+
+    /**
+     * @return the asynchronous-imperative paradigm container.
+     * @throws ParadigmUnavailableException if no imperative provider is on the classpath.
+     *
+     * @since 0.9.0
+     */
+    Async async();
+
+    /**
      * @return the imperative paradigm container.
      * @throws ParadigmUnavailableException if no imperative provider is on the classpath.
+     *
+     * @deprecated since 0.9.0. Use {@link #sync()} for sync-imperative access or
+     *             {@link #async()} for async-imperative access. The
+     *             {@code imperative()} method continues to work for backward
+     *             compatibility; new code should use the typed accessors
+     *             directly. To be removed in a future release.
      */
+    @Deprecated(since = "0.9.0")
     Imperative imperative();
 
     /**

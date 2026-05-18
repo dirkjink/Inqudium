@@ -2,7 +2,7 @@ package eu.inqudium.imperative.bulkhead.dsl;
 
 import eu.inqudium.config.dsl.BulkheadBuilderBase;
 import eu.inqudium.config.dsl.ImperativeBulkheadBuilder;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.ImperativeTag;
 
 /**
  * Concrete imperative bulkhead builder.

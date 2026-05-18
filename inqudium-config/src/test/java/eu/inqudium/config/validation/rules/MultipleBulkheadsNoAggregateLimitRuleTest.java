@@ -1,7 +1,7 @@
 package eu.inqudium.config.validation.rules;
 
 import eu.inqudium.config.runtime.InqConfigView;
-import eu.inqudium.config.runtime.ParadigmTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.snapshot.BulkheadEventConfig;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.config.snapshot.ComponentSnapshot;

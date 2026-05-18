@@ -3,6 +3,7 @@ package eu.inqudium.config.runtime;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.config.snapshot.ComponentSnapshot;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 
 import java.util.Optional;
 import java.util.stream.Stream;

@@ -1,6 +1,6 @@
 package eu.inqudium.config.dsl;
 
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.ImperativeTag;
 
 /**
  * Imperative-paradigm extension of {@link BulkheadBuilder}.

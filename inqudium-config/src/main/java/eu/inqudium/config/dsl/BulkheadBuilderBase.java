@@ -1,7 +1,7 @@
 package eu.inqudium.config.dsl;
 
 import eu.inqudium.config.patch.BulkheadPatch;
-import eu.inqudium.config.runtime.ParadigmTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.snapshot.BulkheadEventConfig;
 import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
 

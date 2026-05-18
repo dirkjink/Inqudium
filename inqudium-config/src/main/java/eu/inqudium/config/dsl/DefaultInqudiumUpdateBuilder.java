@@ -1,7 +1,7 @@
 package eu.inqudium.config.dsl;
 
-import eu.inqudium.config.runtime.ImperativeTag;
-import eu.inqudium.config.runtime.ParadigmTag;
+import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.runtime.ParadigmUnavailableException;
 import eu.inqudium.config.spi.ParadigmProvider;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
