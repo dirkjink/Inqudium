@@ -697,8 +697,8 @@ any remaining drift.
 
 ## Completion log
 
-* [ ] Q.0 — Audit (no commit)
-* [ ] Q.1 — New `ParadigmTag` hierarchy in `inqudium-core`
+* [x] Q.0 — Audit (no commit) (2026-05-18)
+* [x] Q.1 — New `ParadigmTag` hierarchy in `inqudium-core` (2026-05-18, PR #82)
 * [ ] Q.2 — `ParadigmClassifier` + lazy-class probes
 * [ ] Q.3 — `ElementRef` + new `MethodPlan` shape (parallel)
 * [ ] Q.4 — Proxy consumes the new plan shape
