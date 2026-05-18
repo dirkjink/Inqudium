@@ -800,7 +800,7 @@ any remaining drift.
 * [x] Q.2 — `ParadigmClassifier` + lazy-class probes (2026-05-18, PR #83)
 * [x] Q.3 — `ElementRef` + new `MethodPlan` shape (parallel) (2026-05-18, PR #84)
 * [x] Q.4 — Proxy consumes the new plan shape (2026-05-18, PR #85)
-* [x] Q.5a — Runtime: `Sync` / `Async` accessors and typed handles (2026-05-18, PR #TBD)
+* [x] Q.5a — Runtime: `Sync` / `Async` accessors and typed handles (2026-05-18, PR #87)
 * [ ] Q.5b — DSL + Integration Examples migrate to `sync()` / `async()`
 * [ ] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names
 * [ ] Q.7 — Final cleanup: remove legacy types
