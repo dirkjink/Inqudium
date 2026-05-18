@@ -700,7 +700,7 @@ any remaining drift.
 * [x] Q.0 — Audit (no commit) (2026-05-18)
 * [x] Q.1 — New `ParadigmTag` hierarchy in `inqudium-core` (2026-05-18, PR #82)
 * [x] Q.2 — `ParadigmClassifier` + lazy-class probes (2026-05-18, PR #83)
-* [ ] Q.3 — `ElementRef` + new `MethodPlan` shape (parallel)
+* [x] Q.3 — `ElementRef` + new `MethodPlan` shape (parallel) (2026-05-18, PR #TBD)
 * [ ] Q.4 — Proxy consumes the new plan shape
 * [ ] Q.5 — `inqudium-imperative`: async-imperative lights up
 * [ ] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names
