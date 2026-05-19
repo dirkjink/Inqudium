@@ -40,10 +40,10 @@ public final class ElementResolver {
     /**
      * Builds the lookup map from element name to {@link InqElement}.
      *
-     * <p>Currently assumes globally-unique element names — see
-     * finding 1.1 in {@code REFACTORING_PROXY_POLISH.md} (sub-step
-     * P.3). When that finding is resolved this method's contract may
-     * change.</p>
+     * <p>Currently assumes globally-unique element names. The
+     * triple-keyed variant {@link #indexByTypeAndName(InqPipeline)}
+     * below dissolves this assumption — when migration to that
+     * method completes, this method may be deprecated and removed.</p>
      */
     public static Map<String, InqElement> indexByName(InqPipeline pipeline) {
         Objects.requireNonNull(pipeline, "pipeline");
@@ -120,9 +120,9 @@ public final class ElementResolver {
      * the pair-keyed form supports paradigm-aware resolution where two
      * elements may share a name across types.
      *
-     * <p>Dissolves finding 1.1 from {@code REFACTORING_PROXY_POLISH.md}
-     * by construction: keying on the pair never collides on shared
-     * names across types.</p>
+     * <p>Dissolves the historical name-collision concern (tracked as
+     * finding 1.1 in the polish plan) by construction: keying on
+     * the pair never collides on shared names across types.</p>
      *
      * @since 0.9.0
      */
@@ -144,10 +144,11 @@ public final class ElementResolver {
      *
      * <p>Parallel to {@link #resolve(List, Map)} — that method
      * resolves names against an index keyed on names alone, which
-     * carries the latent crash mode documented as finding 1.1 in
-     * {@code REFACTORING_PROXY_POLISH.md}. The triple-keyed form here
-     * dissolves that finding: duplicate names across element types
-     * are inherently safe.</p>
+     * carries a latent crash mode for duplicate names across
+     * element types (originally tracked as finding 1.1 in the
+     * polish plan). The triple-keyed form here dissolves that
+     * concern: duplicate names across element types are inherently
+     * safe.</p>
      *
      * @throws IllegalStateException if a ref is not present in the
      *                               index (defensive guard against

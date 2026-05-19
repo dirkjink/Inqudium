@@ -388,7 +388,7 @@ List<InqElement> resolveTriples(List<ElementRef> refs,
 }
 ```
 
-The triple-keyed index dissolves the cross-type name-collision crash mode (finding 1.1 in `REFACTORING_PROXY_POLISH.md`, sub-step P.3) by construction: two elements with the same name but different element types coexist legally under their distinct keys. The pipeline-elements list is small (typically ≤ 6 per ADR-040/041), so the `Map` construction is acceptable per proxy. The lookup is on cold-path code; no optimisation needed.
+The triple-keyed index dissolves the cross-type name-collision crash mode (originally tracked as finding 1.1 in the polish plan, dissolved by ADR-046's adoption) by construction: two elements with the same name but different element types coexist legally under their distinct keys. The pipeline-elements list is small (typically ≤ 6 per ADR-040/041), so the `Map` construction is acceptable per proxy. The lookup is on cold-path code; no optimisation needed.
 
 ### 7.2 Paradigm validation
 

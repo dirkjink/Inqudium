@@ -21,10 +21,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@link ElementResolverTest} so the name-only and triple-keyed
  * resolver paths are exercised side by side.
  *
- * <p>The cross-type name-collision tests pin the dissolution of
- * finding 1.1 from {@code REFACTORING_PROXY_POLISH.md}: keying the
- * pipeline index on the {@code (elementType, name)} pair makes
- * duplicate names across element types inherently safe.</p>
+ * <p>The cross-type name-collision tests pin the dissolution
+ * of the historical pipeline-index crash mode: keying the
+ * index on the {@code (elementType, name)} pair makes
+ * duplicate names across element types inherently safe.
+ * This was originally tracked as finding 1.1 in the polish
+ * plan and dissolved by ADR-046's triple-keyed resolver.</p>
  */
 class ElementResolverTriplesTest {
 
@@ -51,12 +53,12 @@ class ElementResolverTriplesTest {
 
         @Test
         void should_accept_two_elements_with_the_same_name_but_different_types() {
-            // What is to be tested? — Finding 1.1 from
-            //   REFACTORING_PROXY_POLISH.md describes the legacy
-            //   indexByName(...) crashing with a Collectors.toMap merge
-            //   when two pipeline elements share a name across element
-            //   types. The new indexByTypeAndName(...) must accept this
-            //   configuration without merging or throwing.
+            // What is to be tested? — The legacy indexByName(...) crashed
+            //   with a Collectors.toMap merge when two pipeline elements
+            //   shared a name across element types (originally tracked as
+            //   finding 1.1 in the polish plan). The new
+            //   indexByTypeAndName(...) must accept this configuration
+            //   without merging or throwing.
             // Successful when? — both elements appear in the resulting
             //   index under their respective (type, name) keys.
             // Why important? — This is the structural fix that
