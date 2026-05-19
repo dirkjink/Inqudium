@@ -1126,7 +1126,7 @@ Commit subject: `chore: complete proxy polish, delete plan`
 * [ ] P.4 — Folder lambda hoisting (JMH-validated decision)
 * [x] P.5 — Test-infrastructure hardening (2026-05-17, PR #81)
 * [x] P.7 — `BulkheadHandle.unwrap(Class<T>)` default method (2026-05-19, PR #94)
-* [ ] P.8 — Replace `ParadigmProvider` SPI with presence-probe + class rename
+* [x] P.8 — Replace `ParadigmProvider` SPI with presence-probe + class rename (2026-05-19, PR #95)
 * [ ] P.9 — Remove or rename `InqImperativeBulkheadConfigBuilder`
 * [ ] P.6 — Plan deletion + final architecture polish
 

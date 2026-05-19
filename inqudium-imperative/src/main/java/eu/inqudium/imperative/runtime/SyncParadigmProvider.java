@@ -23,9 +23,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Imperative paradigm provider. Registered via
- * {@code META-INF/services/eu.inqudium.config.spi.ParadigmProvider} so the runtime builder
- * discovers it through {@link java.util.ServiceLoader}.
+ * The sync-paradigm provider materialising bulkhead containers for the imperative
+ * dispatch path. Discovered by {@link eu.inqudium.config.spi.ProviderDiscovery}
+ * via direct class-loading probe — no SPI registration, mirroring the
+ * {@code DetectionAsync} pattern from ADR-037.
  *
  * <p>Provides:
  *
@@ -42,13 +43,12 @@ import java.util.Set;
  * {@link DefaultImperative#applyUpdate} path uses to build new components when an update
  * introduces a previously-unknown name.</p>
  *
- * <p>The class name is historical — kept to avoid SPI churn after the ADR-046 paradigm-tag
- * migration. Functionally, this provider materialises components that serve both the sync
+ * <p>Functionally, this provider materialises components that serve both the sync
  * and async dispatch paths through a single {@link InqBulkhead} backing instance per name
  * (façade design: Q.5a runtime split into {@code Sync} / {@code Async} typed views over one
  * registry).</p>
  */
-public final class ImperativeProvider implements ParadigmProvider {
+public final class SyncParadigmProvider implements ParadigmProvider {
 
     /**
      * System-default snapshot used as the apply-base for incoming bulkhead patches. Touched

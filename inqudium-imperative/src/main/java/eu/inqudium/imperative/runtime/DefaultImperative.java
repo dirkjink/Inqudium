@@ -48,7 +48,7 @@ import java.util.stream.Stream;
  * map; writes (during {@link #applyUpdate}) acquire a {@link ReentrantLock} that serialises
  * concurrent update calls.
  *
- * <p>Holds a back-reference to {@link ImperativeProvider} so the container can materialize new
+ * <p>Holds a back-reference to {@link SyncParadigmProvider} so the container can materialize new
  * bulkheads through the same path that built the initial set when {@link #applyUpdate}
  * encounters a previously-unknown name.
  */
@@ -71,7 +71,7 @@ public final class DefaultImperative implements Sync {
         }
     }
 
-    private final ImperativeProvider provider;
+    private final SyncParadigmProvider provider;
     private final UpdateDispatcher dispatcher;
     private final AtomicReference<Map<String, Entry>> bulkheads;
     private final ReentrantLock updateLock = new ReentrantLock();
@@ -83,7 +83,7 @@ public final class DefaultImperative implements Sync {
      *                         registration order.
      */
     public DefaultImperative(
-            ImperativeProvider provider,
+            SyncParadigmProvider provider,
             Map<String, Entry> initialBulkheads) {
         this(provider, initialBulkheads, new UpdateDispatcher());
     }
@@ -98,7 +98,7 @@ public final class DefaultImperative implements Sync {
      * @param dispatcher       the dispatcher used to route patches against existing components.
      */
     public DefaultImperative(
-            ImperativeProvider provider,
+            SyncParadigmProvider provider,
             Map<String, Entry> initialBulkheads,
             UpdateDispatcher dispatcher) {
         this.provider = Objects.requireNonNull(provider, "provider");

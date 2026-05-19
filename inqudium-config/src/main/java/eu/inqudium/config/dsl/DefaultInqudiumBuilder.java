@@ -9,6 +9,7 @@ import eu.inqudium.config.snapshot.ComponentSnapshot;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
 import eu.inqudium.config.spi.ParadigmProvider;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
+import eu.inqudium.config.spi.ProviderDiscovery;
 import eu.inqudium.config.validation.BuildReport;
 import eu.inqudium.config.validation.ConsistencyRule;
 import eu.inqudium.config.validation.ConsistencyRulePipeline;
@@ -30,8 +31,8 @@ import java.util.stream.Stream;
  * Default implementation of {@link InqudiumBuilder}.
  *
  * <p>Accumulates the user's {@code .general(...)} configuration plus per-paradigm sections, then
- * runs the build pipeline in {@link #build()}: load paradigm providers via
- * {@link ServiceLoader}, materialize each declared section through its provider, and assemble
+ * runs the build pipeline in {@link #build()}: discover paradigm providers via
+ * {@link ProviderDiscovery}, materialize each declared section through its provider, and assemble
  * the {@link DefaultInqRuntime}. If a paradigm section is declared but no provider is on the
  * classpath, build raises {@link ParadigmUnavailableException} naming the missing module.
  */
@@ -43,15 +44,7 @@ public final class DefaultInqudiumBuilder implements InqudiumBuilder {
     private boolean strict;
 
     public DefaultInqudiumBuilder() {
-        this.providers = loadProviders();
-    }
-
-    private static Map<ParadigmTag, ParadigmProvider> loadProviders() {
-        Map<ParadigmTag, ParadigmProvider> result = new LinkedHashMap<>();
-        for (ParadigmProvider provider : ServiceLoader.load(ParadigmProvider.class)) {
-            result.put(provider.paradigm(), provider);
-        }
-        return result;
+        this.providers = ProviderDiscovery.providers();
     }
 
     /**

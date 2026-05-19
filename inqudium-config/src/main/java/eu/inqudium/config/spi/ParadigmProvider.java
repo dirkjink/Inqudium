@@ -6,14 +6,16 @@ import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
 
 /**
- * Service-provider interface that links a paradigm module ({@code inqudium-imperative},
+ * Provider interface that links a paradigm module ({@code inqudium-imperative},
  * {@code inqudium-reactive}, {@code inqudium-rxjava3}, {@code inqudium-kotlin}) into the
  * runtime.
  *
- * <p>Each paradigm contributes one provider, registered via
- * {@code META-INF/services/eu.inqudium.config.spi.ParadigmProvider}. At runtime build time, the
- * top-level builder loads providers via {@link java.util.ServiceLoader}, matches each declared
- * paradigm section to the corresponding provider, and asks the provider to materialize a
+ * <p>Each paradigm module contributes one provider class. Provider discovery uses
+ * {@link ProviderDiscovery} — direct class-loading probes against known paradigm
+ * module class FQNs — mirroring the {@code DetectionAsync} pattern from ADR-037.
+ * At runtime build time, {@code DefaultInqudiumBuilder} asks {@code ProviderDiscovery}
+ * for the set of available providers, matches each declared paradigm section to the
+ * corresponding provider, and asks the provider to materialize a
  * {@link ParadigmContainer} from the section's accumulated patches plus the
  * {@link GeneralSnapshot}.
  *
