@@ -52,13 +52,13 @@ class BulkheadHandleListenerTest {
                 .build();
         @SuppressWarnings("unchecked")
         InqBulkhead<String, String> bh =
-                runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                runtime.sync().bulkhead("inventory").target();
         bh.execute(1L, 1L, "warm", IDENTITY);
         return new HotBulkhead(runtime, bh);
     }
 
-    /** Pair of {@link InqRuntime} and an already-warmed bulkhead handle. */
-    private record HotBulkhead(InqRuntime runtime, BulkheadHandle<SyncTag> bulkhead) {
+    /** Pair of {@link InqRuntime} and an already-warmed bulkhead component. */
+    private record HotBulkhead(InqRuntime runtime, InqBulkhead<String, String> bulkhead) {
     }
 
     @Nested

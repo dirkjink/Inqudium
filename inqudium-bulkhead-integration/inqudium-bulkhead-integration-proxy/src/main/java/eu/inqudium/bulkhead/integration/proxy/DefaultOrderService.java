@@ -44,8 +44,7 @@ public class DefaultOrderService implements OrderService {
 
     public DefaultOrderService(InqRuntime runtime) {
         eu.inqudium.imperative.bulkhead.InqBulkhead<?, ?> bulkhead =
-                (eu.inqudium.imperative.bulkhead.InqBulkhead<?, ?>) runtime.sync()
-                        .bulkhead(BulkheadConfig.BULKHEAD_NAME);
+                runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME).target();
         subscribeBulkheadEvents(bulkhead);
     }
 

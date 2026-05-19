@@ -121,13 +121,13 @@ public final class DefaultImperative implements Sync {
             throw new IllegalArgumentException(
                     "No bulkhead named '" + name + "'. Available: " + snapshot.keySet());
         }
-        return e.bulkhead();
+        return BulkheadHandle.sync(e.bulkhead());
     }
 
     @Override
     public Optional<BulkheadHandle<SyncTag>> findBulkhead(String name) {
         Entry e = bulkheads.get().get(name);
-        return e != null ? Optional.of(e.bulkhead()) : Optional.empty();
+        return e != null ? Optional.of(BulkheadHandle.sync(e.bulkhead())) : Optional.empty();
     }
 
     @Override

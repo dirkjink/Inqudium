@@ -177,7 +177,7 @@ class RuntimeTopologyEventsTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(req -> ChangeDecision.veto("policy: limits frozen"));
 
@@ -217,7 +217,7 @@ class RuntimeTopologyEventsTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override

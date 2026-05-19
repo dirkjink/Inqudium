@@ -67,7 +67,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 // Warm into HOT before the storm so the snapshot-listener path is registered.
                 bh.execute(0L, 0L, "warm", IDENTITY);
 
@@ -145,7 +145,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(0L, 0L, "warm", IDENTITY);
 
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
@@ -184,7 +184,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(0L, 0L, "warm", IDENTITY);
 
                 CountDownLatch ready = new CountDownLatch(2);

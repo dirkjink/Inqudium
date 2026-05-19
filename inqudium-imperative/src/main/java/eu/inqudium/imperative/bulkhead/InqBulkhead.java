@@ -1,8 +1,7 @@
 package eu.inqudium.imperative.bulkhead;
 
 import eu.inqudium.config.live.LiveContainer;
-import eu.inqudium.config.runtime.BulkheadHandle;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.config.runtime.BulkheadComponent;
 import eu.inqudium.config.snapshot.AdaptiveInstantStrategyConfig;
 import eu.inqudium.config.snapshot.AdaptiveStrategyConfig;
 import eu.inqudium.config.snapshot.AimdLimitAlgorithmConfig;
@@ -64,7 +63,7 @@ import eu.inqudium.imperative.lifecycle.spi.ImperativePhase;
  */
 public final class InqBulkhead<A, R>
         extends ImperativeLifecyclePhasedComponent<BulkheadSnapshot, A, R>
-        implements BulkheadHandle<SyncTag>,
+        implements BulkheadComponent,
                    InqDecorator<A, R>,
                    InqAsyncDecorator<A, R> {
 

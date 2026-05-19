@@ -19,7 +19,7 @@ import java.util.stream.Stream;
  * bulkhead components (the imperative module's {@code DefaultImperative}
  * implements {@code Sync} directly). {@code DefaultAsync} wraps that
  * container as a façade and projects each handle as a
- * {@code BulkheadHandle<AsyncTag>} via {@link BulkheadHandleAsAsyncView};
+ * {@code BulkheadHandle<AsyncTag>} via {@link AsyncBulkheadHandle};
  * the underlying bulkhead instance is shared (Q.5a / ADR-046).</p>
  *
  * <p>{@link #snapshots()} returns an empty stream because the wrapped
@@ -77,6 +77,6 @@ final class DefaultAsync implements Async {
     }
 
     private BulkheadHandle<AsyncTag> toAsyncHandle(BulkheadHandle<SyncTag> handle) {
-        return new BulkheadHandleAsAsyncView(handle);
+        return BulkheadHandle.async(handle.target());
     }
 }

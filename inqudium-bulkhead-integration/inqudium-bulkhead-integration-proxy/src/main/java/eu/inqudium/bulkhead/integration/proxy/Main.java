@@ -246,7 +246,7 @@ public final class Main {
     private static InqBulkhead<Object, Object> orderBulkhead(InqRuntime runtime) {
         return runtime.sync()
                 .bulkhead(BulkheadConfig.BULKHEAD_NAME)
-                .unwrap(InqBulkhead.class);
+                .target();
     }
 
     private static void joinQuietly(Thread t) {
