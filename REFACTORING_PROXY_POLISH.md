@@ -746,7 +746,7 @@ Commit subject: `chore: complete proxy polish, delete plan`
 * [x] P.0 — Audit (no commit) (2026-05-17)
 * [x] P.1 — Polish pass: bundled small fixes (2026-05-17, PR #79)
 * [x] P.2 — Documentation sweep (2026-05-17, PR #80)
-* [x] P.3 — `ElementResolver` name-uniqueness (dissolved by ADR-046 / Q.4 of `REFACTORING_PARADIGM_TAGGING.md`, PR #85) (2026-05-18)
+* [x] P.3 — `ElementResolver` name-uniqueness (dissolved by ADR-046, implemented in PR #85) (2026-05-18)
 * [ ] P.4 — Folder lambda hoisting (JMH-validated decision)
 * [x] P.5 — Test-infrastructure hardening (2026-05-17, PR #81)
 * [ ] P.6 — Plan deletion + final architecture polish

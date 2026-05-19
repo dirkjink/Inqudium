@@ -23,9 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for {@code createEntry(...)}, the paradigm-aware
- * factory entry-point introduced by Q.4 of
- * {@code REFACTORING_PARADIGM_TAGGING.md}.
+ * Tests for {@code createEntry(...)}, the paradigm-aware factory
+ * entry-point introduced by ADR-046 §5.
  *
  * <p>Coverage targets:</p>
  * <ul>

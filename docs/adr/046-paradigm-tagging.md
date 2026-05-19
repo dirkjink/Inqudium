@@ -1,7 +1,7 @@
 # ADR-046: ParadigmTag stamping by AnnotationEvaluator
 
-**Status:** Proposed
-**Date:** 2026-05-18
+**Status:** Accepted
+**Date:** 2026-05-18 (proposed); 2026-05-19 (accepted)
 **Deciders:** Core team
 
 ## Context
@@ -620,6 +620,39 @@ paradigm classification independently.
   dissolved by this ADR's adoption.
 
 **Implementation:**
-- `REFACTORING_PARADIGM_TAGGING.md` (to be written) — the
-  multi-PR migration plan that introduces the types and consumes
-  the new shape across the library.
+
+The migration is complete (2026-05-18 to 2026-05-19). The
+multi-PR plan document that drove the migration was deleted
+in Q.8 once all sub-steps merged; the full timeline is
+preserved in Git history (search for the file by its former
+path at any commit before Q.8's deletion commit). Ten
+sub-steps were merged as PRs #82, #83, #84, #85, #87, #88,
+#89, #90, and #91. The implementation followed
+the architectural decisions in §2–§5 of this ADR with two
+notable evolutions:
+
+- **Q.5a pre-emptively migrated the type-system layer** when
+  a generic-bound conflict between the existing
+  `BulkheadHandle<P>` parameter and the new `SyncTag`/
+  `AsyncTag` types surfaced mid-implementation. The legacy
+  `eu.inqudium.config.runtime.ParadigmTag` was deleted and
+  `ImperativeTag` relocated to `inqudium-core` as part of
+  the same PR, ahead of the Q.7 cleanup phase. The deviation
+  is documented in PR #87.
+
+- **Q.7.5 (added mid-plan)** converted all 13 leaf paradigm
+  tags from `final class` to `sealed interface` declarations
+  with package-private default implementations. The change
+  brings the entire tag hierarchy into structural consistency
+  and enables generic intersection bounds like
+  `<P extends SyncTag & ReactiveTag>` that classes forbid.
+  The structural choice supports future multi-paradigm
+  resilience elements (e.g. a hypothetical `ReactiveBulkhead`
+  serving both `Mono` and `Flux`).
+
+Related dissolved finding: `REFACTORING_PROXY_POLISH.md`
+finding 1.1 (`ElementResolver` name-uniqueness across element
+types) was dissolved by Q.4's introduction of
+`ElementResolver.resolveTriples(...)` — paradigm-tagged
+plans key on `(elementType, name)` pairs, making name
+collisions across element types safe by construction.

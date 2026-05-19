@@ -15,11 +15,11 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for the triple-keyed resolver helpers added in Q.4 of
- * {@code REFACTORING_PARADIGM_TAGGING.md} ({@code indexByTypeAndName},
- * {@code resolveTriples}, and the {@code ElementTypeAndName} key
- * record). Mirrors the structure of {@link ElementResolverTest} so the
- * legacy and stamped resolver paths are exercised side by side.
+ * Tests for the triple-keyed resolver helpers introduced by ADR-046
+ * ({@code indexByTypeAndName}, {@code resolveTriples}, and the
+ * {@code ElementTypeAndName} key record). Mirrors the structure of
+ * {@link ElementResolverTest} so the name-only and triple-keyed
+ * resolver paths are exercised side by side.
  *
  * <p>The cross-type name-collision tests pin the dissolution of
  * finding 1.1 from {@code REFACTORING_PROXY_POLISH.md}: keying the
