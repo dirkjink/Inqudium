@@ -13,13 +13,13 @@ package eu.inqudium.core.element.paradigm;
  * user-defined implementations — all share the same completion
  * contract and require no sub-shape distinction.</p>
  *
- * <p>Singleton — use {@link #INSTANCE}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code AsyncTagDefault}. Clients access the
+ * canonical instance via {@link #INSTANCE}.</p>
  */
-public final class AsyncTag implements ParadigmTag {
+public sealed interface AsyncTag extends ParadigmTag
+        permits AsyncTagDefault {
 
-    /** The singleton instance. */
-    public static final AsyncTag INSTANCE = new AsyncTag();
-
-    private AsyncTag() {
-    }
+    /** The canonical singleton instance. */
+    AsyncTag INSTANCE = AsyncTagDefault.INSTANCE;
 }

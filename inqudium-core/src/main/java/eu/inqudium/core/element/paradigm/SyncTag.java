@@ -8,13 +8,13 @@ package eu.inqudium.core.element.paradigm;
  * <p>Permit-release happens at method-return. The
  * {@code CompletionStage}-counterpart is {@link AsyncTag}.</p>
  *
- * <p>Singleton — use {@link #INSTANCE}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code SyncTagDefault}. Clients access the
+ * canonical instance via {@link #INSTANCE}.</p>
  */
-public final class SyncTag implements ParadigmTag {
+public sealed interface SyncTag extends ParadigmTag
+        permits SyncTagDefault {
 
-    /** The singleton instance. */
-    public static final SyncTag INSTANCE = new SyncTag();
-
-    private SyncTag() {
-    }
+    /** The canonical singleton instance. */
+    SyncTag INSTANCE = SyncTagDefault.INSTANCE;
 }

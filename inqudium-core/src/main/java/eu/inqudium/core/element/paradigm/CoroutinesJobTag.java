@@ -5,13 +5,10 @@ package eu.inqudium.core.element.paradigm;
  * coroutines paradigm. Lifecycle handle that signals completion
  * without carrying a result value.
  *
- * <p>Singleton — use {@link CoroutinesTag#JOB}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code CoroutinesJobTagDefault}. Clients access
+ * the canonical instance via {@link CoroutinesTag#JOB}.</p>
  */
-public final class CoroutinesJobTag implements CoroutinesTag {
-
-    /** The singleton instance. Package-private; use {@link CoroutinesTag#JOB}. */
-    static final CoroutinesJobTag INSTANCE = new CoroutinesJobTag();
-
-    private CoroutinesJobTag() {
-    }
+public sealed interface CoroutinesJobTag extends CoroutinesTag
+        permits CoroutinesJobTagDefault {
 }

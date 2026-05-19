@@ -5,13 +5,10 @@ package eu.inqudium.core.element.paradigm;
  * coroutines paradigm. Awaitable handle that completes with a
  * value or an exception.
  *
- * <p>Singleton — use {@link CoroutinesTag#DEFERRED}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code CoroutinesDeferredTagDefault}. Clients
+ * access the canonical instance via {@link CoroutinesTag#DEFERRED}.</p>
  */
-public final class CoroutinesDeferredTag implements CoroutinesTag {
-
-    /** The singleton instance. Package-private; use {@link CoroutinesTag#DEFERRED}. */
-    static final CoroutinesDeferredTag INSTANCE = new CoroutinesDeferredTag();
-
-    private CoroutinesDeferredTag() {
-    }
+public sealed interface CoroutinesDeferredTag extends CoroutinesTag
+        permits CoroutinesDeferredTagDefault {
 }

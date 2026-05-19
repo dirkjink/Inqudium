@@ -5,13 +5,10 @@ package eu.inqudium.core.element.paradigm;
  * reactive paradigm. Zero-or-more values, terminal completion
  * signal.
  *
- * <p>Singleton — use {@link ReactiveTag#FLUX}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code ReactiveFluxTagDefault}. Clients access
+ * the canonical instance via {@link ReactiveTag#FLUX}.</p>
  */
-public final class ReactiveFluxTag implements ReactiveTag {
-
-    /** The singleton instance. Package-private; use {@link ReactiveTag#FLUX}. */
-    static final ReactiveFluxTag INSTANCE = new ReactiveFluxTag();
-
-    private ReactiveFluxTag() {
-    }
+public sealed interface ReactiveFluxTag extends ReactiveTag
+        permits ReactiveFluxTagDefault {
 }

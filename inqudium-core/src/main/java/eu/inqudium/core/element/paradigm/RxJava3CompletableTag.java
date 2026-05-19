@@ -5,13 +5,10 @@ package eu.inqudium.core.element.paradigm;
  * RxJava 3 paradigm. Signal-only: completes either successfully
  * or with an error; carries no value.
  *
- * <p>Singleton — use {@link RxJava3Tag#COMPLETABLE}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code RxJava3CompletableTagDefault}. Clients
+ * access the canonical instance via {@link RxJava3Tag#COMPLETABLE}.</p>
  */
-public final class RxJava3CompletableTag implements RxJava3Tag {
-
-    /** The singleton instance. Package-private; use {@link RxJava3Tag#COMPLETABLE}. */
-    static final RxJava3CompletableTag INSTANCE = new RxJava3CompletableTag();
-
-    private RxJava3CompletableTag() {
-    }
+public sealed interface RxJava3CompletableTag extends RxJava3Tag
+        permits RxJava3CompletableTagDefault {
 }

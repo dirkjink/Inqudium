@@ -5,13 +5,10 @@ package eu.inqudium.core.element.paradigm;
  * RxJava 3 paradigm. Optional single value: completes with one
  * value, empty, or error.
  *
- * <p>Singleton — use {@link RxJava3Tag#MAYBE}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code RxJava3MaybeTagDefault}. Clients access
+ * the canonical instance via {@link RxJava3Tag#MAYBE}.</p>
  */
-public final class RxJava3MaybeTag implements RxJava3Tag {
-
-    /** The singleton instance. Package-private; use {@link RxJava3Tag#MAYBE}. */
-    static final RxJava3MaybeTag INSTANCE = new RxJava3MaybeTag();
-
-    private RxJava3MaybeTag() {
-    }
+public sealed interface RxJava3MaybeTag extends RxJava3Tag
+        permits RxJava3MaybeTagDefault {
 }

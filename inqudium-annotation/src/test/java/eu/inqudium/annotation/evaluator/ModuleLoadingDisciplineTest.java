@@ -136,13 +136,16 @@ final class ModuleLoadingDisciplineTest {
             Object tag = classifyMethod.invoke(null, syncFixture);
 
             // Sanity — the classifier ran end-to-end and produced a
-            //   SyncTag. Comparing class names (not instances) because
-            //   tag was loaded by the isolated loader: the SyncTag
-            //   visible from the test class and the one from the
-            //   isolated loader are two distinct Class objects.
+            //   SyncTag instance. Comparing class names (not instances)
+            //   because tag was loaded by the isolated loader: the
+            //   SyncTagDefault visible from the test class and the one
+            //   from the isolated loader are two distinct Class
+            //   objects. Post-Q.7.5 the runtime class is the
+            //   package-private SyncTagDefault (the concrete singleton
+            //   behind the SyncTag sealed interface).
             assertThat(tag).isNotNull();
             assertThat(tag.getClass().getName())
-                    .isEqualTo("eu.inqudium.core.element.paradigm.SyncTag");
+                    .isEqualTo("eu.inqudium.core.element.paradigm.SyncTagDefault");
 
             // Then — none of the paradigm-library classes loaded.
             //   peekLoadedClass exposes ClassLoader#findLoadedClass on

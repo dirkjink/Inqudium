@@ -28,14 +28,14 @@ public sealed interface CoroutinesTag extends ParadigmTag
                 CoroutinesJobTag, CoroutinesFlowTag {
 
     /** The {@code suspend fun} sub-shape. */
-    CoroutinesSuspendTag SUSPEND = CoroutinesSuspendTag.INSTANCE;
+    CoroutinesSuspendTag SUSPEND = CoroutinesSuspendTagDefault.INSTANCE;
 
     /** The {@code Deferred<T>} sub-shape. */
-    CoroutinesDeferredTag DEFERRED = CoroutinesDeferredTag.INSTANCE;
+    CoroutinesDeferredTag DEFERRED = CoroutinesDeferredTagDefault.INSTANCE;
 
     /** The {@code Job} sub-shape. */
-    CoroutinesJobTag JOB = CoroutinesJobTag.INSTANCE;
+    CoroutinesJobTag JOB = CoroutinesJobTagDefault.INSTANCE;
 
     /** The {@code Flow<T>} sub-shape. */
-    CoroutinesFlowTag FLOW = CoroutinesFlowTag.INSTANCE;
+    CoroutinesFlowTag FLOW = CoroutinesFlowTagDefault.INSTANCE;
 }
