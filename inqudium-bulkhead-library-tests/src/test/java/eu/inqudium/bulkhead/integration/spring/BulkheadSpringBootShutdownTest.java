@@ -67,7 +67,7 @@ class BulkheadSpringBootShutdownTest {
         InqRuntime runtime = context.getBean(InqRuntime.class);
         @SuppressWarnings("unchecked")
         InqBulkhead<Void, Object> bh =
-                (InqBulkhead<Void, Object>) runtime.sync().bulkhead("aopShutdown");
+                runtime.sync().bulkhead("aopShutdown").unwrap(InqBulkhead.class);
 
         assertThat(bh.name()).isEqualTo("aopShutdown");
 

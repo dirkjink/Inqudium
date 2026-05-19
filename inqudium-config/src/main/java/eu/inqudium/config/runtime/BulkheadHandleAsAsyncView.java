@@ -94,6 +94,22 @@ final class BulkheadHandleAsAsyncView implements BulkheadHandle<AsyncTag> {
         return wrapped.evaluateRemoval(currentSnapshot);
     }
 
+    /**
+     * Override that unwraps the delegate before casting. An async
+     * view wraps a sync handle, which in turn IS-A {@code InqBulkhead}
+     * post-paradigm-tagging Q.7. The default implementation would
+     * try to cast {@code this} (the view) to the target — which
+     * doesn't work for {@code InqBulkhead.class} since the view
+     * is not an {@code InqBulkhead}. Unwrapping recursively lets
+     * the same {@code unwrap(InqBulkhead.class)} call succeed
+     * regardless of whether the caller came in via the sync or
+     * async surface.
+     */
+    @Override
+    public <T> T unwrap(Class<T> target) {
+        return wrapped.unwrap(target);
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;

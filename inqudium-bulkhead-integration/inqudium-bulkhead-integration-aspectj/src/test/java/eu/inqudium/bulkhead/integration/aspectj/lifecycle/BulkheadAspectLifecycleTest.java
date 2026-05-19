@@ -72,7 +72,7 @@ class BulkheadAspectLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bh =
-                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("aop-cold");
+                        runtime.sync().bulkhead("aop-cold").unwrap(InqBulkhead.class);
                 SingleElementAspect aspect = new SingleElementAspect(new ElementLayerProvider(bh));
 
                 Object result = aspect.execute(() -> "cold-to-hot-ok");
@@ -106,7 +106,7 @@ class BulkheadAspectLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bh =
-                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("aop-swap");
+                        runtime.sync().bulkhead("aop-swap").unwrap(InqBulkhead.class);
                 SingleElementAspect aspect = new SingleElementAspect(new ElementLayerProvider(bh));
 
                 assertThat(aspect.execute(() -> "warm")).isEqualTo("warm");
@@ -148,7 +148,7 @@ class BulkheadAspectLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bh =
-                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("aop-remove");
+                        runtime.sync().bulkhead("aop-remove").unwrap(InqBulkhead.class);
                 SingleElementAspect aspect = new SingleElementAspect(new ElementLayerProvider(bh));
 
                 assertThat(aspect.execute(() -> "warm")).isEqualTo("warm");

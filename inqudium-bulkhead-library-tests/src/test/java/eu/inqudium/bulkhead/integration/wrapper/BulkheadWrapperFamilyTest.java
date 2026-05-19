@@ -44,7 +44,7 @@ class BulkheadWrapperFamilyTest {
      */
     @SuppressWarnings("unchecked")
     private static <A, R> InqBulkhead<A, R> newBulkhead(InqRuntime runtime, String name) {
-        return (InqBulkhead<A, R>) runtime.sync().bulkhead(name);
+        return runtime.sync().bulkhead(name).unwrap(InqBulkhead.class);
     }
 
     @Nested

@@ -244,8 +244,9 @@ public final class Main {
      */
     @SuppressWarnings("unchecked")
     private static InqBulkhead<Object, Object> orderBulkhead(InqRuntime runtime) {
-        return (InqBulkhead<Object, Object>) runtime.sync()
-                .bulkhead(BulkheadConfig.BULKHEAD_NAME);
+        return runtime.sync()
+                .bulkhead(BulkheadConfig.BULKHEAD_NAME)
+                .unwrap(InqBulkhead.class);
     }
 
     private static void joinQuietly(Thread t) {

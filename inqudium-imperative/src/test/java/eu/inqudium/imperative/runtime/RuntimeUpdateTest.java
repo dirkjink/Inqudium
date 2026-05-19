@@ -46,7 +46,7 @@ class RuntimeUpdateTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(15);
 
                 // When
@@ -280,7 +280,7 @@ class RuntimeUpdateTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 assertThat(bh.lifecycleState())
                         .as("the bulkhead is cold before the first execute")
                         .isEqualTo(LifecycleState.COLD);
@@ -325,7 +325,7 @@ class RuntimeUpdateTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 LayerTerminal<String, String> identity =
                         (chainId, callId, argument) -> argument;
                 bh.execute(1L, 1L, "warm", identity);
@@ -366,10 +366,10 @@ class RuntimeUpdateTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bhA =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("a");
+                        runtime.sync().bulkhead("a").unwrap(InqBulkhead.class);
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bhB =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("b");
+                        runtime.sync().bulkhead("b").unwrap(InqBulkhead.class);
                 LayerTerminal<String, String> identity =
                         (chainId, callId, argument) -> argument;
                 bhA.execute(1L, 1L, "warm", identity);
@@ -424,7 +424,7 @@ class RuntimeUpdateTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 LayerTerminal<String, String> identity =
                         (chainId, callId, argument) -> argument;
                 bh.execute(1L, 1L, "warm", identity);

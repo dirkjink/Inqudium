@@ -58,7 +58,7 @@ class RuntimeDryRunTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
 
                 // When
                 BuildReport report = runtime.dryRun(u -> u.sync(s -> s
@@ -143,7 +143,7 @@ class RuntimeDryRunTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 BuildReport report = runtime.dryRun(u -> u.sync(s -> s
@@ -194,7 +194,7 @@ class RuntimeDryRunTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(req -> ChangeDecision.veto("policy: limits frozen"));
 
@@ -222,7 +222,7 @@ class RuntimeDryRunTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override
@@ -275,7 +275,7 @@ class RuntimeDryRunTest {
                 // Warm gamma so a hot-patch listener veto can engage.
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> gamma =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("gamma");
+                        runtime.sync().bulkhead("gamma").unwrap(InqBulkhead.class);
                 gamma.execute(1L, 1L, "warm", IDENTITY);
                 gamma.onChangeRequest(req -> ChangeDecision.veto("frozen"));
 
@@ -323,7 +323,7 @@ class RuntimeDryRunTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 BuildReport first = runtime.dryRun(u -> u.sync(s -> s

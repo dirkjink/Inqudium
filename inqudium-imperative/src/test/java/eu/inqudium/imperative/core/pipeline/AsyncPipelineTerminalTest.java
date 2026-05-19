@@ -505,7 +505,7 @@ class AsyncPipelineTerminalTest {
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
+                        runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
                 InqPipeline pipeline = InqPipeline.builder()
                         .shield(bulkhead)
                         .build();
@@ -535,7 +535,7 @@ class AsyncPipelineTerminalTest {
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
+                        runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
                 List<String> trace = new ArrayList<>();
                 InqPipeline pipeline = InqPipeline.builder()
                         .shield(bulkhead)

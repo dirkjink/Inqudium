@@ -57,7 +57,7 @@ class BulkheadWrapperLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
 
                 // Given — wrapper built while bulkhead is cold; subscribe to the runtime
                 // publisher so the cold-to-hot event is observable.
@@ -94,7 +94,7 @@ class BulkheadWrapperLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
 
                 List<ComponentBecameHotEvent> hotEvents = new ArrayList<>();
                 runtime.general().eventPublisher()
@@ -142,7 +142,7 @@ class BulkheadWrapperLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
 
                 Supplier<String> protected_ = bh.decorateSupplier(() -> "ok");
 
@@ -181,7 +181,7 @@ class BulkheadWrapperLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
 
                 Supplier<String> protected_ = bh.decorateSupplier(() -> "ok");
                 assertThat(protected_.get()).isEqualTo("ok");
@@ -220,7 +220,7 @@ class BulkheadWrapperLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
 
                 Supplier<String> protected_ = bh.decorateSupplier(() -> "ok");
                 assertThat(protected_.get()).isEqualTo("ok");
@@ -247,7 +247,7 @@ class BulkheadWrapperLifecycleTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, null, (cid, callId, arg) -> null);
 
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));

@@ -560,7 +560,7 @@ class HybridAspectPipelineTerminalTest {
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
+                        runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
 
                 // When
                 HybridAspectPipelineTerminal terminal = HybridAspectPipelineTerminal.of(
@@ -587,7 +587,7 @@ class HybridAspectPipelineTerminalTest {
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
+                        runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
                 List<String> trace = new ArrayList<>();
 
                 // When
