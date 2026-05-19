@@ -4,7 +4,6 @@ import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.imperative.core.pipeline.AsyncLayerAction;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
-import eu.inqudium.pipeline.InqPipeline;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
 import eu.inqudium.proxy.folding.AsyncChainFolder;
 import eu.inqudium.proxy.folding.FoldedAsyncChain;
@@ -73,38 +72,11 @@ public final class AsyncEntryBuilder {
     public static MethodDispatchEntry build(
             Method method,
             MethodPlan.Decorated decorated,
-            InqPipeline pipeline,
-            Object target,
-            Map<String, InqElement> elementsByName) {
-
-        List<InqElement> elements = ElementResolver.resolve(
-                decorated.elementNamesOuterToInner(), elementsByName);
-        return finishBuild(method, target, elements);
-    }
-
-    /**
-     * Stamped-plan overload mirroring
-     * {@link #build(Method, MethodPlan.Decorated, InqPipeline, Object, Map)}.
-     * Resolves elements via
-     * {@link ElementResolver#resolveTriples(List, Map)} so the
-     * triple-keyed index from ADR-046 is honoured.
-     *
-     * @since 0.9.0
-     */
-    public static MethodDispatchEntry build(
-            Method method,
-            MethodPlan.StampedDecorated stamped,
             Object target,
             Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
 
         List<InqElement> elements = ElementResolver.resolveTriples(
-                stamped.elementsOuterToInner(), elementsByTypeAndName);
-        return finishBuild(method, target, elements);
-    }
-
-    private static MethodDispatchEntry finishBuild(
-            Method method, Object target, List<InqElement> elements) {
-
+                decorated.elementsOuterToInner(), elementsByTypeAndName);
         AsyncParadigmValidator.validate(elements, method);
 
         List<AsyncLayerAction<Void, Object>> asyncLayers = elements.stream()

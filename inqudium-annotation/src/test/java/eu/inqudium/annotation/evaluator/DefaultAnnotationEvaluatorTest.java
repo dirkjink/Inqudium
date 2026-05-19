@@ -33,8 +33,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>The tests pin: validation parity with the legacy {@code evaluate(...)},
  * paradigm-stamping across all five top-level paradigm families, the
- * {@link ElementRef} pair shape carried by {@link MethodPlan.StampedDecorated},
- * the {@link MethodPlan.StampedPassThrough} variant, immutability of the
+ * {@link ElementRef} pair shape carried by {@link MethodPlan.Decorated},
+ * the {@link MethodPlan.PassThrough} variant, immutability of the
  * element list, and backward-compatibility — the existing
  * {@code evaluate(...)} method continues to produce the legacy plan
  * variants unchanged.</p>
@@ -44,7 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * fixture's annotations reference; one stub element per element type per
  * pipeline (ADR-036 §4).</p>
  */
-class DefaultAnnotationEvaluatorStampedTest {
+class DefaultAnnotationEvaluatorTest {
 
     @Nested
     class ValidationParityWithLegacyMethod {
@@ -54,7 +54,7 @@ class DefaultAnnotationEvaluatorStampedTest {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith();
             // When / Then
-            assertThatThrownBy(() -> evaluator.evaluateStamped(null, SyncAnnotatedImpl.class))
+            assertThatThrownBy(() -> evaluator.evaluate(null, SyncAnnotatedImpl.class))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("serviceInterface");
         }
@@ -64,7 +64,7 @@ class DefaultAnnotationEvaluatorStampedTest {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith();
             // When / Then
-            assertThatThrownBy(() -> evaluator.evaluateStamped(SyncApi.class, null))
+            assertThatThrownBy(() -> evaluator.evaluate(SyncApi.class, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("implementationClass");
         }
@@ -74,105 +74,106 @@ class DefaultAnnotationEvaluatorStampedTest {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith();
             // When / Then
-            assertThatThrownBy(() -> evaluator.evaluateStamped(
+            assertThatThrownBy(() -> evaluator.evaluate(
                     SyncAnnotatedImpl.class, SyncAnnotatedImpl.class))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("must be an interface");
         }
 
         // The fourth defensive check — "implementation does not implement
-        // the service interface" — is asserted on the legacy path by
-        // AnnotationEvaluatorTest. Both public methods route through the
-        // shared validateArguments(...) helper, so behavioural parity is
-        // guaranteed by construction; duplicating the test here would
-        // only add a @SuppressWarnings({"unchecked","rawtypes"}) line.
+        // the service interface" — runs through the shared
+        // validateArguments(...) helper alongside the three checks above;
+        // duplicating it here would require raw-type casts to bypass the
+        // compile-time generic check and only add a
+        // @SuppressWarnings({"unchecked","rawtypes"}) line for negligible
+        // additional coverage.
     }
 
     @Nested
     class ParadigmStamping {
 
         @Test
-        void sync_method_produces_stamped_decorated_with_sync_tag() {
+        void sync_method_produces_decorated_with_sync_tag() {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith(
                     stubElement("bh", InqElementType.BULKHEAD));
             Method m = declared(SyncApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     SyncApi.class, SyncAnnotatedImpl.class);
 
             // Then
             assertThat(result.plans().get(m)).isInstanceOfSatisfying(
-                    MethodPlan.StampedDecorated.class,
+                    MethodPlan.Decorated.class,
                     sd -> assertThat(sd.paradigm()).isSameAs(SyncTag.INSTANCE));
         }
 
         @Test
-        void completion_stage_method_produces_stamped_decorated_with_async_tag() {
+        void completion_stage_method_produces_decorated_with_async_tag() {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith(
                     stubElement("bh", InqElementType.BULKHEAD));
             Method m = declared(AsyncApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     AsyncApi.class, AsyncAnnotatedImpl.class);
 
             // Then
             assertThat(result.plans().get(m)).isInstanceOfSatisfying(
-                    MethodPlan.StampedDecorated.class,
+                    MethodPlan.Decorated.class,
                     sd -> assertThat(sd.paradigm()).isSameAs(AsyncTag.INSTANCE));
         }
 
         @Test
-        void mono_method_produces_stamped_decorated_with_reactive_mono_tag() {
+        void mono_method_produces_decorated_with_reactive_mono_tag() {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith(
                     stubElement("bh", InqElementType.BULKHEAD));
             Method m = declared(MonoApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     MonoApi.class, MonoAnnotatedImpl.class);
 
             // Then
             assertThat(result.plans().get(m)).isInstanceOfSatisfying(
-                    MethodPlan.StampedDecorated.class,
+                    MethodPlan.Decorated.class,
                     sd -> assertThat(sd.paradigm()).isSameAs(ReactiveTag.MONO));
         }
 
         @Test
-        void single_method_produces_stamped_decorated_with_rxjava3_single_tag() {
+        void single_method_produces_decorated_with_rxjava3_single_tag() {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith(
                     stubElement("bh", InqElementType.BULKHEAD));
             Method m = declared(SingleApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     SingleApi.class, SingleAnnotatedImpl.class);
 
             // Then
             assertThat(result.plans().get(m)).isInstanceOfSatisfying(
-                    MethodPlan.StampedDecorated.class,
+                    MethodPlan.Decorated.class,
                     sd -> assertThat(sd.paradigm()).isSameAs(RxJava3Tag.SINGLE));
         }
 
         @Test
-        void deferred_method_produces_stamped_decorated_with_coroutines_deferred_tag() {
+        void deferred_method_produces_decorated_with_coroutines_deferred_tag() {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith(
                     stubElement("bh", InqElementType.BULKHEAD));
             Method m = declared(DeferredApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     DeferredApi.class, DeferredAnnotatedImpl.class);
 
             // Then
             assertThat(result.plans().get(m)).isInstanceOfSatisfying(
-                    MethodPlan.StampedDecorated.class,
+                    MethodPlan.Decorated.class,
                     sd -> assertThat(sd.paradigm()).isSameAs(CoroutinesTag.DEFERRED));
         }
     }
@@ -181,29 +182,29 @@ class DefaultAnnotationEvaluatorStampedTest {
     class PassThroughVariant {
 
         @Test
-        void unannotated_sync_method_produces_stamped_pass_through_with_sync_tag() {
+        void unannotated_sync_method_produces_pass_through_with_sync_tag() {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith();
             Method m = declared(SyncApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     SyncApi.class, SyncUnannotatedImpl.class);
 
             // Then
             assertThat(result.plans().get(m)).isInstanceOfSatisfying(
-                    MethodPlan.StampedPassThrough.class,
+                    MethodPlan.PassThrough.class,
                     spt -> assertThat(spt.paradigm()).isSameAs(SyncTag.INSTANCE));
         }
 
         @Test
-        void unannotated_mono_method_produces_stamped_pass_through_with_reactive_mono_tag() {
-            // What is to be tested? — StampedPassThrough must still
+        void unannotated_mono_method_produces_pass_through_with_reactive_mono_tag() {
+            // What is to be tested? — PassThrough must still
             //   carry the paradigm of the method, even when no
             //   resilience annotations apply. This lets downstream
             //   dispatch routing pick the right path even for
             //   pass-through methods.
-            // Successful when? — the plan is StampedPassThrough and
+            // Successful when? — the plan is PassThrough and
             //   its paradigm() is ReactiveTag.MONO.
             // Why important? — Without paradigm-stamping on
             //   pass-through plans, a Mono-returning unannotated
@@ -215,28 +216,28 @@ class DefaultAnnotationEvaluatorStampedTest {
             Method m = declared(MonoApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     MonoApi.class, MonoUnannotatedImpl.class);
 
             // Then
             assertThat(result.plans().get(m)).isInstanceOfSatisfying(
-                    MethodPlan.StampedPassThrough.class,
+                    MethodPlan.PassThrough.class,
                     spt -> assertThat(spt.paradigm()).isSameAs(ReactiveTag.MONO));
         }
 
         @Test
-        void unoverridden_default_method_produces_stamped_pass_through() {
+        void unoverridden_default_method_produces_pass_through() {
             // Given
             AnnotationEvaluator evaluator = evaluatorWith();
             Method m = declared(DefaultMethodApi.class, "greet");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     DefaultMethodApi.class, NoOverrideImpl.class);
 
             // Then
             assertThat(result.plans().get(m))
-                    .isInstanceOf(MethodPlan.StampedPassThrough.class);
+                    .isInstanceOf(MethodPlan.PassThrough.class);
         }
     }
 
@@ -251,12 +252,12 @@ class DefaultAnnotationEvaluatorStampedTest {
             Method m = declared(SyncApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     SyncApi.class, SyncAnnotatedImpl.class);
 
             // Then
-            MethodPlan.StampedDecorated plan =
-                    (MethodPlan.StampedDecorated) result.plans().get(m);
+            MethodPlan.Decorated plan =
+                    (MethodPlan.Decorated) result.plans().get(m);
             assertThat(plan.elementsOuterToInner()).hasSize(1);
             ElementRef ref = plan.elementsOuterToInner().get(0);
             assertThat(ref.elementType()).isEqualTo(InqElementType.BULKHEAD);
@@ -283,12 +284,12 @@ class DefaultAnnotationEvaluatorStampedTest {
             Method m = declared(MultiAnnotationApi.class, "op");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     MultiAnnotationApi.class, MultiAnnotationImpl.class);
 
             // Then
-            MethodPlan.StampedDecorated plan =
-                    (MethodPlan.StampedDecorated) result.plans().get(m);
+            MethodPlan.Decorated plan =
+                    (MethodPlan.Decorated) result.plans().get(m);
             assertThat(plan.elementsOuterToInner()).containsExactly(
                     new ElementRef(InqElementType.CIRCUIT_BREAKER, "cb"),
                     new ElementRef(InqElementType.RETRY, "rt"));
@@ -300,10 +301,10 @@ class DefaultAnnotationEvaluatorStampedTest {
             AnnotationEvaluator evaluator = evaluatorWith(
                     stubElement("bh", InqElementType.BULKHEAD));
             Method m = declared(SyncApi.class, "op");
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     SyncApi.class, SyncAnnotatedImpl.class);
-            MethodPlan.StampedDecorated plan =
-                    (MethodPlan.StampedDecorated) result.plans().get(m);
+            MethodPlan.Decorated plan =
+                    (MethodPlan.Decorated) result.plans().get(m);
 
             // When / Then
             assertThatThrownBy(() -> plan.elementsOuterToInner().clear())
@@ -336,7 +337,7 @@ class DefaultAnnotationEvaluatorStampedTest {
             Method monoOp = declared(MixedParadigmApi.class, "monoOp");
 
             // When
-            EvaluationResult result = evaluator.evaluateStamped(
+            EvaluationResult result = evaluator.evaluate(
                     MixedParadigmApi.class, MixedParadigmImpl.class);
 
             // Then
@@ -347,52 +348,11 @@ class DefaultAnnotationEvaluatorStampedTest {
 
         private ParadigmTag plansParadigm(EvaluationResult result, Method method) {
             return switch (result.plans().get(method)) {
-                case MethodPlan.StampedPassThrough spt -> spt.paradigm();
-                case MethodPlan.StampedDecorated sd -> sd.paradigm();
+                case MethodPlan.PassThrough spt -> spt.paradigm();
+                case MethodPlan.Decorated sd -> sd.paradigm();
                 default -> throw new AssertionError(
-                        "Expected a Stamped* plan for " + method + " but got " + result.plans().get(method));
+                        "Expected a stamped plan for " + method + " but got " + result.plans().get(method));
             };
-        }
-    }
-
-    @Nested
-    class LegacyMethodStillWorks {
-
-        @Test
-        void legacy_evaluate_still_produces_legacy_decorated_for_annotated_method() {
-            // Given
-            AnnotationEvaluator evaluator = evaluatorWith(
-                    stubElement("bh", InqElementType.BULKHEAD));
-            Method m = declared(SyncApi.class, "op");
-
-            // When
-            EvaluationResult result = evaluator.evaluate(
-                    SyncApi.class, SyncAnnotatedImpl.class);
-
-            // Then
-            assertThat(result.plans().get(m))
-                    .isInstanceOf(MethodPlan.Decorated.class)
-                    .isNotInstanceOf(MethodPlan.StampedDecorated.class)
-                    .isNotInstanceOf(MethodPlan.StampedPassThrough.class);
-            assertThat((MethodPlan.Decorated) result.plans().get(m))
-                    .isEqualTo(new MethodPlan.Decorated(List.of("bh")));
-        }
-
-        @Test
-        void legacy_evaluate_still_produces_legacy_pass_through_for_unannotated_method() {
-            // Given
-            AnnotationEvaluator evaluator = evaluatorWith();
-            Method m = declared(SyncApi.class, "op");
-
-            // When
-            EvaluationResult result = evaluator.evaluate(
-                    SyncApi.class, SyncUnannotatedImpl.class);
-
-            // Then
-            assertThat(result.plans().get(m))
-                    .isInstanceOf(MethodPlan.PassThrough.class)
-                    .isNotInstanceOf(MethodPlan.StampedPassThrough.class)
-                    .isNotInstanceOf(MethodPlan.StampedDecorated.class);
         }
     }
 
@@ -417,31 +377,31 @@ class DefaultAnnotationEvaluatorStampedTest {
     }
 
     @Nested
-    class StampedPlanRecords {
+    class PlanRecords {
 
         @Test
-        void stamped_pass_through_rejects_null_paradigm() {
+        void pass_through_rejects_null_paradigm() {
             // Given / When / Then
-            assertThatThrownBy(() -> new MethodPlan.StampedPassThrough(null))
+            assertThatThrownBy(() -> new MethodPlan.PassThrough(null))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("paradigm");
         }
 
         @Test
-        void stamped_decorated_rejects_null_paradigm() {
+        void decorated_rejects_null_paradigm() {
             // Given / When / Then
-            assertThatThrownBy(() -> new MethodPlan.StampedDecorated(null, List.of()))
+            assertThatThrownBy(() -> new MethodPlan.Decorated(null, List.of()))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("paradigm");
         }
 
         @Test
-        void stamped_decorated_defensively_copies_element_list() {
+        void decorated_defensively_copies_element_list() {
             // Given a mutable list passed to the record's constructor
             List<ElementRef> input = new java.util.ArrayList<>();
             input.add(new ElementRef(InqElementType.BULKHEAD, "bh"));
-            MethodPlan.StampedDecorated plan =
-                    new MethodPlan.StampedDecorated(SyncTag.INSTANCE, input);
+            MethodPlan.Decorated plan =
+                    new MethodPlan.Decorated(SyncTag.INSTANCE, input);
 
             // When the original input is mutated after construction
             input.add(new ElementRef(InqElementType.RETRY, "rt"));

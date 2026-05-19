@@ -11,8 +11,7 @@ import java.util.Objects;
  * {@code (paradigm, elementType, name)} registry-key triple used by
  * paradigm-aware integration mechanisms; the third component, the paradigm
  * tag, is carried by the surrounding
- * {@link MethodPlan.StampedDecorated} or
- * {@link MethodPlan.StampedPassThrough}.</p>
+ * {@link MethodPlan.Decorated} or {@link MethodPlan.PassThrough}.</p>
  *
  * <p>Name uniqueness assumptions: per ADR-046, the
  * {@code (elementType, name)} pair is sufficient to disambiguate pipeline

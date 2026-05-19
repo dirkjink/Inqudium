@@ -116,8 +116,7 @@ eu.inqudium.proxy
 │   ├── AsyncChainFolder               //   public — builds FoldedAsyncChain
 │   └── FoldedAsyncChain               //   public @FunctionalInterface — async counterpart
 │
-├── dispatch/                          // Public — paradigm classification
-│   ├── ParadigmDetector               //   public — isAsyncMethod(Method); JDK types only
+├── dispatch/                          // Public — runtime detection
 │   └── DetectionAsync                 //   public — probes for inqudium-imperative
 │
 ├── invocation/                        // Public sealed interface + package-private implementations
@@ -368,9 +367,7 @@ classify(method, plan, implClass):
 
 `Object`-declared methods are not handled by the factory: `serviceInterface.getMethods()` on an interface excludes them, so the evaluator never returns a plan for `equals`/`hashCode`/`toString`. `ProxyBuilder` seeds `ObjectMethodEntry` instances for those three directly after the evaluator pass.
 
-`overriddenByImpl(method, implClass)` is a small reflective check on whether the implementation class declares the same signature as a non-default method. The evaluator already does the same check internally for its own purposes; the proxy repeats it because it consumes `MethodPlan.StampedPassThrough` opaquely and needs the bit independently.
-
-The legacy `createEntry(...)` overloads (consuming `MethodPlan.PassThrough` / `Decorated`) remain in place for backward compatibility and route through `ParadigmDetector.isAsyncMethod(method)` for the sync-vs-async decision. They are slated for removal alongside the legacy plan permits — see `REFACTORING_PARADIGM_TAGGING.md` sub-step Q.6.
+`overriddenByImpl(method, implClass)` is a small reflective check on whether the implementation class declares the same signature as a non-default method. The evaluator already does the same check internally for its own purposes; the proxy repeats it because it consumes `MethodPlan.PassThrough` opaquely and needs the bit independently.
 
 ### 7.1 Element resolution by `(elementType, name)` pair
 
@@ -705,7 +702,7 @@ The paradigm-validator design deserves explicit documentation. The validator mus
 - `SyncParadigmValidator` — references only `InqDecorator` from `inqudium-core`; always loadable.
 - `AsyncParadigmValidator` — references `InqAsyncDecorator` from `inqudium-imperative`; loaded only via the `DetectionAsync.isPresent()` branch in `MethodDispatchEntryFactory`. The factory delegates the entire async build to `AsyncEntryBuilder`, which is the single place that references `AsyncParadigmValidator.validate(...)`, `FoldedAsyncChain`, and the layer-extraction helper `toAsyncLayerAction(...)`. The factory's only async-side touch is the `AsyncEntryBuilder.build(...)` `invokestatic` call inside `buildAsyncDecorated(...)`. JVM lazy class loading (JVMS §5.4) resolves `AsyncEntryBuilder` only when that method is first invoked, which only happens after `DetectionAsync.isPresent()` has returned `true`.
 
-Both are package-private static helpers in `eu.inqudium.proxy.construction`. The factory selects between them via the result of `ParadigmDetector.isAsyncMethod(method)`. No type hierarchy connects them — the relationship is via the factory's branching, not via polymorphism. This is simpler than an abstract `ParadigmValidator` interface with two implementations and equally satisfies the class-loading constraint.
+Both are package-private static helpers in `eu.inqudium.proxy.construction`. The factory selects between them via the paradigm carried on the `MethodPlan.Decorated` plan (ADR-046 / Q.4): `SyncTag` → `SyncParadigmValidator`, `AsyncTag` → `AsyncParadigmValidator`. No type hierarchy connects them — the relationship is via the factory's switch, not via polymorphism. This is simpler than an abstract `ParadigmValidator` interface with two implementations and equally satisfies the class-loading constraint.
 
 The async-build flow itself lives in a separate class `AsyncEntryBuilder` in the same package as the factory. This is not just for code organisation — it is an *architectural* requirement enforced by JVMS §5.4 mechanics. The HotSpot bytecode verifier eagerly resolves the return types of all `MethodHandle`s in a class's `BootstrapMethods` attribute when the class's first `invokedynamic` site links. A private static helper inside the factory whose method reference appears in any lambda site would trigger eager loading of its return type — pulling `AsyncLayerAction` onto the sync path regardless of which method is actually called. The fix is structural: the async-build flow lives behind an `invokestatic` boundary (a regular static method invocation on a different class), which IS lazy. Class-loading discipline is empirically verified by `ModuleLoadingDisciplineTest`.
 

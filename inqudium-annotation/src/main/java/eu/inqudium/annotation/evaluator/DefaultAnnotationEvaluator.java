@@ -38,25 +38,13 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
     }
 
     @Override
-    public <T> EvaluationResult evaluate(Class<T> serviceInterface, Class<? extends T> implementationClass) {
-        validateArguments(serviceInterface, implementationClass);
-
-        Map<Method, MethodPlan> plans = new LinkedHashMap<>();
-        for (Method interfaceMethod : serviceInterface.getMethods()) {
-            MethodPlan plan = planFor(serviceInterface, interfaceMethod, implementationClass);
-            plans.put(interfaceMethod, plan);
-        }
-        return new EvaluationResult(plans);
-    }
-
-    @Override
-    public <T> EvaluationResult evaluateStamped(
+    public <T> EvaluationResult evaluate(
             Class<T> serviceInterface, Class<? extends T> implementationClass) {
         validateArguments(serviceInterface, implementationClass);
 
         Map<Method, MethodPlan> plans = new LinkedHashMap<>();
         for (Method interfaceMethod : serviceInterface.getMethods()) {
-            MethodPlan plan = stampedPlanFor(serviceInterface, interfaceMethod, implementationClass);
+            MethodPlan plan = planFor(serviceInterface, interfaceMethod, implementationClass);
             plans.put(interfaceMethod, plan);
         }
         return new EvaluationResult(plans);
@@ -84,34 +72,18 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
     private MethodPlan planFor(
             Class<?> serviceInterface, Method interfaceMethod, Class<?> implementationClass) {
 
-        AnnotatedElement annotatedElement = resolveAnnotatedElement(interfaceMethod, implementationClass);
-
-        if (annotatedElement == null) {
-            return new MethodPlan.PassThrough();
-        }
-
-        List<String> orderedNames = new ArrayList<>();
-        forEachOrderedElement(serviceInterface, interfaceMethod, annotatedElement,
-                (type, name) -> orderedNames.add(name));
-
-        return new MethodPlan.Decorated(orderedNames);
-    }
-
-    private MethodPlan stampedPlanFor(
-            Class<?> serviceInterface, Method interfaceMethod, Class<?> implementationClass) {
-
         ParadigmTag paradigm = ParadigmClassifier.classify(interfaceMethod);
         AnnotatedElement annotatedElement = resolveAnnotatedElement(interfaceMethod, implementationClass);
 
         if (annotatedElement == null) {
-            return new MethodPlan.StampedPassThrough(paradigm);
+            return new MethodPlan.PassThrough(paradigm);
         }
 
         List<ElementRef> orderedRefs = new ArrayList<>();
         forEachOrderedElement(serviceInterface, interfaceMethod, annotatedElement,
                 (type, name) -> orderedRefs.add(new ElementRef(type, name)));
 
-        return new MethodPlan.StampedDecorated(paradigm, orderedRefs);
+        return new MethodPlan.Decorated(paradigm, orderedRefs);
     }
 
     private AnnotatedElement resolveAnnotatedElement(
@@ -127,8 +99,7 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
     /**
      * Resolves the ordered list of element types for {@code annotatedElement}
      * and invokes {@code consumer} for each {@code (type, name)} pair in
-     * order. Shared between {@link #planFor} and {@link #stampedPlanFor} so
-     * both walk the resolvers identically.
+     * order.
      */
     private void forEachOrderedElement(
             Class<?> serviceInterface,

@@ -97,7 +97,7 @@ public final class ProxyBuilder {
         Class<? extends T> implClass = (Class<? extends T>) target.getClass();
 
         EvaluationResult evaluation = InqPipelineAnnotationEvaluator
-                .evaluateStamped(pipeline, serviceInterface, implClass);
+                .evaluate(pipeline, serviceInterface, implClass);
 
         Map<Method, MethodPlan> plans = evaluation.plans();
         Map<Method, MethodDispatchEntry> entries =
@@ -108,7 +108,7 @@ public final class ProxyBuilder {
         for (Map.Entry<Method, MethodPlan> entry : plans.entrySet()) {
             Method method = entry.getKey();
             MethodPlan plan = entry.getValue();
-            MethodDispatchEntry dispatchEntry = MethodDispatchEntryFactory.createStampedEntry(
+            MethodDispatchEntry dispatchEntry = MethodDispatchEntryFactory.createEntry(
                     method, plan, pipeline, target, implClass, elementsByTypeAndName);
             entries.put(method, dispatchEntry);
         }

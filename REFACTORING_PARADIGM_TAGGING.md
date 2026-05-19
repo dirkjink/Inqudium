@@ -802,7 +802,7 @@ any remaining drift.
 * [x] Q.4 — Proxy consumes the new plan shape (2026-05-18, PR #85)
 * [x] Q.5a — Runtime: `Sync` / `Async` accessors and typed handles (2026-05-18, PR #87)
 * [x] Q.5b — DSL + Integration Examples migrate to `sync()` / `async()` (2026-05-19, PR #88)
-* [ ] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names
+* [x] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names (2026-05-19, PR #89)
 * [ ] Q.7 — Final cleanup: remove legacy types
 * [ ] Q.8 — Plan deletion + final consistency
 
