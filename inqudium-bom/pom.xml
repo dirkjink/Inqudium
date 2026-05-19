@@ -38,13 +38,6 @@
                 <version>${revision}</version>
                 <scope>compile</scope>
             </dependency>
-            <dependency>
-                <groupId>eu.inqudium</groupId>
-                <artifactId>inqudium-annotation-support</artifactId>
-                <version>${revision}</version>
-                <scope>compile</scope>
-            </dependency>
-
             <!-- Configuration runtime -->
             <dependency>
                 <groupId>eu.inqudium</groupId>

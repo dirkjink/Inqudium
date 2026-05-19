@@ -29,13 +29,6 @@
             <scope>compile</scope>
         </dependency>
 
-        <!-- Annotation scanning + PipelineFactory -->
-        <dependency>
-            <groupId>eu.inqudium</groupId>
-            <artifactId>inqudium-annotation-support</artifactId>
-            <scope>compile</scope>
-        </dependency>
-
         <!-- AsyncPipelineTerminal for hybrid sync/async dispatch -->
         <dependency>
             <groupId>eu.inqudium</groupId>

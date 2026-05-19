@@ -20,6 +20,14 @@ import java.util.function.BiFunction;
  * reactive) or dispatch mechanisms (functions, dynamic proxy, AspectJ).
  * Terminal operations live in paradigm-specific adapters.</p>
  *
+ * <p><strong>Bridge state (post-Phase-A).</strong> This class survives Phase A
+ * as a transitional bridge consumed by the legacy annotation evaluator in
+ * {@code inqudium-annotation}. The proxy factories, sync/async pipeline
+ * terminals, and aspect terminals referenced in the diagrams and code samples
+ * below were removed in Phase A; the diagrams are retained as historical
+ * context until {@code InqPipeline} itself is deleted in Phase B together with
+ * the legacy annotation evaluator.</p>
+ *
  * <h3>Terminal landscape</h3>
  * <pre>
  *                              InqPipeline

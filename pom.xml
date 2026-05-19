@@ -45,7 +45,6 @@
         <module>inqudium-imperative</module>
         <module>inqudium-aspect</module>
         <module>inqudium-annotation</module>
-        <module>inqudium-annotation-support</module>
         <module>inqudium-spring</module>
         <module>inqudium-bulkhead-library-tests</module>
         <module>inqudium-bulkhead-integration</module>
@@ -150,13 +149,6 @@
             <dependency>
                 <groupId>eu.inqudium</groupId>
                 <artifactId>inqudium-annotation</artifactId>
-                <version>${project.version}</version>
-                <scope>compile</scope>
-                <optional>true</optional>
-            </dependency>
-            <dependency>
-                <groupId>eu.inqudium</groupId>
-                <artifactId>inqudium-annotation-support</artifactId>
                 <version>${project.version}</version>
                 <scope>compile</scope>
                 <optional>true</optional>
