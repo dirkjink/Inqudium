@@ -20,8 +20,7 @@ warrant cleanup before the next feature cycle:
 - a few cold-path performance opportunities, and
 - a couple of test/edge-case robustness items.
 
-Full review document: see `code-review.md` (separate artefact, not
-checked into the repo). This plan bundles the recommended actions
+This plan bundles the recommended actions
 into sub-steps for sequential execution following the same workflow
 established by `REFACTORING_PROXY_REWRITE.md`.
 
@@ -42,7 +41,7 @@ everything is merged.
 ## Scope discipline
 
 This plan addresses only the **proxy-module-internal** findings
-from `code-review.md`. Out of scope here:
+from the original 18-item review. Out of scope here:
 
 - The library-wide `chainId → stackId` rename (Option-B from
   sub-step 3.12; separate refactor).
@@ -67,8 +66,8 @@ a concrete location in the codebase.
 
 **Tasks:**
 
-1. For each finding in `code-review.md` §1-§7, run a targeted grep
-   or view to confirm the issue is present in the current codebase.
+1. For each of the 18 findings, run a targeted grep or view to
+   confirm the issue is present in the current codebase.
 2. Note any finding that no longer applies (false positive or
    already fixed in a subsequent PR).
 3. Note any finding whose specifics drifted (e.g., a line moved
@@ -713,6 +712,383 @@ Commit subject: `test(proxy): tighten classpath filter, document JPMS notes`
 
 ---
 
+### P.7 — `BulkheadHandle.unwrap(Class<T>)` default method
+
+**Goal:** Add a default method to `BulkheadHandle<P>` that
+returns the underlying concrete type, eliminating the
+`(InqBulkhead<...>) runtime.sync().bulkhead(...)` cast pattern
+that appears 73 times across the codebase (tests, integration
+examples, imperative tests, aspect tests). The cast is
+technically safe (the wrapper is always over an `InqBulkhead`
+post-paradigm-tagging Q.7), but reads as a workaround in
+otherwise-typed code.
+
+**Findings addressed:** post-Q.5b/Q.7 deferred — not in the
+original 18 polish findings.
+
+**Tasks:**
+
+1. Add a default method to `BulkheadHandle<P>`:
+
+   ```java
+   /**
+    * Returns this handle's underlying implementation cast to the
+    * requested type. Convenience method that eliminates the
+    * `(InqBulkhead<...>) runtime.sync().bulkhead(...)` cast pattern
+    * for callers that need to pass the concrete type to
+    * pipeline-construction APIs (e.g. {@code InqPipeline.builder().shield(...)}).
+    *
+    * <p>The default implementation does a direct cast and throws
+    * {@code ClassCastException} on mismatch. Wrapper implementations
+    * (e.g., the {@code BulkheadHandleAsAsyncView} that wraps an
+    * {@code InqBulkhead} as a typed async view) override this to
+    * unwrap their delegate before casting.</p>
+    *
+    * @param target the target class
+    * @param <T> the target type
+    * @return this handle as the target type
+    * @throws ClassCastException if the underlying instance is not
+    *         assignable to {@code target}
+    */
+   default <T> T unwrap(Class<T> target) {
+       return target.cast(this);
+   }
+   ```
+
+2. Override in `BulkheadHandleAsAsyncView` (the only wrapper
+   class remaining post-Q.7):
+
+   ```java
+   @Override
+   public <T> T unwrap(Class<T> target) {
+       return target.cast(wrapped);
+   }
+   ```
+
+3. Sweep the 73 call sites and replace the cast pattern with
+   `unwrap`:
+
+   - Before: `(InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory")`
+   - After: `runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class)`
+
+   The 73 sites span ~10 modules. Use sed for mechanical
+   replacement; verify each module compiles after the sweep
+   via `mvn -pl <module> -am verify`.
+
+4. Add a test in `inqudium-imperative` for the unwrap surface:
+
+   - Direct `InqBulkhead` (from `runtime.sync().bulkhead(...)`):
+     `bh.unwrap(InqBulkhead.class)` returns the bulkhead itself.
+   - Wrapped (`BulkheadHandleAsAsyncView` from
+     `runtime.async().bulkhead(...)`): `bh.unwrap(InqBulkhead.class)`
+     returns the wrapped `InqBulkhead`, not the wrapper.
+   - Type mismatch: `bh.unwrap(String.class)` throws
+     `ClassCastException`.
+
+**Verification gates:**
+
+- [ ] `mvn verify` green across all 24 modules.
+- [ ] `grep -rln "(InqBulkhead.*runtime\.\(sync\|async\)" inqudium-*/src` returns zero hits.
+- [ ] All 73 call sites (or however many remain after sweep)
+      now use `.unwrap(InqBulkhead.class)`.
+- [ ] Test-count delta: **+3 to +5** (three new unwrap tests).
+- [ ] `@SuppressWarnings` baseline: 64/166 (unchanged).
+
+**Branch:** `feat/bulkhead-handle-unwrap`.
+
+**Estimated effort:** 1-2 hours (15 minutes for the API
+addition; 1-1.5 hours for the 73-site sweep and verification).
+
+---
+
+### P.8 — Replace `ParadigmProvider` SPI with presence-probe + class rename
+
+**Goal:** Eliminate the `META-INF/services/eu.inqudium.config.spi.ParadigmProvider`
+SPI mechanism in favour of a direct presence-probe following
+the canonical `DetectionAsync.isPresent()` pattern from
+ADR-037. SPI's value proposition — "load unknown future
+implementations" — does not apply: the library's paradigm
+modules (`inqudium-imperative`, the planned `inqudium-reactor`,
+`inqudium-rxjava3`, `inqudium-kotlin`) are all known at
+library compile time. SPI is over-engineered for this
+problem; presence-probe says directly what it means.
+
+The change also folds in the deferred `ImperativeProvider →
+SyncProvider` rename (Q.7's deferral) — the class becomes
+`SyncParadigmProvider` (or maintainer's preferred name), no
+longer marked imperative.
+
+**Findings addressed:** SPI architectural-fit observation +
+Q.7 deferred rename.
+
+**Tasks:**
+
+1. **Rename `ImperativeProvider` → `SyncParadigmProvider`.**
+   File: `inqudium-imperative/src/main/java/eu/inqudium/imperative/runtime/ImperativeProvider.java`.
+   - Class name flips to `SyncParadigmProvider` (Javadoc-
+     description: "the sync-paradigm provider materialising
+     bulkhead containers for the imperative dispatch path").
+   - Constructor name flips.
+   - No `implements ParadigmProvider` change — the interface
+     stays (see step 2).
+
+2. **Keep the `ParadigmProvider` interface, drop SPI loading.**
+   The interface in
+   `inqudium-config/src/main/java/eu/inqudium/config/spi/ParadigmProvider.java`
+   continues to define the four contract methods (`paradigm()`,
+   `createSyncBulkheadBuilder(...)`, `createAsyncBulkheadBuilder(...)`,
+   `createContainer(...)`). Only the discovery mechanism
+   changes.
+
+   - Update the interface's Javadoc to drop the
+     `META-INF/services` reference. Replace with a description
+     of the presence-probe discovery (referenced from
+     `ProviderDiscovery`).
+
+3. **Introduce `ProviderDiscovery`.** New file:
+   `inqudium-config/src/main/java/eu/inqudium/config/spi/ProviderDiscovery.java`.
+   Mirrors `DetectionAsync`'s shape from `inqudium-proxy`.
+
+   ```java
+   package eu.inqudium.config.spi;
+
+   import eu.inqudium.config.runtime.ParadigmContainer;
+   import eu.inqudium.core.element.paradigm.ParadigmTag;
+   import eu.inqudium.core.element.paradigm.SyncTag;
+
+   import java.util.LinkedHashMap;
+   import java.util.Map;
+   import java.util.Optional;
+
+   /**
+    * Discovers paradigm providers by direct class-loading probes,
+    * mirroring the {@code DetectionAsync} pattern (ADR-037). Each
+    * known paradigm module's provider class is probed at class-init
+    * time; absent modules contribute nothing.
+    *
+    * <p>This replaces the previous {@code ServiceLoader<ParadigmProvider>}
+    * mechanism. SPI's purpose is to load unknown future
+    * implementations; the library's paradigm modules are known at
+    * compile time, so presence-probe is the architecturally
+    * consistent choice.</p>
+    *
+    * <p>Package-private constructor; the class is a static-method
+    * utility. The discovered providers are computed once at class
+    * load and cached.</p>
+    */
+   public final class ProviderDiscovery {
+
+       private static final Map<ParadigmTag, ParadigmProvider> PROVIDERS =
+               discoverProviders();
+
+       private ProviderDiscovery() {
+       }
+
+       /**
+        * Returns the discovered providers, keyed on their paradigm
+        * tag. Iteration order is fixed: sync first, then async,
+        * then reactive, then rxjava3, then coroutines as those
+        * modules ship.
+        */
+       public static Map<ParadigmTag, ParadigmProvider> providers() {
+           return PROVIDERS;
+       }
+
+       private static Map<ParadigmTag, ParadigmProvider> discoverProviders() {
+           Map<ParadigmTag, ParadigmProvider> result = new LinkedHashMap<>();
+           probeImperative().ifPresent(p -> result.put(p.paradigm(), p));
+           // Future:
+           //   probeReactor().ifPresent(p -> result.put(p.paradigm(), p));
+           //   probeRxJava3().ifPresent(p -> result.put(p.paradigm(), p));
+           //   probeCoroutines().ifPresent(p -> result.put(p.paradigm(), p));
+           return Map.copyOf(result);
+       }
+
+       private static Optional<ParadigmProvider> probeImperative() {
+           return instantiateProvider(
+                   "eu.inqudium.imperative.runtime.SyncParadigmProvider");
+       }
+
+       /**
+        * Generic probe: try to load and instantiate a provider class
+        * by FQN. Returns empty if the class is not on the classpath
+        * (its module is not a runtime dependency).
+        */
+       private static Optional<ParadigmProvider> instantiateProvider(String fqn) {
+           try {
+               Class<?> cls = Class.forName(
+                       fqn, false, ProviderDiscovery.class.getClassLoader());
+               // Class found — load and instantiate via public no-arg constructor
+               Class<? extends ParadigmProvider> providerClass =
+                       Class.forName(fqn).asSubclass(ParadigmProvider.class);
+               return Optional.of(providerClass.getDeclaredConstructor().newInstance());
+           } catch (ClassNotFoundException e) {
+               return Optional.empty();
+           } catch (ReflectiveOperationException e) {
+               throw new IllegalStateException(
+                       "Provider class " + fqn + " exists but cannot be instantiated. "
+                               + "Paradigm providers must have a public no-arg constructor.", e);
+           }
+       }
+   }
+   ```
+
+   **Two-step class-loading:** the first `Class.forName(fqn, false, ...)`
+   call probes existence without `<clinit>`; the second
+   loads-and-initializes only if the first succeeded.
+   `ClassNotFoundException` on the first call cleanly maps to
+   `Optional.empty()`. Errors during instantiation
+   (non-public class, missing no-arg constructor) escalate as
+   `IllegalStateException` — these are configuration errors,
+   not classpath conditions.
+
+4. **Update `DefaultInqudiumBuilder` to use the new discovery.**
+   File: `inqudium-config/src/main/java/eu/inqudium/config/dsl/DefaultInqudiumBuilder.java`.
+
+   ```java
+   // Was:
+   public DefaultInqudiumBuilder() {
+       this.providers = loadProviders();
+   }
+
+   private static Map<ParadigmTag, ParadigmProvider> loadProviders() {
+       Map<ParadigmTag, ParadigmProvider> result = new LinkedHashMap<>();
+       for (ParadigmProvider provider : ServiceLoader.load(ParadigmProvider.class)) {
+           result.put(provider.paradigm(), provider);
+       }
+       return result;
+   }
+
+   // Is now:
+   public DefaultInqudiumBuilder() {
+       this.providers = ProviderDiscovery.providers();
+   }
+   ```
+
+   The private `loadProviders()` method is deleted.
+   `ServiceLoader` import is no longer needed in this class
+   (verify; other ServiceLoader uses for `ConsistencyRule`,
+   `CrossComponentRule` stay — those are user-extensible
+   genuinely-unknown-implementations and SPI is correct
+   there).
+
+5. **Delete the SPI registration file.**
+   ```bash
+   git rm inqudium-imperative/src/main/resources/META-INF/services/eu.inqudium.config.spi.ParadigmProvider
+   ```
+
+   If the directory becomes empty, the `META-INF/services`
+   directory itself can stay (Maven preserves empty resource
+   directories). Leave it for now; if other SPI files exist
+   in the same directory, the deletion is precise.
+
+6. **Sweep references** in `inqudium-imperative` and elsewhere
+   for `ImperativeProvider` class name. Update via sed.
+   Expected ~5-10 main-code consumers plus tests.
+
+7. **Verify presence-probe correctness.** Run the
+   `inqudium-proxy` `ModuleLoadingDisciplineTest` and any
+   equivalent in `inqudium-config` to confirm the
+   presence-probe doesn't eagerly load paradigm modules. The
+   `Class.forName(fqn, false, ...)` form with
+   `initialize=false` is critical for laziness.
+
+**Verification gates:**
+
+- [ ] `mvn verify` green across all 24 modules.
+- [ ] `grep -rln "ImperativeProvider" inqudium-*/src` returns
+      zero hits (renamed to `SyncParadigmProvider`).
+- [ ] SPI file
+      `inqudium-imperative/src/main/resources/META-INF/services/eu.inqudium.config.spi.ParadigmProvider`
+      is deleted.
+- [ ] `grep -rln "ServiceLoader.*ParadigmProvider" inqudium-*/src`
+      returns zero hits.
+- [ ] `inqudium-config` module-loading discipline (if it
+      exists; if not, run `inqudium-proxy`'s) passes
+      unchanged.
+- [ ] Test-count delta: zero (no new tests needed for the
+      rename; presence-probe correctness is implicitly
+      verified by existing discipline tests).
+- [ ] `@SuppressWarnings` baseline: 64/166 (unchanged).
+
+**Branch:** `refactor/replace-paradigm-provider-spi`.
+
+**Estimated effort:** 1.5-2 hours.
+- Class rename + SPI removal: 30 minutes.
+- `ProviderDiscovery` introduction: 30 minutes (mirrors
+  existing `DetectionAsync`).
+- Consumer sweep + verification: 30-60 minutes.
+
+**Note for future paradigm modules:** when `inqudium-reactor`,
+`inqudium-rxjava3`, or `inqudium-kotlin` modules ship with
+their own provider implementations, the addition is a single
+`probe*` method in `ProviderDiscovery` per new module. No
+SPI registration; the new module's provider class FQN is
+hardcoded in `ProviderDiscovery` because we know it at
+library compile time.
+
+---
+
+### P.9 — Remove or rename `InqImperativeBulkheadConfigBuilder`
+
+**Goal:** Resolve the `@Deprecated(forRemoval = true, since = "0.4.0")`
+class. The deprecation is two releases old; the for-removal
+promise was made before paradigm-tagging. Three legacy
+callers remain: the legacy `CircuitBreaker`, the legacy
+`Resilience` DSL, and the legacy `Bulkhead.of(...)` factory.
+
+**Findings addressed:** Q.7 deferral.
+
+**Approach: maintainer decides one of three:**
+
+**Option A — Migrate callers, then delete.** Migrate each of
+the three legacy callers to the modern paradigm-aware API
+(`runtime.sync().bulkhead(...)` or equivalent). Then delete
+`InqImperativeBulkheadConfigBuilder`. **Most thorough.** Risk:
+the three legacy types may themselves have additional
+dependents; surface migration scope before committing.
+
+**Option B — Rename without deletion.** Keep the class and
+its callers, but rename to drop the `Imperative` token:
+`InqSyncBulkheadConfigBuilder` (or similar). Update the
+`@Deprecated` note to reflect post-paradigm-tagging context.
+**Cosmetic but safe.** Reduces token count but preserves API.
+
+**Option C — Defer further.** The class is internal; the
+`forRemoval = true` promise is informational. Leave it for
+the broader "remove legacy resilience DSL" refactor.
+**Conservative.** Doesn't reduce token count now.
+
+**Recommended path:**
+
+1. **First:** maintainer chooses A, B, or C. The choice
+   depends on whether the legacy `CircuitBreaker` / `Resilience`
+   / `Bulkhead.of(...)` are scheduled for removal (Option A
+   becomes natural) or staying (Option B or C).
+2. **Then:** implementation per the choice.
+
+**Verification gates (depend on chosen option):**
+
+- Option A: zero `InqImperativeBulkheadConfigBuilder` hits in
+  src; tests of the three legacy callers pass or are removed.
+- Option B: class renamed, all consumers updated.
+- Option C: no code change; document the deferral in this
+  plan.
+
+**Branch (depend on option):**
+
+- Option A: `refactor/remove-imperative-bulkhead-config-builder`
+- Option B: `refactor/rename-imperative-bulkhead-config-builder`
+- Option C: no branch — documentation update only.
+
+**Estimated effort:**
+
+- Option A: 1-2 hours.
+- Option B: 30 minutes.
+- Option C: 5 minutes.
+
+---
+
 ### P.6 — Plan deletion + final architecture polish
 
 **Goal:** After all polish PRs have merged, delete this plan
@@ -749,6 +1125,9 @@ Commit subject: `chore: complete proxy polish, delete plan`
 * [x] P.3 — `ElementResolver` name-uniqueness (dissolved by ADR-046, implemented in PR #85) (2026-05-18)
 * [ ] P.4 — Folder lambda hoisting (JMH-validated decision)
 * [x] P.5 — Test-infrastructure hardening (2026-05-17, PR #81)
+* [ ] P.7 — `BulkheadHandle.unwrap(Class<T>)` default method
+* [ ] P.8 — Replace `ParadigmProvider` SPI with presence-probe + class rename
+* [ ] P.9 — Remove or rename `InqImperativeBulkheadConfigBuilder`
 * [ ] P.6 — Plan deletion + final architecture polish
 
 ---
@@ -765,12 +1144,15 @@ A rough estimate for someone familiar with the codebase:
 | P.3 | depends on option: Option C ~1 hour, Option A ~4 hours, Option B ~1-2 days across multiple PRs |
 | P.4 | 1 day (JMH setup is the biggest unknown) |
 | P.5 | 1-2 hours |
+| P.7 | 1-2 hours (API addition + 73-site sweep) |
+| P.8 | 1.5-2 hours (SPI removal + class rename) |
+| P.9 | depends on option: A ~1-2h, B ~30m, C ~5m |
 | P.6 | 15 minutes |
 
-Total range: 1 day (P.1 + P.2 + P.5 + P.6 if P.3 picks Option C
-and P.4 stays in-repo as a benchmark only) to about 1 week (if
-P.3 picks Option B and P.4 ends up applying the hoist with full
-JMH validation).
+Total range: P.1 + P.2 + P.3 + P.5 (completed) plus P.7 + P.8 +
+P.9 + P.6 remaining = 3-5 hours of actual work to plan completion
+(if P.4 stays unticked for later and P.9 picks Option B or C).
+Option A on P.9 extends the remaining time to 4-6 hours.
 
 P.1 and P.2 are the highest-value-per-hour. P.3 deserves a real
 architecture discussion. P.4 is a "do it when there's an
@@ -779,6 +1161,6 @@ afternoon to spare" item — the perf impact is theoretical.
 ## When unsure
 
 Search the code first. The audit report from P.0 is the source of
-truth for current finding locations. When the audit and
-`code-review.md` disagree, the audit wins (it's based on current
-HEAD; the review is from 2026-05-17).
+truth for current finding locations — it was produced against
+current HEAD, supersedes any older review notes, and reflects
+post-paradigm-tagging structure.
