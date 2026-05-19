@@ -573,4 +573,72 @@ class OrderServiceFunctionExampleTest {
             service.placeOrder("warm-up");
         }
     }
+
+    @Nested
+    @DisplayName("Sync/Async paradigm views (Q.5a/Q.5b)")
+    class SyncAsyncParadigmViews {
+
+        @Test
+        void sync_and_async_views_resolve_the_same_configured_bulkhead() {
+            // Function-style example: confirms that BulkheadConfig's
+            // .sync(...) DSL surface (Q.5b-migrated) results in a
+            // bulkhead reachable through both runtime.sync() and
+            // runtime.async() — the user-visible manifestation of
+            // the shared-backing façade (Q.5a).
+            try (InqRuntime runtime = BulkheadConfig.newRuntime()) {
+                assertThat(runtime.sync().bulkheadNames())
+                        .contains(BulkheadConfig.BULKHEAD_NAME);
+                assertThat(runtime.async().bulkheadNames())
+                        .contains(BulkheadConfig.BULKHEAD_NAME);
+
+                var syncSnap = runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME).snapshot();
+                var asyncSnap = runtime.async().bulkhead(BulkheadConfig.BULKHEAD_NAME).snapshot();
+                assertThat(syncSnap.maxConcurrentCalls())
+                        .isEqualTo(asyncSnap.maxConcurrentCalls())
+                        .isEqualTo(2);
+            }
+        }
+
+        @Test
+        void sync_and_async_views_observe_concurrent_calls_from_the_shared_backing() {
+            // What is to be tested? — Both views report the same
+            //   concurrent-calls count even though only one of the
+            //   two paradigm dispatches is exercised. Demonstrates
+            //   the shared backing instance at the function-style
+            //   integration level.
+            // Successful when? — after issuing an async holder via
+            //   the OrderService's function-wrapped pipeline, both
+            //   the sync view and the async view report
+            //   concurrentCalls == 1.
+            // Why important? — Confirms the façade isn't paradigm-
+            //   isolated at runtime — both views report the same
+            //   live state regardless of which paradigm produced
+            //   the in-flight call.
+
+            try (InqRuntime runtime = BulkheadConfig.newRuntime()) {
+                OrderService service = new OrderService(runtime);
+
+                CompletableFuture<Void> release = new CompletableFuture<>();
+                CompletionStage<String> holder = service.placeOrderHoldingAsync(release);
+
+                try {
+                    // Both views read 1 in-flight call from the
+                    // single underlying bulkhead
+                    assertThat(runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME)
+                            .concurrentCalls()).isEqualTo(1);
+                    assertThat(runtime.async().bulkhead(BulkheadConfig.BULKHEAD_NAME)
+                            .concurrentCalls()).isEqualTo(1);
+                } finally {
+                    release.complete(null);
+                    holder.toCompletableFuture().join();
+                }
+
+                // After release, both views read zero
+                assertThat(runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME)
+                        .concurrentCalls()).isZero();
+                assertThat(runtime.async().bulkhead(BulkheadConfig.BULKHEAD_NAME)
+                        .concurrentCalls()).isZero();
+            }
+        }
+    }
 }

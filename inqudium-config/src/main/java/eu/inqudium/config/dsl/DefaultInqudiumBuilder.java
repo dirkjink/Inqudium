@@ -96,18 +96,37 @@ public final class DefaultInqudiumBuilder implements InqudiumBuilder {
 
     @Override
     public InqudiumBuilder imperative(Consumer<ImperativeSection> configurer) {
+        configurer.accept(ensureImperativeSection());
+        return this;
+    }
+
+    @Override
+    public InqudiumBuilder sync(Consumer<SyncSection> configurer) {
+        DefaultImperativeSection section = ensureImperativeSection();
+        configurer.accept(new DefaultSyncSection(section, providers.get(ImperativeTag.INSTANCE)));
+        return this;
+    }
+
+    @Override
+    public InqudiumBuilder async(Consumer<AsyncSection> configurer) {
+        DefaultImperativeSection section = ensureImperativeSection();
+        configurer.accept(new DefaultAsyncSection(section, providers.get(ImperativeTag.INSTANCE)));
+        return this;
+    }
+
+    private DefaultImperativeSection ensureImperativeSection() {
         ParadigmProvider provider = providers.get(ImperativeTag.INSTANCE);
         if (provider == null) {
             throw new ParadigmUnavailableException(
                     "The 'imperative' paradigm requires module 'inqudium-imperative' on the "
-                            + "classpath. Add it as a dependency or remove .imperative(...) "
-                            + "sections from your configuration.");
+                            + "classpath. Add it as a dependency or remove "
+                            + ".imperative(...) / .sync(...) / .async(...) sections from your "
+                            + "configuration.");
         }
         if (imperativeSection == null) {
             imperativeSection = new DefaultImperativeSection(provider);
         }
-        configurer.accept(imperativeSection);
-        return this;
+        return imperativeSection;
     }
 
     @Override

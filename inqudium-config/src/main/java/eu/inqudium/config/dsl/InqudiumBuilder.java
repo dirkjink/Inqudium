@@ -30,11 +30,40 @@ public interface InqudiumBuilder {
     InqudiumBuilder general(Consumer<GeneralSnapshotBuilder> configurer);
 
     /**
+     * Configure the synchronous-paradigm section.
+     *
+     * @param configurer fills the supplied section.
+     * @return this builder, for chaining.
+     *
+     * @since 0.9.0
+     */
+    InqudiumBuilder sync(Consumer<SyncSection> configurer);
+
+    /**
+     * Configure the asynchronous-paradigm section.
+     *
+     * @param configurer fills the supplied section.
+     * @return this builder, for chaining.
+     *
+     * @since 0.9.0
+     */
+    InqudiumBuilder async(Consumer<AsyncSection> configurer);
+
+    /**
      * Configure the imperative paradigm section.
      *
      * @param configurer fills the supplied section.
      * @return this builder, for chaining.
+     *
+     * @deprecated since 0.9.0. Use {@link #sync(Consumer)} for
+     *             sync-paradigm configuration or
+     *             {@link #async(Consumer)} for async-paradigm
+     *             configuration. The {@code .imperative(...)} method
+     *             routes through the same underlying section and
+     *             continues to work for backward compatibility. To be
+     *             removed in a future release.
      */
+    @Deprecated(since = "0.9.0")
     InqudiumBuilder imperative(Consumer<ImperativeSection> configurer);
 
     /**

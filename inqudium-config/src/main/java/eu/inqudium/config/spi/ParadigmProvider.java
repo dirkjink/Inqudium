@@ -42,6 +42,47 @@ public interface ParadigmProvider {
     BulkheadBuilderBase<?> createBulkheadBuilder(String name);
 
     /**
+     * Create a sync-paradigm bulkhead builder for the named bulkhead.
+     * Called by {@link eu.inqudium.config.dsl.DefaultSyncSection} on
+     * every {@code .sync(...).bulkhead("name", ...)} call.
+     *
+     * <p>The default implementation throws
+     * {@link UnsupportedOperationException}. Paradigm providers that
+     * implement sync-paradigm support override it to return a builder
+     * implementing {@link eu.inqudium.config.dsl.SyncBulkheadBuilder}.
+     * The {@link eu.inqudium.imperative.runtime.ImperativeProvider
+     * ImperativeProvider} overrides it.</p>
+     *
+     * @param name the bulkhead's name; non-null and non-blank.
+     * @return a paradigm-specific {@code BulkheadBuilderBase} instance
+     *         implementing {@link eu.inqudium.config.dsl.SyncBulkheadBuilder}.
+     *
+     * @since 0.9.0
+     */
+    default BulkheadBuilderBase<?> createSyncBulkheadBuilder(String name) {
+        throw new UnsupportedOperationException(
+                "Paradigm provider " + getClass().getName()
+                        + " does not implement createSyncBulkheadBuilder");
+    }
+
+    /**
+     * Create an async-paradigm bulkhead builder for the named bulkhead.
+     * Counterpart to {@link #createSyncBulkheadBuilder(String)} for
+     * {@link eu.inqudium.config.dsl.DefaultAsyncSection}.
+     *
+     * @param name the bulkhead's name; non-null and non-blank.
+     * @return a paradigm-specific {@code BulkheadBuilderBase} instance
+     *         implementing {@link eu.inqudium.config.dsl.AsyncBulkheadBuilder}.
+     *
+     * @since 0.9.0
+     */
+    default BulkheadBuilderBase<?> createAsyncBulkheadBuilder(String name) {
+        throw new UnsupportedOperationException(
+                "Paradigm provider " + getClass().getName()
+                        + " does not implement createAsyncBulkheadBuilder");
+    }
+
+    /**
      * Materialize a paradigm container from the given general snapshot and the patches the DSL
      * accumulated for this paradigm's section.
      *

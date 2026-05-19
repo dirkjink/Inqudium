@@ -630,4 +630,92 @@ class OrderServiceProxyExampleTest {
             service.placeOrder("warm-up");
         }
     }
+
+    @Nested
+    @DisplayName("Sync/Async paradigm views (Q.5a/Q.5b)")
+    class SyncAsyncParadigmViews {
+
+        @Test
+        void sync_and_async_views_share_the_same_backing_bulkhead_state() {
+            // What is to be tested? — The Q.5a façade design: the
+            //   typed BulkheadHandle<SyncTag> and BulkheadHandle<AsyncTag>
+            //   surfaced by runtime.sync() / runtime.async() observe
+            //   the same underlying live container. End-to-end through
+            //   the proxy: sync calls go through .placeOrder(...) on
+            //   the SyncTag-tagged dispatch path; async calls go
+            //   through .placeOrderAsync(...) on the AsyncTag-tagged
+            //   dispatch path; both share the same two-permit pool.
+            // Successful when? — saturation reached via a mix of sync
+            //   and async holders is observable from both views; after
+            //   release, both views report all permits available.
+            // Why important? — Pins the user-visible shared-pool
+            //   contract end-to-end through the proxy, the
+            //   evaluator-stamped plan (Q.4), and the runtime façade
+            //   (Q.5a).
+
+            // Given — both views resolve to the same configured bulkhead
+            var syncHandle = runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+            var asyncHandle = runtime.async().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+            assertThat(syncHandle.snapshot().maxConcurrentCalls()).isEqualTo(2);
+            assertThat(asyncHandle.snapshot().maxConcurrentCalls()).isEqualTo(2);
+
+            // When — saturate with one sync holder + one async holder
+            CountDownLatch syncAcquired = new CountDownLatch(1);
+            CountDownLatch syncRelease = new CountDownLatch(1);
+            CompletableFuture<Void> asyncRelease = new CompletableFuture<>();
+
+            CompletableFuture<String> syncHolder = CompletableFuture.supplyAsync(() ->
+                    service.placeOrderHolding(syncAcquired, syncRelease));
+            try {
+                if (!syncAcquired.await(2, TimeUnit.SECONDS)) {
+                    throw new AssertionError("sync holder failed to acquire permit");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            CompletionStage<String> asyncHolder = service.placeOrderHoldingAsync(asyncRelease);
+
+            // Then — both views report the saturated state from the
+            // single shared backing instance
+            assertThat(bulkhead.concurrentCalls()).isEqualTo(2);
+            assertThat(syncHandle.availablePermits()).isZero();
+            assertThat(asyncHandle.availablePermits()).isZero();
+
+            // When — sync release frees one permit
+            syncRelease.countDown();
+            assertThat(syncHolder.join()).isEqualTo("released");
+
+            // Then — both views observe one permit available (the
+            // async holder still holds the other)
+            assertThat(asyncHandle.availablePermits()).isEqualTo(1);
+            assertThat(syncHandle.availablePermits()).isEqualTo(1);
+
+            // When — async release completes the held stage
+            asyncRelease.complete(null);
+            assertThat(asyncHolder.toCompletableFuture().join())
+                    .isEqualTo("async-released");
+
+            // Then — both permits are back in the pool, both views
+            // agree
+            assertThat(syncHandle.availablePermits()).isEqualTo(2);
+            assertThat(asyncHandle.availablePermits()).isEqualTo(2);
+        }
+
+        @Test
+        void sync_and_async_views_share_the_same_snapshot_state() {
+            // Read-only sanity: both views' snapshots agree at any
+            // moment on every field the BulkheadSnapshot exposes.
+            var syncSnap = runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME).snapshot();
+            var asyncSnap = runtime.async().bulkhead(BulkheadConfig.BULKHEAD_NAME).snapshot();
+
+            assertThat(syncSnap.name()).isEqualTo(asyncSnap.name());
+            assertThat(syncSnap.maxConcurrentCalls())
+                    .isEqualTo(asyncSnap.maxConcurrentCalls());
+            assertThat(syncSnap.maxWaitDuration())
+                    .isEqualTo(asyncSnap.maxWaitDuration());
+            assertThat(syncSnap.derivedFromPreset())
+                    .isEqualTo(asyncSnap.derivedFromPreset());
+        }
+    }
 }

@@ -47,8 +47,13 @@ public final class BulkheadConfig {
      *         caller — typically via try-with-resources.
      */
     public static InqRuntime newRuntime() {
+        // Per ADR-046 / Q.5b, .sync(...) is the user-facing entry for
+        // synchronous-imperative configuration. The same bulkhead is
+        // observable through runtime.sync(), runtime.async(), and the
+        // deprecated runtime.imperative() (one backing instance,
+        // three typed views per Q.5a's façade design).
         return Inqudium.configure()
-                .imperative(im -> im.bulkhead(BULKHEAD_NAME,
+                .sync(s -> s.bulkhead(BULKHEAD_NAME,
                         b -> b.balanced()
                                 .maxConcurrentCalls(2)
                                 .events(EXAMPLE_EVENTS)))
