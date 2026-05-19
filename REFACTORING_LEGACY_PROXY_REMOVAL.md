@@ -593,7 +593,7 @@ rewrite) repopulates them.
 ## Completion log
 
 * [x] A.0 — Audit (no commit) (2026-05-19)
-* [x] A.1 + A.2 — Silence consumer modules (2026-05-19, PR #TBD)
+* [x] A.1 + A.2 — Silence consumer modules (2026-05-19, PR #98)
 * [ ] A.3 — Delete legacy pipeline stack
 * [ ] A.4 — Final cleanup
 
