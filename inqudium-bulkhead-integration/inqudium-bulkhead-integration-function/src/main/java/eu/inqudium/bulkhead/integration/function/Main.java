@@ -181,7 +181,7 @@ public final class Main {
     }
 
     private static InqBulkhead<?, ?> bulkheadOf(InqRuntime runtime) {
-        return (InqBulkhead<?, ?>) runtime.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+        return runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME).unwrap(InqBulkhead.class);
     }
 
     private static void joinQuietly(Thread t) {

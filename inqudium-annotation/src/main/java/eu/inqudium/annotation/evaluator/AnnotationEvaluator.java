@@ -4,13 +4,14 @@ import eu.inqudium.core.pipeline.InqPipeline;
 
 /**
  * Reads the resilience-element annotations on a service interface's
- * implementation class and produces a per-method protection plan, validated
- * against a given {@link InqPipeline}.
+ * implementation class and produces a per-method paradigm-stamped
+ * protection plan, validated against a given {@link InqPipeline}.
  *
  * <p>The evaluator is the library-internal entry point described in
- * ADR-036. Annotation rules (which method to inspect, how inheritance
- * applies, how multiple annotations are composed, which configurations are
- * invalid) are encoded in its collaborators in this package.</p>
+ * ADR-036 / ADR-046. Annotation rules (which method to inspect, how
+ * inheritance applies, how multiple annotations are composed, which
+ * configurations are invalid) are encoded in its collaborators in
+ * this package.</p>
  *
  * <p>Instances are created via the static factory
  * {@link #forPipeline(InqPipeline)}; the returned evaluator holds the
@@ -38,7 +39,13 @@ public interface AnnotationEvaluator {
     /**
      * Evaluates the annotations on {@code implementationClass} for each
      * method of {@code serviceInterface}, producing a per-method
-     * {@link MethodPlan}.
+     * paradigm-stamped {@link MethodPlan}.
+     *
+     * <p>Each per-method plan carries the method's
+     * {@link eu.inqudium.core.element.paradigm.ParadigmTag}; decorated
+     * plans reference their pipeline elements by {@link ElementRef} pair
+     * so paradigm-aware resolvers can disambiguate elements that share a
+     * name across element types (ADR-046).</p>
      *
      * @param <T>                  the service interface type; the
      *                             implementation class must be a subtype

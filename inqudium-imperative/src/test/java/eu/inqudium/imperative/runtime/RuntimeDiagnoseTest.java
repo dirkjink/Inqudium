@@ -41,7 +41,7 @@ class RuntimeDiagnoseTest {
             // never fire in real systems either.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("bh-1", b -> b.balanced().maxConcurrentCalls(50))
                             .bulkhead("bh-2", b -> b.balanced().maxConcurrentCalls(50))
                             .bulkhead("bh-3", b -> b.balanced().maxConcurrentCalls(50))
@@ -68,7 +68,7 @@ class RuntimeDiagnoseTest {
             // 2 × 50 = 100 aggregate, count well below threshold. Nothing to warn about.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("alpha", b -> b.balanced().maxConcurrentCalls(50))
                             .bulkhead("beta", b -> b.balanced().maxConcurrentCalls(50)))
                     .build()) {
@@ -94,13 +94,13 @@ class RuntimeDiagnoseTest {
             // surprise.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("inventory", b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 int permitsBefore = bh.availablePermits();
@@ -112,7 +112,7 @@ class RuntimeDiagnoseTest {
                         .as("availablePermits is unchanged by diagnose")
                         .isEqualTo(permitsBefore);
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(maxBefore);
-                assertThat(runtime.imperative().bulkheadNames()).containsExactly("inventory");
+                assertThat(runtime.sync().bulkheadNames()).containsExactly("inventory");
                 assertThat(bh.execute(2L, 2L, "still-here", IDENTITY))
                         .isEqualTo("still-here");
             }

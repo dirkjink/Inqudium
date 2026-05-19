@@ -4,7 +4,6 @@ import eu.inqudium.proxy.handler.InqInvocationHandler;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -56,11 +55,13 @@ public final class ProxyStackAdapter {
      *         (use {@link #supports(Object)} to guard before calling)
      */
     public static ProxyStackInfo inspect(Object instance) {
-        Objects.requireNonNull(instance, "instance");
         if (!supports(instance)) {
             throw new IllegalArgumentException(
                     "instance is not a proxy produced by ProxyDispatcher; "
-                            + "use supports(...) to guard before calling inspect(...)");
+                            + "use supports(...) to guard before calling inspect(...). "
+                            + "Got: " + (instance == null
+                                    ? "null"
+                                    : instance.getClass().getName()));
         }
         InqInvocationHandler handler =
                 (InqInvocationHandler) Proxy.getInvocationHandler(instance);

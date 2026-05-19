@@ -5,6 +5,7 @@ import eu.inqudium.config.lifecycle.LifecycleAware;
 import eu.inqudium.config.lifecycle.ListenerRegistry;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.core.element.InqElement;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 
 /**
  * Paradigm-agnostic read surface for a live bulkhead.
@@ -50,4 +51,37 @@ public interface BulkheadHandle<P extends ParadigmTag>
      * @return the number of permits currently held by in-flight calls. Zero when cold.
      */
     int concurrentCalls();
+
+    /**
+     * Returns this handle as the requested type. Convenience method
+     * that eliminates the cast pattern
+     * <pre>{@code
+     * InqBulkhead<Void, String> bh =
+     *     (InqBulkhead<Void, String>) runtime.sync().bulkhead("foo");
+     * }</pre>
+     * which now reads as
+     * <pre>{@code
+     * InqBulkhead<Void, String> bh =
+     *     runtime.sync().bulkhead("foo").unwrap(InqBulkhead.class);
+     * }</pre>
+     *
+     * <p>The default implementation does a direct cast and throws
+     * {@code ClassCastException} on mismatch. Wrapper implementations
+     * (the {@link eu.inqudium.config.runtime.BulkheadHandleAsAsyncView}
+     * that exposes a sync handle as a typed async view) override this
+     * method to unwrap their delegate before casting, so async
+     * callers receive the underlying concrete instance.</p>
+     *
+     * @param target the target class
+     * @param <T> the target type
+     * @return this handle as the target type
+     * @throws ClassCastException if this handle's underlying
+     *         implementation is not assignable to {@code target}
+     * @throws NullPointerException if {@code target} is null
+     *
+     * @since 0.10.0
+     */
+    default <T> T unwrap(Class<T> target) {
+        return target.cast(this);
+    }
 }

@@ -6,6 +6,8 @@ import java.io.File;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
@@ -203,8 +205,7 @@ final class ModuleLoadingDisciplineTest {
         String classpath = System.getProperty("java.class.path");
         String[] entries = classpath.split(File.pathSeparator);
         return Arrays.stream(entries)
-                .filter(p -> !excludeImperative
-                        || !p.contains("inqudium-imperative"))
+                .filter(p -> !excludeImperative || !isInqudiumImperativeArtifact(p))
                 .map(File::new)
                 .map(f -> {
                     try {
@@ -215,5 +216,39 @@ final class ModuleLoadingDisciplineTest {
                     }
                 })
                 .toArray(URL[]::new);
+    }
+
+    /**
+     * Returns true if the given classpath entry refers to the
+     * {@code inqudium-imperative} artifact. Two canonical forms are
+     * recognised:
+     *
+     * <ul>
+     *   <li>A Maven repository directory: any path component equals
+     *       {@code inqudium-imperative} exactly (matches the
+     *       artifact-id subdirectory under
+     *       {@code .m2/repository/eu/inqudium/}).</li>
+     *   <li>An artifact JAR: filename starts with
+     *       {@code inqudium-imperative-} and ends with {@code .jar}
+     *       (matches any version, including {@code -SNAPSHOT}).</li>
+     * </ul>
+     *
+     * <p>Platform-independent — uses {@link Path} iteration over
+     * components rather than substring matching, so Maven and
+     * IDE-shadowed classpaths on Windows and POSIX work identically.</p>
+     */
+    private static boolean isInqudiumImperativeArtifact(String classpathEntry) {
+        Path path = Paths.get(classpathEntry);
+        for (Path component : path) {
+            if (component.toString().equals("inqudium-imperative")) {
+                return true;
+            }
+        }
+        Path filename = path.getFileName();
+        if (filename == null) {
+            return false;
+        }
+        String name = filename.toString();
+        return name.startsWith("inqudium-imperative-") && name.endsWith(".jar");
     }
 }

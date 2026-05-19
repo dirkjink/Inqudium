@@ -2,7 +2,7 @@ package eu.inqudium.config.validation;
 
 import eu.inqudium.config.lifecycle.ComponentField;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class VetoFindingTest {
 
     private static final ComponentKey KEY =
-            new ComponentKey("inventory", ImperativeTag.INSTANCE);
+            new ComponentKey("inventory", SyncTag.INSTANCE);
 
     private enum TestField implements ComponentField {
         ALPHA, BETA

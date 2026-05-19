@@ -67,12 +67,12 @@ class BulkheadAspectLifecycleTest {
             // architecture for AOP users.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("aop-cold", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("aop-cold", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bh =
-                        (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("aop-cold");
+                        runtime.sync().bulkhead("aop-cold").unwrap(InqBulkhead.class);
                 SingleElementAspect aspect = new SingleElementAspect(new ElementLayerProvider(bh));
 
                 Object result = aspect.execute(() -> "cold-to-hot-ok");
@@ -101,12 +101,12 @@ class BulkheadAspectLifecycleTest {
             // tuning of resilience parameters without an aspect rebuild.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("aop-swap", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("aop-swap", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bh =
-                        (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("aop-swap");
+                        runtime.sync().bulkhead("aop-swap").unwrap(InqBulkhead.class);
                 SingleElementAspect aspect = new SingleElementAspect(new ElementLayerProvider(bh));
 
                 assertThat(aspect.execute(() -> "warm")).isEqualTo("warm");
@@ -114,7 +114,7 @@ class BulkheadAspectLifecycleTest {
                         .isInstanceOf(SemaphoreStrategyConfig.class);
 
                 // When — quiescent strategy swap.
-                runtime.update(u -> u.imperative(im -> im.bulkhead("aop-swap", b -> b
+                runtime.update(u -> u.sync(s -> s.bulkhead("aop-swap", b -> b
                         .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                 .interval(Duration.ofMillis(500))))));
 
@@ -143,17 +143,17 @@ class BulkheadAspectLifecycleTest {
             // AOP entry point.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("aop-remove", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("aop-remove", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bh =
-                        (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("aop-remove");
+                        runtime.sync().bulkhead("aop-remove").unwrap(InqBulkhead.class);
                 SingleElementAspect aspect = new SingleElementAspect(new ElementLayerProvider(bh));
 
                 assertThat(aspect.execute(() -> "warm")).isEqualTo("warm");
 
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("aop-remove")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("aop-remove")));
 
                 assertThatThrownBy(() -> aspect.execute(() -> "after-remove"))
                         .isInstanceOf(ComponentRemovedException.class)

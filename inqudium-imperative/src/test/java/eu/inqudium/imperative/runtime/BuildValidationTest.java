@@ -31,7 +31,7 @@ class BuildValidationTest {
             // class-3 issues should see a clean report.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 BuildReport report = runtime.lastBuildReport();
@@ -64,7 +64,7 @@ class BuildValidationTest {
             // rules surface in the report without breaking lenient builds.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.protective().maxWaitDuration(Duration.ofSeconds(5))))
                     .build()) {
 
@@ -81,7 +81,7 @@ class BuildValidationTest {
         @Test
         void warnings_should_be_visible_via_BuildReport_warnings_stream() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.protective().maxWaitDuration(Duration.ofSeconds(5))))
                     .build()) {
 
@@ -113,14 +113,14 @@ class BuildValidationTest {
             // build's findings, which is often the first answer support engineers need.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 // Given
                 BuildReport beforeUpdate = runtime.lastBuildReport();
 
                 // When
-                BuildReport updateReport = runtime.update(u -> u.imperative(im -> im
+                BuildReport updateReport = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 // Then
@@ -141,12 +141,12 @@ class BuildValidationTest {
             // in phase 2) will be on the update's return value, not appended here.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 int findingsBefore = runtime.lastBuildReport().findings().size();
 
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("addedLater", b -> b.protective())));
 
                 assertThat(runtime.lastBuildReport().findings()).hasSize(findingsBefore);
@@ -170,7 +170,7 @@ class BuildValidationTest {
             // Given / When / Then
             assertThatThrownBy(() -> Inqudium.configure()
                     .strict()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.protective().maxWaitDuration(Duration.ofSeconds(5))))
                     .build())
                     .isInstanceOfSatisfying(ConfigurationException.class, ex -> {
@@ -192,7 +192,7 @@ class BuildValidationTest {
 
             try (InqRuntime runtime = Inqudium.configure()
                     .strict()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 assertThat(runtime.lastBuildReport().isSuccess()).isTrue();
@@ -205,7 +205,7 @@ class BuildValidationTest {
             // Given / When / Then
             assertThatThrownBy(() -> Inqudium.configure()
                     .strict()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.protective().maxWaitDuration(Duration.ofSeconds(5))))
                     .build())
                     .hasMessageContaining("BULKHEAD_PROTECTIVE_WITH_LONG_WAIT");

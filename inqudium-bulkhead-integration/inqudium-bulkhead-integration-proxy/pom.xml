@@ -38,6 +38,21 @@
             <artifactId>inqudium-imperative</artifactId>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>eu.inqudium</groupId>
+            <artifactId>inqudium-pipeline</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>eu.inqudium</groupId>
+            <artifactId>inqudium-proxy</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>eu.inqudium</groupId>
+            <artifactId>inqudium-annotation</artifactId>
+            <scope>compile</scope>
+        </dependency>
 
         <!-- ========================= -->
         <!--  Logging                  -->

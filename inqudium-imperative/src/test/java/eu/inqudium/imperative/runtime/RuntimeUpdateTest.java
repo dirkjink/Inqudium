@@ -5,7 +5,7 @@ import eu.inqudium.config.lifecycle.ChangeDecision;
 import eu.inqudium.config.lifecycle.LifecycleState;
 import eu.inqudium.config.runtime.BulkheadHandle;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.BulkheadEventConfig;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
@@ -40,24 +40,24 @@ class RuntimeUpdateTest {
             // during traffic spikes without restart.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(15);
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(40);
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("inventory", ImperativeTag.INSTANCE),
+                                new ComponentKey("inventory", SyncTag.INSTANCE),
                                 ApplyOutcome.PATCHED);
                 assertThat(report.isSuccess()).isTrue();
             }
@@ -67,14 +67,14 @@ class RuntimeUpdateTest {
         void should_preserve_untouched_fields_during_patch() {
             // The "patch only what was touched" semantics extend through the runtime path.
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced()))
                     .build()) {
 
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
-                BulkheadSnapshot snap = runtime.imperative().bulkhead("inventory").snapshot();
+                BulkheadSnapshot snap = runtime.sync().bulkhead("inventory").snapshot();
                 assertThat(snap.maxConcurrentCalls()).isEqualTo(99);
                 assertThat(snap.maxWaitDuration())
                         .as("balanced preset's maxWaitDuration is preserved")
@@ -101,23 +101,23 @@ class RuntimeUpdateTest {
             // both critical (events stop flowing) and easy to miss without a pinning test.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .events(BulkheadEventConfig.allEnabled())))
                     .build()) {
 
                 // Sanity-check the initial state.
-                assertThat(runtime.imperative().bulkhead("inventory").snapshot().events())
+                assertThat(runtime.sync().bulkhead("inventory").snapshot().events())
                         .as("initial snapshot carries the events configuration the user set")
                         .isEqualTo(BulkheadEventConfig.allEnabled());
 
                 // When — preset-only update that does not call events(...)
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.permissive())));
 
                 // Then — events stays at allEnabled, inherited from the live snapshot.
                 BulkheadSnapshot after =
-                        runtime.imperative().bulkhead("inventory").snapshot();
+                        runtime.sync().bulkhead("inventory").snapshot();
                 assertThat(after.events())
                         .as("preset-only update inherits events from the live snapshot")
                         .isEqualTo(BulkheadEventConfig.allEnabled());
@@ -137,16 +137,16 @@ class RuntimeUpdateTest {
             // configuration churn versus idempotent no-op writes from format adapters.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(15))));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("inventory", ImperativeTag.INSTANCE),
+                                new ComponentKey("inventory", SyncTag.INSTANCE),
                                 ApplyOutcome.UNCHANGED);
             }
         }
@@ -159,20 +159,20 @@ class RuntimeUpdateTest {
         @Test
         void should_add_a_new_bulkhead_and_report_ADDED() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("payments", b -> b.protective())));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("payments", ImperativeTag.INSTANCE),
+                                new ComponentKey("payments", SyncTag.INSTANCE),
                                 ApplyOutcome.ADDED);
-                assertThat(runtime.imperative().bulkheadNames())
+                assertThat(runtime.sync().bulkheadNames())
                         .containsExactlyInAnyOrder("inventory", "payments");
 
-                BulkheadHandle<ImperativeTag> newBulkhead = runtime.imperative().bulkhead("payments");
+                BulkheadHandle<SyncTag> newBulkhead = runtime.sync().bulkhead("payments");
                 assertThat(newBulkhead.snapshot().derivedFromPreset()).isEqualTo("protective");
                 assertThat(newBulkhead.snapshot().maxWaitDuration()).isEqualTo(Duration.ZERO);
             }
@@ -181,19 +181,19 @@ class RuntimeUpdateTest {
         @Test
         void should_add_a_bulkhead_to_an_initially_empty_runtime() {
             try (InqRuntime runtime = Inqudium.configure().build()) {
-                assertThat(runtime.imperative().bulkheadNames()).isEmpty();
+                assertThat(runtime.sync().bulkheadNames()).isEmpty();
 
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("first", b -> b.balanced())));
 
-                assertThat(runtime.imperative().bulkheadNames()).containsExactly("first");
+                assertThat(runtime.sync().bulkheadNames()).containsExactly("first");
             }
         }
 
         @Test
         void should_make_added_bulkhead_immediately_observable_via_config_view() {
             try (InqRuntime runtime = Inqudium.configure().build()) {
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("first", b -> b.balanced())));
 
                 assertThat(runtime.config().bulkheads()
@@ -211,43 +211,43 @@ class RuntimeUpdateTest {
         @Test
         void should_apply_both_patch_and_add_in_one_update_call() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))
                         .bulkhead("payments", b -> b.protective())));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("inventory", ImperativeTag.INSTANCE),
+                                new ComponentKey("inventory", SyncTag.INSTANCE),
                                 ApplyOutcome.PATCHED)
                         .containsEntry(
-                                new ComponentKey("payments", ImperativeTag.INSTANCE),
+                                new ComponentKey("payments", SyncTag.INSTANCE),
                                 ApplyOutcome.ADDED);
-                assertThat(runtime.imperative().bulkhead("inventory").snapshot()
+                assertThat(runtime.sync().bulkhead("inventory").snapshot()
                         .maxConcurrentCalls()).isEqualTo(99);
-                assertThat(runtime.imperative().findBulkhead("payments")).isPresent();
+                assertThat(runtime.sync().findBulkhead("payments")).isPresent();
             }
         }
 
         @Test
         void should_leave_untouched_bulkheads_alone() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced())
                             .bulkhead("b", b -> b.protective())
                             .bulkhead("c", b -> b.permissive()))
                     .build()) {
 
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("b", b -> b.maxConcurrentCalls(7))));
 
-                assertThat(runtime.imperative().bulkhead("a").snapshot().maxConcurrentCalls())
+                assertThat(runtime.sync().bulkhead("a").snapshot().maxConcurrentCalls())
                         .as("a is untouched and keeps its balanced baseline").isEqualTo(50);
-                assertThat(runtime.imperative().bulkhead("b").snapshot().maxConcurrentCalls())
+                assertThat(runtime.sync().bulkhead("b").snapshot().maxConcurrentCalls())
                         .as("b receives the patch").isEqualTo(7);
-                assertThat(runtime.imperative().bulkhead("c").snapshot().maxConcurrentCalls())
+                assertThat(runtime.sync().bulkhead("c").snapshot().maxConcurrentCalls())
                         .as("c is untouched and keeps its permissive baseline").isEqualTo(200);
             }
         }
@@ -274,13 +274,13 @@ class RuntimeUpdateTest {
             // every framework integration that relies on it.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 assertThat(bh.lifecycleState())
                         .as("the bulkhead is cold before the first execute")
                         .isEqualTo(LifecycleState.COLD);
@@ -292,14 +292,14 @@ class RuntimeUpdateTest {
                 });
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(40);
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("inventory", ImperativeTag.INSTANCE),
+                                new ComponentKey("inventory", SyncTag.INSTANCE),
                                 ApplyOutcome.PATCHED);
                 assertThat(report.vetoFindings())
                         .as("cold path bypasses the listener chain — no findings emitted")
@@ -319,26 +319,26 @@ class RuntimeUpdateTest {
             // hot without a listener; the absence of one must be a clean accept.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 LayerTerminal<String, String> identity =
                         (chainId, callId, argument) -> argument;
                 bh.execute(1L, 1L, "warm", identity);
                 assertThat(bh.lifecycleState()).isEqualTo(LifecycleState.HOT);
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 // Then
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("inventory", ImperativeTag.INSTANCE),
+                                new ComponentKey("inventory", SyncTag.INSTANCE),
                                 ApplyOutcome.PATCHED);
                 assertThat(report.vetoFindings()).isEmpty();
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(99);
@@ -359,17 +359,17 @@ class RuntimeUpdateTest {
             // operators would see neither the apply on B nor the veto on A.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced().maxConcurrentCalls(15))
                             .bulkhead("b", b -> b.balanced().maxConcurrentCalls(20)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bhA =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("a");
+                        runtime.sync().bulkhead("a").unwrap(InqBulkhead.class);
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bhB =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("b");
+                        runtime.sync().bulkhead("b").unwrap(InqBulkhead.class);
                 LayerTerminal<String, String> identity =
                         (chainId, callId, argument) -> argument;
                 bhA.execute(1L, 1L, "warm", identity);
@@ -381,13 +381,13 @@ class RuntimeUpdateTest {
                 // No listener on B — its patch flows through.
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("a", b -> b.maxConcurrentCalls(99))
                         .bulkhead("b", b -> b.maxConcurrentCalls(77))));
 
                 // Then
-                ComponentKey keyA = new ComponentKey("a", ImperativeTag.INSTANCE);
-                ComponentKey keyB = new ComponentKey("b", ImperativeTag.INSTANCE);
+                ComponentKey keyA = new ComponentKey("a", SyncTag.INSTANCE);
+                ComponentKey keyB = new ComponentKey("b", SyncTag.INSTANCE);
                 assertThat(report.componentOutcomes())
                         .containsEntry(keyA, ApplyOutcome.VETOED)
                         .containsEntry(keyB, ApplyOutcome.PATCHED);
@@ -418,13 +418,13 @@ class RuntimeUpdateTest {
             // operators reading the report.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 LayerTerminal<String, String> identity =
                         (chainId, callId, argument) -> argument;
                 bh.execute(1L, 1L, "warm", identity);
@@ -433,11 +433,11 @@ class RuntimeUpdateTest {
                 bh.onChangeRequest(req -> ChangeDecision.veto("policy disallows during business hours"));
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 // Then
-                ComponentKey key = new ComponentKey("inventory", ImperativeTag.INSTANCE);
+                ComponentKey key = new ComponentKey("inventory", SyncTag.INSTANCE);
                 assertThat(report.componentOutcomes())
                         .containsEntry(key, ApplyOutcome.VETOED);
                 assertThat(report.vetoFindings()).hasSize(1);

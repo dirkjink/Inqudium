@@ -19,19 +19,16 @@
         <dependency>
             <groupId>eu.inqudium</groupId>
             <artifactId>inqudium-core</artifactId>
-            <version>${revision}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>eu.inqudium</groupId>
             <artifactId>inqudium-pipeline</artifactId>
-            <version>${revision}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>eu.inqudium</groupId>
             <artifactId>inqudium-annotation</artifactId>
-            <version>${revision}</version>
             <scope>compile</scope>
             <!--
               Override the parent's <optional>true</optional>. The annotation module is
@@ -41,27 +38,24 @@
             <optional>false</optional>
         </dependency>
         <!--
-          Optional dependency: enables the async dispatch path landing in sub-step 3.11
-          of REFACTORING_PROXY_REWRITE.md (ADR-037 §6). No class inside inqudium-proxy
-          references inqudium-imperative until then; on the sync-only loading path this
-          artefact stays off the classpath.
+          Optional dependency: enables the async dispatch path (ADR-037 §6).
+          No class inside inqudium-proxy references inqudium-imperative on the
+          sync-only loading path, so this artefact stays off the classpath
+          unless an async service method is actually present.
         -->
         <dependency>
             <groupId>eu.inqudium</groupId>
             <artifactId>inqudium-imperative</artifactId>
-            <version>${revision}</version>
             <scope>compile</scope>
             <optional>true</optional>
         </dependency>
         <!--
           Test-scope only: enables building real InqBulkhead instances for the
-          end-to-end smoke tests landed in sub-step 3.13 of
-          REFACTORING_PROXY_REWRITE.md. Not visible to production code.
+          end-to-end smoke tests. Not visible to production code.
         -->
         <dependency>
             <groupId>eu.inqudium</groupId>
             <artifactId>inqudium-config</artifactId>
-            <version>${revision}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

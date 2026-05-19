@@ -3,9 +3,7 @@ package eu.inqudium.imperative.runtime;
 import eu.inqudium.config.dsl.BulkheadBuilderBase;
 import eu.inqudium.config.live.LiveContainer;
 import eu.inqudium.config.patch.BulkheadPatch;
-import eu.inqudium.config.runtime.ImperativeTag;
 import eu.inqudium.config.runtime.ParadigmContainer;
-import eu.inqudium.config.runtime.ParadigmTag;
 import eu.inqudium.config.runtime.UpdateDispatcher;
 import eu.inqudium.config.snapshot.BulkheadEventConfig;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
@@ -13,8 +11,11 @@ import eu.inqudium.config.snapshot.GeneralSnapshot;
 import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
 import eu.inqudium.config.spi.ParadigmProvider;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;
-import eu.inqudium.imperative.bulkhead.dsl.DefaultImperativeBulkheadBuilder;
+import eu.inqudium.imperative.bulkhead.dsl.DefaultAsyncBulkheadBuilder;
+import eu.inqudium.imperative.bulkhead.dsl.DefaultSyncBulkheadBuilder;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -29,8 +30,9 @@ import java.util.Set;
  * <p>Provides:
  *
  * <ul>
- *   <li>The paradigm tag, {@link ImperativeTag#INSTANCE},</li>
- *   <li>The {@link DefaultImperativeBulkheadBuilder} factory used by the DSL section, and</li>
+ *   <li>The paradigm tag, {@link SyncTag#INSTANCE} — the sync paradigm is the
+ *       primary identity of the imperative module's container (ADR-046),</li>
+ *   <li>The sync and async bulkhead-builder factories used by the DSL section, and</li>
  *   <li>The {@link DefaultImperative} container assembly that takes a paradigm-section's worth
  *       of {@link BulkheadPatch} instances plus the {@link GeneralSnapshot} and produces the
  *       live {@code InqBulkhead} components.</li>
@@ -38,7 +40,13 @@ import java.util.Set;
  *
  * <p>Also exposes the package-private {@link #materializeBulkhead} helper that the
  * {@link DefaultImperative#applyUpdate} path uses to build new components when an update
- * introduces a previously-unknown name.
+ * introduces a previously-unknown name.</p>
+ *
+ * <p>The class name is historical — kept to avoid SPI churn after the ADR-046 paradigm-tag
+ * migration. Functionally, this provider materialises components that serve both the sync
+ * and async dispatch paths through a single {@link InqBulkhead} backing instance per name
+ * (façade design: Q.5a runtime split into {@code Sync} / {@code Async} typed views over one
+ * registry).</p>
  */
 public final class ImperativeProvider implements ParadigmProvider {
 
@@ -59,12 +67,17 @@ public final class ImperativeProvider implements ParadigmProvider {
 
     @Override
     public ParadigmTag paradigm() {
-        return ImperativeTag.INSTANCE;
+        return SyncTag.INSTANCE;
     }
 
     @Override
-    public BulkheadBuilderBase<?> createBulkheadBuilder(String name) {
-        return new DefaultImperativeBulkheadBuilder(name);
+    public BulkheadBuilderBase<?> createSyncBulkheadBuilder(String name) {
+        return new DefaultSyncBulkheadBuilder(name);
+    }
+
+    @Override
+    public BulkheadBuilderBase<?> createAsyncBulkheadBuilder(String name) {
+        return new DefaultAsyncBulkheadBuilder(name);
     }
 
     @Override
@@ -96,12 +109,6 @@ public final class ImperativeProvider implements ParadigmProvider {
             GeneralSnapshot general, String name, BulkheadPatch patch) {
         BulkheadSnapshot initial = patch.applyTo(defaultSnapshot(name));
         LiveContainer<BulkheadSnapshot> live = new LiveContainer<>(initial);
-        // ADR-033 Stage 2: components served via the runtime registry are wildcard-typed in the
-        // Entry record because one bulkhead instance dispatches calls of any shape over its
-        // lifetime. Diamond inference picks up the wildcard target from the variable
-        // declaration, so the constructor stays diamond-style. Callers that need the typed
-        // entry point cast to InqBulkhead<A, R> at the call site (transitional until Stage 3
-        // widens the registry's return type to BulkheadHandle<ImperativeTag>).
         InqBulkhead<?, ?> bulkhead = new InqBulkhead<>(live, general);
         return new DefaultImperative.Entry(bulkhead, live);
     }

@@ -25,7 +25,7 @@ import java.util.Objects;
  * <p>The patches are issued through the standard {@link InqRuntime#update(java.util.function.Consumer)
  * runtime.update(...)} entry point. The proxy's pipeline need not be rebuilt — the bulkhead
  * component is the same instance before and after the patch, only its snapshot changes. The
- * proxy holds a reference to the {@link eu.inqudium.core.pipeline.InqPipeline} that holds a
+ * proxy holds a reference to the {@link eu.inqudium.pipeline.InqPipeline} that holds a
  * reference to the bulkhead handle, so the live strategy switch is observed transparently at
  * the proxy's call sites.
  */
@@ -47,7 +47,7 @@ public class AdminService {
     public void startSellPromotion() {
         LOG.info("Sell promotion starting — patching bulkhead '{}' to permissive/50 permits",
                 BulkheadConfig.BULKHEAD_NAME);
-        BuildReport report = runtime.update(u -> u.imperative(im -> im
+        BuildReport report = runtime.update(u -> u.sync(s -> s
                 .bulkhead(BulkheadConfig.BULKHEAD_NAME, b -> b
                         .permissive()
                         .maxConcurrentCalls(50))));
@@ -64,7 +64,7 @@ public class AdminService {
     public void endSellPromotion() {
         LOG.info("Sell promotion ending — patching bulkhead '{}' back to balanced/2 permits",
                 BulkheadConfig.BULKHEAD_NAME);
-        BuildReport report = runtime.update(u -> u.imperative(im -> im
+        BuildReport report = runtime.update(u -> u.sync(s -> s
                 .bulkhead(BulkheadConfig.BULKHEAD_NAME, b -> b
                         .balanced()
                         .maxConcurrentCalls(2))));

@@ -124,6 +124,18 @@
             </dependency>
             <dependency>
                 <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-pipeline</artifactId>
+                <version>${project.version}</version>
+                <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-proxy</artifactId>
+                <version>${project.version}</version>
+                <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>eu.inqudium</groupId>
                 <artifactId>inqudium-aspect</artifactId>
                 <version>${project.version}</version>
                 <scope>compile</scope>

@@ -84,7 +84,7 @@ public class OrderServiceApplication {
      */
     @Bean
     public InqElement orderBh(InqRuntime runtime) {
-        return (InqElement) runtime.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+        return (InqElement) runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
     }
 
     public static void main(String[] args) {
@@ -227,7 +227,7 @@ public class OrderServiceApplication {
         // registry, which holds the same instance the runtime exposes.
         @SuppressWarnings("unchecked")
         InqBulkhead<Object, Object> bulkhead = (InqBulkhead<Object, Object>)
-                runtime.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+                runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
         System.out.println("permits after async saturation: " + bulkhead.availablePermits());
     }
 

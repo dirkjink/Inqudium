@@ -21,14 +21,14 @@ import java.util.List;
  *   <li>{@link PassThroughEntry} — single {@code MethodInvoker}
  *       call to the real target. Used when the annotation
  *       evaluator's plan for the method is
- *       {@code MethodPlan.PassThrough} (sub-step 3.6).</li>
+ *       {@code MethodPlan.PassThrough}.</li>
  *   <li>{@link DefaultMethodEntry} — {@code InvocationHandler.invokeDefault}
- *       for unoverridden Java default methods (sub-step 3.6).</li>
- *   <li>{@link SyncCacheEntry} — folded sync chain (sub-step 3.7).</li>
+ *       for unoverridden Java default methods.</li>
+ *   <li>{@link SyncCacheEntry} — folded sync chain.</li>
  *   <li>{@link ObjectMethodEntry} — {@code Object}-declared methods
  *       ({@code equals}, {@code hashCode}, {@code toString}), routed
- *       to {@link ObjectMethodHandler} (sub-step 3.10).</li>
- *   <li>{@link AsyncCacheEntry} — folded async chain (sub-step 3.11).</li>
+ *       to {@link ObjectMethodHandler}.</li>
+ *   <li>{@link AsyncCacheEntry} — folded async chain.</li>
  * </ul>
  *
  * <p><strong>Internal API.</strong> Permitted types are
@@ -60,10 +60,8 @@ public sealed interface MethodDispatchEntry
     /**
      * Returns the layer descriptions for this entry in outer-to-inner
      * order. {@link SyncCacheEntry} and {@link AsyncCacheEntry}
-     * override via their package-private accessor (record component
-     * for {@code AsyncCacheEntry}, declared method for
-     * {@code SyncCacheEntry}); the other three entry types inherit
-     * the empty-list default.
+     * override via their package-private record-component accessor;
+     * the other three entry types inherit the empty-list default.
      *
      * <p>Used by
      * {@link eu.inqudium.proxy.handler.InqInvocationHandler#methodLayers()}

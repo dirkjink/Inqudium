@@ -2,6 +2,7 @@ package eu.inqudium.proxy.construction;
 
 import eu.inqudium.annotation.evaluator.EvaluationResult;
 import eu.inqudium.annotation.evaluator.MethodPlan;
+import eu.inqudium.core.element.InqElement;
 import eu.inqudium.pipeline.InqPipeline;
 import eu.inqudium.pipeline.InqPipelineAnnotationEvaluator;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
@@ -19,16 +20,14 @@ import java.util.Objects;
  * <ol>
  *   <li>Validate inputs.</li>
  *   <li>Call the annotation evaluator via the
- *       {@link InqPipelineAnnotationEvaluator} bridge (ADR-036 plus
- *       the transitional bridge from sub-step 3.3).</li>
+ *       {@link InqPipelineAnnotationEvaluator} bridge (ADR-036).</li>
  *   <li>For each method in the evaluator's plan, classify and build
  *       a {@link MethodDispatchEntry} via
  *       {@link MethodDispatchEntryFactory}.</li>
  * </ol>
  *
- * <p>Returns the per-proxy entries map. Sub-step 3.9's
- * {@code ProxyDispatcher} wires this into an
- * {@code InqInvocationHandler} and a JDK proxy.</p>
+ * <p>Returns the per-proxy entries map. {@code ProxyDispatcher}
+ * wires this into an {@code InqInvocationHandler} and a JDK proxy.</p>
  *
  * <p><strong>Construction-time errors:</strong></p>
  * <ul>
@@ -46,8 +45,8 @@ import java.util.Objects;
  * </ul>
  *
  * <p><strong>Internal API.</strong> Public for cross-package
- * reference from sub-step 3.9's {@code ProxyDispatcher}; not part
- * of the stable public surface.</p>
+ * reference from {@code ProxyDispatcher}; not part of the stable
+ * public surface.</p>
  */
 public final class ProxyBuilder {
 
@@ -101,13 +100,16 @@ public final class ProxyBuilder {
                 .evaluate(pipeline, serviceInterface, implClass);
 
         Map<Method, MethodPlan> plans = evaluation.plans();
-        Map<Method, MethodDispatchEntry> entries = new HashMap<>(plans.size());
+        Map<Method, MethodDispatchEntry> entries =
+                new HashMap<>(plans.size() + OBJECT_METHOD_KINDS.size());
 
+        Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName =
+                ElementResolver.indexByTypeAndName(pipeline);
         for (Map.Entry<Method, MethodPlan> entry : plans.entrySet()) {
             Method method = entry.getKey();
             MethodPlan plan = entry.getValue();
             MethodDispatchEntry dispatchEntry = MethodDispatchEntryFactory.createEntry(
-                    method, plan, pipeline, target, implClass);
+                    method, plan, pipeline, target, implClass, elementsByTypeAndName);
             entries.put(method, dispatchEntry);
         }
 

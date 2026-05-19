@@ -4,7 +4,6 @@ import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.imperative.core.pipeline.AsyncLayerAction;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
-import eu.inqudium.pipeline.InqPipeline;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
 import eu.inqudium.proxy.folding.AsyncChainFolder;
 import eu.inqudium.proxy.folding.FoldedAsyncChain;
@@ -12,6 +11,7 @@ import eu.inqudium.proxy.invocation.MethodInvoker;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Builds a {@link MethodDispatchEntry} for a service method that
@@ -22,7 +22,7 @@ import java.util.List;
  * <h2>Why this class exists</h2>
  *
  * <p>Per the finding documented in
- * {@code ADR-037-DISCIPLINE-FINDING.md} (sub-step 3.13's PR), the
+ * {@code ADR-037-DISCIPLINE-FINDING.md} (PR #74), the
  * HotSpot bytecode verifier resolves the return type of every
  * {@code MethodHandle} in a class's {@code BootstrapMethods}
  * attribute as soon as the class's first {@code invokedynamic} site
@@ -72,11 +72,11 @@ public final class AsyncEntryBuilder {
     public static MethodDispatchEntry build(
             Method method,
             MethodPlan.Decorated decorated,
-            InqPipeline pipeline,
-            Object target) {
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
 
-        List<InqElement> elements = ElementResolver.resolveNames(
-                decorated.elementNamesOuterToInner(), pipeline);
+        List<InqElement> elements = ElementResolver.resolveTriples(
+                decorated.elementsOuterToInner(), elementsByTypeAndName);
         AsyncParadigmValidator.validate(elements, method);
 
         List<AsyncLayerAction<Void, Object>> asyncLayers = elements.stream()

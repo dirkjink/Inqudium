@@ -37,7 +37,7 @@ import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
  * @since 0.4.0
  *
  * @deprecated Replaced by {@link eu.inqudium.imperative.bulkhead.InqBulkhead}, accessed
- *             through {@code Inqudium.configure().imperative(im -> im.bulkhead("name", ...))}
+ *             through {@code Inqudium.configure().sync(s -> s.bulkhead("name", ...))}
  *             per ADR-025 / ADR-029. Retained because
  *             {@code eu.inqudium.imperative.circuitbreaker.CircuitBreaker} and the legacy
  *             {@code Resilience} DSL still construct bulkheads via {@code Bulkhead.of(...)};

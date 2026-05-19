@@ -3,6 +3,7 @@ package eu.inqudium.config.runtime;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.config.snapshot.ComponentSnapshot;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -19,7 +20,7 @@ import java.util.stream.Stream;
  * <p>Lookups that disambiguate by paradigm — for example, the same bulkhead name registered in
  * both the imperative and the reactive section — accept a {@link ParadigmTag} alongside the
  * name. The view never returns the live handle; it returns the snapshot. Code that needs the
- * handle goes through the paradigm-specific container ({@link InqRuntime#imperative()}).
+ * handle goes through the paradigm-specific container ({@link InqRuntime#sync()}).
  */
 public interface InqConfigView {
 

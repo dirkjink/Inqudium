@@ -1,7 +1,7 @@
 package eu.inqudium.config.dsl;
 
 import eu.inqudium.config.patch.BulkheadPatch;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.snapshot.BulkheadEventConfig;
 import eu.inqudium.config.snapshot.BulkheadField;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
@@ -28,7 +28,7 @@ class BulkheadBuilderBaseTest {
      * paradigm-specific tests live next to the concrete builder in
      * {@code DefaultImperativeBulkheadBuilderTest}.
      */
-    private static final class TestBuilder extends BulkheadBuilderBase<ImperativeTag> {
+    private static final class TestBuilder extends BulkheadBuilderBase<SyncTag> {
         TestBuilder(String name) {
             super(name);
         }

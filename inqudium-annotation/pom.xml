@@ -35,6 +35,28 @@
             <artifactId>inqudium-core</artifactId>
             <scope>compile</scope>
         </dependency>
+
+        <!-- Test-scope only: enables exercising the lazy-class-loading
+             paradigm probes against real reactor/rxjava3/coroutines types.
+             Not visible to production code. -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
+            <scope>test</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.reactivex.rxjava3</groupId>
+            <artifactId>rxjava</artifactId>
+            <scope>test</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlinx</groupId>
+            <artifactId>kotlinx-coroutines-core</artifactId>
+            <scope>test</scope>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 
 </project>

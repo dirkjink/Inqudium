@@ -17,6 +17,7 @@ import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
 import eu.inqudium.config.validation.ApplyOutcome;
 import eu.inqudium.config.validation.VetoFinding;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.log.LogAction;
 import eu.inqudium.core.log.Logger;
 import eu.inqudium.core.log.LoggerFactory;
@@ -40,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class UpdateDispatcherTest {
 
     private static final ComponentKey KEY =
-            new ComponentKey("inventory", ImperativeTag.INSTANCE);
+            new ComponentKey("inventory", SyncTag.INSTANCE);
 
     private static BulkheadSnapshot snapshot(int max) {
         return new BulkheadSnapshot(

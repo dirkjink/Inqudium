@@ -2,7 +2,7 @@ package eu.inqudium.config.spi;
 
 import eu.inqudium.config.dsl.BulkheadBuilderBase;
 import eu.inqudium.config.runtime.ParadigmContainer;
-import eu.inqudium.config.runtime.ParadigmTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
 
 /**
@@ -29,17 +29,40 @@ public interface ParadigmProvider {
     ParadigmTag paradigm();
 
     /**
-     * Create a paradigm-specific bulkhead builder for the named bulkhead. The DSL section invokes
-     * this on every {@code .bulkhead("name", ...)} call, hands the returned builder to the
-     * user's configurer (after casting to the paradigm-specific sub-interface), then extracts
-     * the resulting patch via {@link BulkheadBuilderBase#toPatch()}.
+     * Create a sync-paradigm bulkhead builder for the named bulkhead.
+     * Called by {@link eu.inqudium.config.dsl.DefaultSyncSection} on
+     * every {@code .sync(...).bulkhead("name", ...)} call.
+     *
+     * <p>The default implementation throws
+     * {@link UnsupportedOperationException}. Paradigm providers that
+     * implement sync-paradigm support override it to return a builder
+     * implementing {@link eu.inqudium.config.dsl.SyncBulkheadBuilder}.
+     * The imperative module's provider overrides it.</p>
      *
      * @param name the bulkhead's name; non-null and non-blank.
-     * @return a paradigm-specific {@code BulkheadBuilderBase} instance. The concrete return type
-     *         implements the paradigm's bulkhead-builder sub-interface (e.g.
-     *         {@code ImperativeBulkheadBuilder}).
+     * @return a paradigm-specific {@code BulkheadBuilderBase} instance
+     *         implementing {@link eu.inqudium.config.dsl.SyncBulkheadBuilder}.
      */
-    BulkheadBuilderBase<?> createBulkheadBuilder(String name);
+    default BulkheadBuilderBase<?> createSyncBulkheadBuilder(String name) {
+        throw new UnsupportedOperationException(
+                "Paradigm provider " + getClass().getName()
+                        + " does not implement createSyncBulkheadBuilder");
+    }
+
+    /**
+     * Create an async-paradigm bulkhead builder for the named bulkhead.
+     * Counterpart to {@link #createSyncBulkheadBuilder(String)} for
+     * {@link eu.inqudium.config.dsl.DefaultAsyncSection}.
+     *
+     * @param name the bulkhead's name; non-null and non-blank.
+     * @return a paradigm-specific {@code BulkheadBuilderBase} instance
+     *         implementing {@link eu.inqudium.config.dsl.AsyncBulkheadBuilder}.
+     */
+    default BulkheadBuilderBase<?> createAsyncBulkheadBuilder(String name) {
+        throw new UnsupportedOperationException(
+                "Paradigm provider " + getClass().getName()
+                        + " does not implement createAsyncBulkheadBuilder");
+    }
 
     /**
      * Materialize a paradigm container from the given general snapshot and the patches the DSL

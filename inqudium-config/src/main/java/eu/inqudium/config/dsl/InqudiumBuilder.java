@@ -8,15 +8,14 @@ import java.util.function.Consumer;
  * Top-level builder for {@code Inqudium.configure()...build()}.
  *
  * <p>Receives a {@code .general(...)} block, zero or more paradigm sections
- * ({@code .imperative(...)} for now; reactive, RxJava 3, and coroutines join in later phases),
- * and an optional {@code .strict()} toggle. {@link #build()} runs the complete validation
- * pipeline (classes 1, 2, 3 per ADR-027), invokes the matching
+ * ({@code .sync(...)} and {@code .async(...)} for now; reactive, RxJava 3, and coroutines
+ * join in later phases), and an optional {@code .strict()} toggle. {@link #build()} runs the
+ * complete validation pipeline (classes 1, 2, 3 per ADR-027), invokes the matching
  * {@link eu.inqudium.config.spi.ParadigmProvider ParadigmProvider}s for the declared sections,
  * and returns the live {@link InqRuntime}.
  *
- * <p>Phase&nbsp;1 ships only the imperative section. Reactive, RxJava 3, and coroutine entry
- * points will be added when their providers come online; until then, a configuration that
- * requires one of them has no DSL surface to express it.
+ * <p>Phase&nbsp;1 ships sync and async sections. Reactive, RxJava 3, and coroutine entry
+ * points will be added when their providers come online.
  */
 public interface InqudiumBuilder {
 
@@ -30,12 +29,20 @@ public interface InqudiumBuilder {
     InqudiumBuilder general(Consumer<GeneralSnapshotBuilder> configurer);
 
     /**
-     * Configure the imperative paradigm section.
+     * Configure the synchronous-paradigm section.
      *
      * @param configurer fills the supplied section.
      * @return this builder, for chaining.
      */
-    InqudiumBuilder imperative(Consumer<ImperativeSection> configurer);
+    InqudiumBuilder sync(Consumer<SyncSection> configurer);
+
+    /**
+     * Configure the asynchronous-paradigm section.
+     *
+     * @param configurer fills the supplied section.
+     * @return this builder, for chaining.
+     */
+    InqudiumBuilder async(Consumer<AsyncSection> configurer);
 
     /**
      * Elevate {@link eu.inqudium.config.validation.Severity#WARNING WARNING} findings to

@@ -31,39 +31,57 @@
                 <scope>compile</scope>
             </dependency>
 
+            <!-- Annotation infrastructure -->
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-annotation</artifactId>
+                <version>${revision}</version>
+                <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-annotation-support</artifactId>
+                <version>${revision}</version>
+                <scope>compile</scope>
+            </dependency>
+
+            <!-- Configuration runtime -->
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-config</artifactId>
+                <version>${revision}</version>
+                <scope>compile</scope>
+            </dependency>
+
+            <!-- Pipeline + integrations -->
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-pipeline</artifactId>
+                <version>${revision}</version>
+                <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-proxy</artifactId>
+                <version>${revision}</version>
+                <scope>compile</scope>
+            </dependency>
+
             <!-- Imperative elements -->
-            <dependency>
-                <groupId>eu.inqudium</groupId>
-                <artifactId>inqudium-circuitbreaker</artifactId>
-                <version>${revision}</version>
-                <scope>compile</scope>
-            </dependency>
-            <dependency>
-                <groupId>eu.inqudium</groupId>
-                <artifactId>inqudium-retry</artifactId>
-                <version>${revision}</version>
-                <scope>compile</scope>
-            </dependency>
-            <dependency>
-                <groupId>eu.inqudium</groupId>
-                <artifactId>inqudium-ratelimiter</artifactId>
-                <version>${revision}</version>
-                <scope>compile</scope>
-            </dependency>
             <dependency>
                 <groupId>eu.inqudium</groupId>
                 <artifactId>inqudium-bulkhead</artifactId>
                 <version>${revision}</version>
                 <scope>compile</scope>
             </dependency>
+
+            <!-- Paradigm runtimes -->
             <dependency>
                 <groupId>eu.inqudium</groupId>
-                <artifactId>inqudium-timelimiter</artifactId>
+                <artifactId>inqudium-imperative</artifactId>
                 <version>${revision}</version>
                 <scope>compile</scope>
             </dependency>
-
-            <!-- Native paradigm implementations -->
             <dependency>
                 <groupId>eu.inqudium</groupId>
                 <artifactId>inqudium-kotlin</artifactId>
@@ -84,6 +102,12 @@
             </dependency>
 
             <!-- Integrations -->
+            <dependency>
+                <groupId>eu.inqudium</groupId>
+                <artifactId>inqudium-spring</artifactId>
+                <version>${revision}</version>
+                <scope>compile</scope>
+            </dependency>
             <dependency>
                 <groupId>eu.inqudium</groupId>
                 <artifactId>inqudium-spring-boot</artifactId>

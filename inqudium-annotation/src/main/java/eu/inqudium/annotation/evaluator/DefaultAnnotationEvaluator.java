@@ -2,6 +2,7 @@ package eu.inqudium.annotation.evaluator;
 
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.core.pipeline.InqPipeline;
 
 import java.lang.annotation.Annotation;
@@ -37,7 +38,20 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
     }
 
     @Override
-    public <T> EvaluationResult evaluate(Class<T> serviceInterface, Class<? extends T> implementationClass) {
+    public <T> EvaluationResult evaluate(
+            Class<T> serviceInterface, Class<? extends T> implementationClass) {
+        validateArguments(serviceInterface, implementationClass);
+
+        Map<Method, MethodPlan> plans = new LinkedHashMap<>();
+        for (Method interfaceMethod : serviceInterface.getMethods()) {
+            MethodPlan plan = planFor(serviceInterface, interfaceMethod, implementationClass);
+            plans.put(interfaceMethod, plan);
+        }
+        return new EvaluationResult(plans);
+    }
+
+    private static <T> void validateArguments(
+            Class<T> serviceInterface, Class<? extends T> implementationClass) {
         if (serviceInterface == null) {
             throw new IllegalArgumentException("serviceInterface must not be null");
         }
@@ -53,36 +67,50 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
                     "implementationClass " + implementationClass.getName()
                             + " does not implement " + serviceInterface.getName());
         }
-
-        Map<Method, MethodPlan> plans = new LinkedHashMap<>();
-        for (Method interfaceMethod : serviceInterface.getMethods()) {
-            MethodPlan plan = planFor(serviceInterface, interfaceMethod, implementationClass);
-            plans.put(interfaceMethod, plan);
-        }
-        return new EvaluationResult(plans);
     }
 
     private MethodPlan planFor(
             Class<?> serviceInterface, Method interfaceMethod, Class<?> implementationClass) {
 
-        AnnotationSource source = inheritanceResolver.resolve(interfaceMethod, implementationClass);
+        ParadigmTag paradigm = ParadigmClassifier.classify(interfaceMethod);
+        AnnotatedElement annotatedElement = resolveAnnotatedElement(interfaceMethod, implementationClass);
 
-        AnnotatedElement annotatedElement = switch (source) {
+        if (annotatedElement == null) {
+            return new MethodPlan.PassThrough(paradigm);
+        }
+
+        List<ElementRef> orderedRefs = new ArrayList<>();
+        forEachOrderedElement(serviceInterface, interfaceMethod, annotatedElement,
+                (type, name) -> orderedRefs.add(new ElementRef(type, name)));
+
+        return new MethodPlan.Decorated(paradigm, orderedRefs);
+    }
+
+    private AnnotatedElement resolveAnnotatedElement(
+            Method interfaceMethod, Class<?> implementationClass) {
+        AnnotationSource source = inheritanceResolver.resolve(interfaceMethod, implementationClass);
+        return switch (source) {
             case AnnotationSource.PassThrough ignored -> null;
             case AnnotationSource.MethodLevel methodLevel -> methodLevel.method();
             case AnnotationSource.ClassLevelOnly classLevel -> classLevel.annotationSourceClass();
         };
+    }
 
-        if (annotatedElement == null) {
-            return new MethodPlan.PassThrough();
-        }
+    /**
+     * Resolves the ordered list of element types for {@code annotatedElement}
+     * and invokes {@code consumer} for each {@code (type, name)} pair in
+     * order.
+     */
+    private void forEachOrderedElement(
+            Class<?> serviceInterface,
+            Method interfaceMethod,
+            AnnotatedElement annotatedElement,
+            java.util.function.BiConsumer<InqElementType, String> consumer) {
 
         Map<InqElementType, String> elementNames = collectElementNames(
                 serviceInterface, interfaceMethod, annotatedElement);
-
         List<InqElementType> ordering = orderingResolver.resolveOrder(annotatedElement);
 
-        List<String> orderedNames = new ArrayList<>(ordering.size());
         for (InqElementType type : ordering) {
             String name = elementNames.get(type);
             if (name == null) {
@@ -95,10 +123,8 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
                                 + " references element type " + type
                                 + " that is not annotated on " + annotatedElement);
             }
-            orderedNames.add(name);
+            consumer.accept(type, name);
         }
-
-        return new MethodPlan.Decorated(orderedNames);
     }
 
     /**

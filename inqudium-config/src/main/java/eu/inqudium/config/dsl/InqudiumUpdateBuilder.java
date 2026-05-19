@@ -16,10 +16,18 @@ import java.util.function.Consumer;
 public interface InqudiumUpdateBuilder {
 
     /**
-     * Apply updates to the imperative paradigm section.
+     * Apply updates via the synchronous-paradigm section.
      *
      * @param configurer fills the supplied section.
      * @return this builder, for chaining.
      */
-    InqudiumUpdateBuilder imperative(Consumer<ImperativeSection> configurer);
+    InqudiumUpdateBuilder sync(Consumer<SyncSection> configurer);
+
+    /**
+     * Apply updates via the asynchronous-paradigm section.
+     *
+     * @param configurer fills the supplied section.
+     * @return this builder, for chaining.
+     */
+    InqudiumUpdateBuilder async(Consumer<AsyncSection> configurer);
 }

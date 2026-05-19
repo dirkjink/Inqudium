@@ -14,6 +14,17 @@ import java.lang.reflect.Method;
  * cached in this instance. Arity-specialised variants (one handle
  * per parameter count) are deferred until benchmarks justify the
  * complexity (per ARCHITECTURE.md §11).</p>
+ *
+ * <p><strong>JPMS note.</strong> The reflect-and-bind step uses
+ * {@link MethodHandles#lookup()}, which sees public methods on
+ * public types only. For service interfaces or implementation
+ * classes that are non-public or non-exported in a JPMS
+ * deployment, construction will fail with
+ * {@link IllegalAccessException} wrapped in
+ * {@link IllegalStateException}. Application authors deploying
+ * under strict JPMS should ensure their service interfaces and
+ * implementation classes are exported by their containing
+ * modules.</p>
  */
 final class MethodHandleInvoker implements MethodInvoker {
 
@@ -33,10 +44,5 @@ final class MethodHandleInvoker implements MethodInvoker {
     @Override
     public Object invoke(Object[] args) throws Throwable {
         return handle.invokeWithArguments(args);
-    }
-
-    @Override
-    public Object invokeAsync(Object[] args) throws Throwable {
-        return invoke(args);
     }
 }

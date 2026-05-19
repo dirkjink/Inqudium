@@ -34,10 +34,16 @@ public interface InqRuntime extends AutoCloseable {
     InqConfigView config();
 
     /**
-     * @return the imperative paradigm container.
+     * @return the synchronous-imperative paradigm container.
      * @throws ParadigmUnavailableException if no imperative provider is on the classpath.
      */
-    Imperative imperative();
+    Sync sync();
+
+    /**
+     * @return the asynchronous-imperative paradigm container.
+     * @throws ParadigmUnavailableException if no imperative provider is on the classpath.
+     */
+    Async async();
 
     /**
      * @return the {@link BuildReport} produced at the runtime's <em>initial</em> build time.

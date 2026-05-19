@@ -2,7 +2,7 @@ package eu.inqudium.imperative.runtime;
 
 import eu.inqudium.config.Inqudium;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.AdaptiveInstantStrategyConfig;
 import eu.inqudium.config.snapshot.AdaptiveStrategyConfig;
@@ -42,11 +42,11 @@ class BulkheadStrategyDslEndToEndTest {
         @Test
         void should_default_to_SemaphoreStrategyConfig_without_an_explicit_strategy_setter() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 BulkheadSnapshot snap =
-                        runtime.imperative().bulkhead("inventory").snapshot();
+                        runtime.sync().bulkhead("inventory").snapshot();
                 assertThat(snap.strategy()).isInstanceOf(SemaphoreStrategyConfig.class);
             }
         }
@@ -54,7 +54,7 @@ class BulkheadStrategyDslEndToEndTest {
         @Test
         void should_carry_codel_through_to_the_snapshot() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .codel(c -> c
                                     .targetDelay(Duration.ofMillis(75))
@@ -62,7 +62,7 @@ class BulkheadStrategyDslEndToEndTest {
                     .build()) {
 
                 CoDelStrategyConfig codel = (CoDelStrategyConfig)
-                        runtime.imperative().bulkhead("inventory").snapshot().strategy();
+                        runtime.sync().bulkhead("inventory").snapshot().strategy();
                 assertThat(codel.targetDelay()).isEqualTo(Duration.ofMillis(75));
                 assertThat(codel.interval()).isEqualTo(Duration.ofMillis(750));
             }
@@ -71,13 +71,13 @@ class BulkheadStrategyDslEndToEndTest {
         @Test
         void should_carry_adaptive_with_AIMD_through_to_the_snapshot() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .adaptive(a -> a.aimd(x -> x.initialLimit(33)))))
                     .build()) {
 
                 AdaptiveStrategyConfig adaptive = (AdaptiveStrategyConfig)
-                        runtime.imperative().bulkhead("inventory").snapshot().strategy();
+                        runtime.sync().bulkhead("inventory").snapshot().strategy();
                 AimdLimitAlgorithmConfig aimd =
                         (AimdLimitAlgorithmConfig) adaptive.algorithm();
                 assertThat(aimd.initialLimit()).isEqualTo(33);
@@ -87,14 +87,14 @@ class BulkheadStrategyDslEndToEndTest {
         @Test
         void should_carry_adaptiveNonBlocking_with_Vegas_through_to_the_snapshot() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .adaptiveNonBlocking(a -> a.vegas(v -> v
                                     .initialLimit(11)))))
                     .build()) {
 
                 AdaptiveInstantStrategyConfig nb = (AdaptiveInstantStrategyConfig)
-                        runtime.imperative().bulkhead("inventory").snapshot().strategy();
+                        runtime.sync().bulkhead("inventory").snapshot().strategy();
                 VegasLimitAlgorithmConfig vegas = (VegasLimitAlgorithmConfig) nb.algorithm();
                 assertThat(vegas.initialLimit()).isEqualTo(11);
             }
@@ -107,7 +107,7 @@ class BulkheadStrategyDslEndToEndTest {
             // that exercises the user-facing builder.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                     .interval(Duration.ofMillis(500)))))
@@ -115,7 +115,7 @@ class BulkheadStrategyDslEndToEndTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 String result = bh.execute(1L, 1L, "x", IDENTITY);
 
                 assertThat(result).isEqualTo("x");
@@ -137,22 +137,22 @@ class BulkheadStrategyDslEndToEndTest {
             // check accepts.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                         .interval(Duration.ofMillis(500))))));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("inventory", ImperativeTag.INSTANCE),
+                                new ComponentKey("inventory", SyncTag.INSTANCE),
                                 ApplyOutcome.PATCHED);
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(CoDelStrategyConfig.class);

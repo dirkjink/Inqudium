@@ -14,6 +14,16 @@ import java.lang.reflect.Method;
  * wraps the method's thrown exceptions in
  * {@link InvocationTargetException}. Callers unwrap via
  * {@code ThrowableUnwrap}.</p>
+ *
+ * <p><strong>JPMS note.</strong> The constructor calls
+ * {@code setAccessible(true)} on the target method, which under
+ * strict JPMS configurations requires the target's module to be
+ * open to {@code eu.inqudium.proxy}. Users running with
+ * {@code inqudium.proxy.invoker=reflective} on a strict JPMS
+ * deployment may need an {@code --add-opens} JVM flag specifying
+ * the target's module. The default {@code mh}
+ * (MethodHandle-based) path is not affected because it uses
+ * lookup-based access rather than {@code setAccessible}.</p>
  */
 final class ReflectiveInvoker implements MethodInvoker {
 
@@ -40,10 +50,5 @@ final class ReflectiveInvoker implements MethodInvoker {
         }
         // InvocationTargetException is left unwrapped here; the caller
         // (typically ExceptionClassifier via ThrowableUnwrap) unwraps it.
-    }
-
-    @Override
-    public Object invokeAsync(Object[] args) throws Throwable {
-        return invoke(args);
     }
 }

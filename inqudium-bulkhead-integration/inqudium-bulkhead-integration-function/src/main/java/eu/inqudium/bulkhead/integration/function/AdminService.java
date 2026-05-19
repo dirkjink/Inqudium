@@ -45,7 +45,7 @@ public class AdminService {
     public void startSellPromotion() {
         LOG.info("Sell promotion starting — patching bulkhead '{}' to permissive/50 permits",
                 BulkheadConfig.BULKHEAD_NAME);
-        BuildReport report = runtime.update(u -> u.imperative(im -> im
+        BuildReport report = runtime.update(u -> u.sync(s -> s
                 .bulkhead(BulkheadConfig.BULKHEAD_NAME, b -> b
                         .permissive()
                         .maxConcurrentCalls(50))));
@@ -62,7 +62,7 @@ public class AdminService {
     public void endSellPromotion() {
         LOG.info("Sell promotion ending — patching bulkhead '{}' back to balanced/2 permits",
                 BulkheadConfig.BULKHEAD_NAME);
-        BuildReport report = runtime.update(u -> u.imperative(im -> im
+        BuildReport report = runtime.update(u -> u.sync(s -> s
                 .bulkhead(BulkheadConfig.BULKHEAD_NAME, b -> b
                         .balanced()
                         .maxConcurrentCalls(2))));

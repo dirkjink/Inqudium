@@ -15,36 +15,23 @@ import java.util.Objects;
  * <p>Per-call work: pull {@code callId} from the handler, call
  * {@link FoldedSyncChain#run}. All folding work happened once at
  * proxy-construction time.</p>
+ *
+ * <p>Package-private — proxy code constructs these via the
+ * {@link MethodDispatchEntry#syncCache(FoldedSyncChain, List)}
+ * static factory.</p>
  */
-final class SyncCacheEntry implements MethodDispatchEntry {
+record SyncCacheEntry(FoldedSyncChain chain, List<String> layerDescriptions)
+        implements MethodDispatchEntry {
 
-    private final FoldedSyncChain chain;
-    private final List<String> layerDescriptions;
-
-    SyncCacheEntry(FoldedSyncChain chain, List<String> layerDescriptions) {
-        this.chain = Objects.requireNonNull(chain, "chain");
-        this.layerDescriptions = List.copyOf(
+    SyncCacheEntry {
+        Objects.requireNonNull(chain, "chain");
+        layerDescriptions = List.copyOf(
                 Objects.requireNonNull(layerDescriptions, "layerDescriptions"));
     }
 
     @Override
     public Object dispatch(Object proxy, InqInvocationHandler handler, Object[] args)
             throws Throwable {
-        long stackId = handler.stackId();
-        long callId = handler.nextCallId();
-        return chain.run(stackId, callId, args);
-    }
-
-    /**
-     * Returns an immutable snapshot of the layer descriptions
-     * (outermost-first), for introspection (ADR-039) and toString.
-     *
-     * <p>Overrides {@link MethodDispatchEntry#layerDescriptions()}'s
-     * empty-list default; must be {@code public} to match the
-     * interface's visibility.</p>
-     */
-    @Override
-    public List<String> layerDescriptions() {
-        return layerDescriptions;
+        return chain.run(handler.stackId(), handler.nextCallId(), args);
     }
 }

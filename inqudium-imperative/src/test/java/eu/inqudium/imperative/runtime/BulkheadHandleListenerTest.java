@@ -5,7 +5,7 @@ import eu.inqudium.config.lifecycle.ChangeDecision;
 import eu.inqudium.config.lifecycle.LifecycleState;
 import eu.inqudium.config.runtime.BulkheadHandle;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.validation.ApplyOutcome;
 import eu.inqudium.config.validation.BuildReport;
@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Direct public-API tests for the listener-registration surface on
- * {@link BulkheadHandle} (specialised to {@link ImperativeTag} as the runtime returns it). The
+ * {@link BulkheadHandle} (specialised to {@link SyncTag} as the runtime returns it). The
  * dispatcher unit tests in {@code UpdateDispatcherTest} pin the
  * routing semantics with synthetic handles; the runtime end-to-end tests in
  * {@code RuntimeUpdateTest} pin per-component outcomes including listener vetoes. This class
@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BulkheadHandleListenerTest {
 
     private static final ComponentKey KEY =
-            new ComponentKey("inventory", ImperativeTag.INSTANCE);
+            new ComponentKey("inventory", SyncTag.INSTANCE);
 
     private static final LayerTerminal<String, String> IDENTITY =
             (chainId, callId, argument) -> argument;
@@ -47,18 +47,18 @@ class BulkheadHandleListenerTest {
      */
     private static HotBulkhead newHotBulkhead() {
         InqRuntime runtime = Inqudium.configure()
-                .imperative(im -> im.bulkhead("inventory",
+                .sync(s -> s.bulkhead("inventory",
                         b -> b.balanced().maxConcurrentCalls(15)))
                 .build();
         @SuppressWarnings("unchecked")
         InqBulkhead<String, String> bh =
-                (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
         bh.execute(1L, 1L, "warm", IDENTITY);
         return new HotBulkhead(runtime, bh);
     }
 
     /** Pair of {@link InqRuntime} and an already-warmed bulkhead handle. */
-    private record HotBulkhead(InqRuntime runtime, BulkheadHandle<ImperativeTag> bulkhead) {
+    private record HotBulkhead(InqRuntime runtime, BulkheadHandle<SyncTag> bulkhead) {
     }
 
     @Nested
@@ -76,7 +76,7 @@ class BulkheadHandleListenerTest {
             // would still pass.
 
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 assertThat(bh.lifecycleState()).isEqualTo(LifecycleState.HOT);
                 AtomicInteger calls = new AtomicInteger();
                 bh.onChangeRequest(req -> {
@@ -85,7 +85,7 @@ class BulkheadHandleListenerTest {
                 });
 
                 // When
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
@@ -98,11 +98,11 @@ class BulkheadHandleListenerTest {
         void should_block_a_patch_via_a_listener_veto_through_the_handle_API() {
             // Given
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 bh.onChangeRequest(req -> ChangeDecision.veto("policy disallows"));
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 // Then
@@ -126,7 +126,7 @@ class BulkheadHandleListenerTest {
         void should_stop_consulting_a_listener_after_close() throws Exception {
             // Given
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 AtomicInteger calls = new AtomicInteger();
                 AutoCloseable handle = bh.onChangeRequest(req -> {
                     calls.incrementAndGet();
@@ -134,13 +134,13 @@ class BulkheadHandleListenerTest {
                 });
 
                 // First update — listener consulted.
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
                 assertThat(calls.get()).isEqualTo(1);
 
                 // When — unregister, then update again.
                 handle.close();
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(50))));
 
                 // Then — counter is unchanged (listener no longer consulted), patch applied.
@@ -160,7 +160,7 @@ class BulkheadHandleListenerTest {
             // surprise at production teardown time.
 
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 AutoCloseable handle = bh.onChangeRequest(req -> ChangeDecision.accept());
 
                 // When / Then — neither close throws.
@@ -168,7 +168,7 @@ class BulkheadHandleListenerTest {
                 handle.close();
 
                 // And a subsequent update still applies cleanly without the listener.
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(40);
             }
@@ -185,7 +185,7 @@ class BulkheadHandleListenerTest {
             // silently drop the safety guard.
 
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 AtomicInteger surviving = new AtomicInteger();
                 AutoCloseable goingAway = bh.onChangeRequest(req -> ChangeDecision.accept());
                 bh.onChangeRequest(req -> {
@@ -195,7 +195,7 @@ class BulkheadHandleListenerTest {
 
                 // When
                 goingAway.close();
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
@@ -223,7 +223,7 @@ class BulkheadHandleListenerTest {
             // evaluated for every update, not just the first one after registration.
 
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 AtomicInteger calls = new AtomicInteger();
                 bh.onChangeRequest(req -> {
                     calls.incrementAndGet();
@@ -231,11 +231,11 @@ class BulkheadHandleListenerTest {
                 });
 
                 // When — three updates in a row.
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(20))));
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(30))));
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
@@ -262,7 +262,7 @@ class BulkheadHandleListenerTest {
             // ordering for the suffix).
 
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 List<String> invocationOrder = new ArrayList<>();
                 bh.onChangeRequest(req -> {
                     invocationOrder.add("first");
@@ -278,7 +278,7 @@ class BulkheadHandleListenerTest {
                 });
 
                 // When
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
@@ -295,7 +295,7 @@ class BulkheadHandleListenerTest {
             // handle API and the dispatcher share semantics.
 
             try (InqRuntime runtime = newHotBulkhead().runtime) {
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 AtomicInteger second = new AtomicInteger();
                 bh.onChangeRequest(req -> ChangeDecision.veto("first says no"));
                 bh.onChangeRequest(req -> {
@@ -304,7 +304,7 @@ class BulkheadHandleListenerTest {
                 });
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then

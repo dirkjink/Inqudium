@@ -2,7 +2,7 @@ package eu.inqudium.imperative.runtime;
 
 import eu.inqudium.config.Inqudium;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.config.runtime.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.CoDelStrategyConfig;
 import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
@@ -35,7 +35,7 @@ class BulkheadLiveTunabilityTest {
             (chainId, callId, argument) -> argument;
 
     private static final ComponentKey INVENTORY_KEY =
-            new ComponentKey("inventory", ImperativeTag.INSTANCE);
+            new ComponentKey("inventory", SyncTag.INSTANCE);
 
     @Nested
     @DisplayName("isolated MAX_CONCURRENT_CALLS patch")
@@ -48,15 +48,15 @@ class BulkheadLiveTunabilityTest {
             // path must keep working.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 assertThat(report.componentOutcomes())
@@ -72,7 +72,7 @@ class BulkheadLiveTunabilityTest {
             // non-tunable strategy.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                     .interval(Duration.ofMillis(500)))))
@@ -80,10 +80,10 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 assertThat(report.componentOutcomes())
@@ -100,17 +100,17 @@ class BulkheadLiveTunabilityTest {
         @Test
         void should_veto_on_hot_adaptive_bulkhead() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .adaptive(a -> a.aimd(x -> x.initialLimit(7)))))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 assertThat(report.componentOutcomes())
@@ -133,7 +133,7 @@ class BulkheadLiveTunabilityTest {
             // semaphore strategy.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                     .interval(Duration.ofMillis(500)))))
@@ -141,10 +141,10 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .semaphore()
                                 .maxConcurrentCalls(99))));
@@ -168,7 +168,7 @@ class BulkheadLiveTunabilityTest {
             // a single VetoFinding pointing at the strategy issue.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced()
                             .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                     .interval(Duration.ofMillis(500)))))
@@ -176,7 +176,7 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 CountDownLatch holding = new CountDownLatch(1);
                 CountDownLatch acquired = new CountDownLatch(1);
                 LayerTerminal<String, String> blocking = (cid, callId, arg) -> {
@@ -193,7 +193,7 @@ class BulkheadLiveTunabilityTest {
                 assertThat(acquired.await(5, TimeUnit.SECONDS)).isTrue();
 
                 try {
-                    BuildReport report = runtime.update(u -> u.imperative(im -> im
+                    BuildReport report = runtime.update(u -> u.sync(s -> s
                             .bulkhead("inventory", b -> b
                                     .semaphore()
                                     .maxConcurrentCalls(99))));

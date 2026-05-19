@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code "type parameter E is not within bound"} compile error.
  *
  * <p>Stage 3 lifted {@code InqElement} into {@code BulkheadHandle} and made {@code InqBulkhead}
- * implement {@code BulkheadHandle<ImperativeTag>} directly. The fact that this test compiles is
+ * implement {@code BulkheadHandle<SyncTag>} directly. The fact that this test compiles is
  * the closure proof: the constructor accepts a runtime-built {@code InqBulkhead} without any
  * adapter, intersection-type cast, or wrapper. The runtime assertions on the resulting provider
  * pin the wiring down to the layer name and order — both must reflect the bulkhead's identity.
@@ -39,7 +39,7 @@ class Adr033Stage3ClosureTest {
         // ElementLayerProvider's intersection-typed constructor accepts an InqBulkhead instance
         // without a "type parameter E is not within bound" error. The Stage-3 surface
         // consolidation (BulkheadHandle extends InqElement, InqBulkhead implements
-        // BulkheadHandle<ImperativeTag>) is what brings the InqElement contract within reach.
+        // BulkheadHandle<SyncTag>) is what brings the InqElement contract within reach.
         // Why successful: the test compiles, runs, and the resulting provider exposes the
         // bulkhead's identity in the layer name and the explicit order in the order accessor.
         // Why important: this is the structural precondition for the Phase-2 sub-step 2.18
@@ -48,11 +48,11 @@ class Adr033Stage3ClosureTest {
 
         // Given
         try (InqRuntime runtime = Inqudium.configure()
-                .imperative(im -> im.bulkhead("payments", b -> b.balanced()))
+                .sync(s -> s.bulkhead("payments", b -> b.balanced()))
                 .build()) {
             @SuppressWarnings("unchecked")
             InqBulkhead<Void, Object> bulkhead =
-                    (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("payments");
+                    runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
 
             // When
             ElementLayerProvider provider = new ElementLayerProvider(bulkhead, 100);

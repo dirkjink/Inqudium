@@ -37,7 +37,9 @@ public record ProxyStackInfo(
 
     public ProxyStackInfo {
         Objects.requireNonNull(targetType, "targetType");
-        elements = List.copyOf(elements);
-        methodLayers = List.copyOf(methodLayers);
+        elements = List.copyOf(
+                Objects.requireNonNull(elements, "elements"));
+        methodLayers = List.copyOf(
+                Objects.requireNonNull(methodLayers, "methodLayers"));
     }
 }

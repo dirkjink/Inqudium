@@ -1,12 +1,18 @@
 package eu.inqudium.proxy.construction;
 
+import eu.inqudium.annotation.evaluator.InqAnnotationConfigurationException;
 import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElement;
+import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.element.paradigm.CoroutinesTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.ReactiveTag;
+import eu.inqudium.core.element.paradigm.RxJava3Tag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerAction;
 import eu.inqudium.pipeline.InqPipeline;
 import eu.inqudium.proxy.dispatch.DetectionAsync;
-import eu.inqudium.proxy.dispatch.ParadigmDetector;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
 import eu.inqudium.proxy.folding.FoldedSyncChain;
 import eu.inqudium.proxy.folding.SyncChainFolder;
@@ -14,21 +20,29 @@ import eu.inqudium.proxy.invocation.MethodInvoker;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
  * Classifies a {@code (method, plan)} pair and builds the
- * appropriate {@link MethodDispatchEntry}. Per ARCHITECTURE.md §7:
+ * appropriate {@link MethodDispatchEntry}. The plan carries the
+ * paradigm classification (ADR-046); this factory routes on it
+ * directly — no per-call paradigm detection.
  *
  * <pre>
  * classify(method, plan, implClass):
  *   if plan instanceof PassThrough:
  *     if method.isDefault() &amp;&amp; !overriddenByImpl(method, implClass) &rarr; DefaultMethodEntry
- *     else                                                        &rarr; PassThroughEntry
- *   else (plan instanceof Decorated):
- *     elements = resolveNames(plan.elementNamesOuterToInner)
- *     mode     = isAsyncMethod(method) ? ASYNC : SYNC
- *     validate paradigm; fold and produce SyncCacheEntry or AsyncCacheEntry
+ *     else                                                                &rarr; PassThroughEntry
+ *   else (plan instanceof Decorated sd):
+ *     elements = resolveTriples(sd.elementsOuterToInner, byTypeAndName)
+ *     switch (sd.paradigm):
+ *       case SyncTag      &rarr; SyncCacheEntry
+ *       case AsyncTag     &rarr; require DetectionAsync.isPresent(); AsyncCacheEntry
+ *       case ReactiveTag,
+ *            RxJava3Tag,
+ *            CoroutinesTag &rarr; throw InqAnnotationConfigurationException
+ *                              (no element implementation for these paradigms yet)
  * </pre>
  *
  * <p>{@code Object}-declared methods are <strong>not</strong> handled
@@ -43,25 +57,14 @@ import java.util.Objects;
  * ARCHITECTURE.md §13). This class carries <strong>no</strong>
  * compile-time references to {@code inqudium-imperative} types.
  * The entire async-build flow lives in {@link AsyncEntryBuilder};
- * {@link #buildAsyncDecorated(Method, MethodPlan.Decorated,
- * InqPipeline, Object)} reaches it via a plain {@code invokestatic}
- * call, which is lazy per JVMS §5.4 — the JVM resolves
- * {@code AsyncEntryBuilder} (and through it
- * {@code AsyncLayerAction}, {@code InqAsyncDecorator},
- * {@code AsyncChainFolder}, {@code FoldedAsyncChain},
- * {@code AsyncParadigmValidator}) only when that branch is first
- * executed. The earlier in-class {@code toAsyncLayerAction} helper
- * caused the JVM's verifier to eagerly resolve
- * {@code AsyncLayerAction} via this class's {@code BootstrapMethods}
- * attribute — see {@code ADR-037-DISCIPLINE-FINDING.md} for the full
- * diagnosis. The entry point
- * {@link #buildDecorated(Method, MethodPlan.Decorated, InqPipeline, Object)}
- * gates the async branch on {@link DetectionAsync#isPresent()}, which
- * itself touches no async type literals.</p>
+ * the async branch reaches it via a plain {@code invokestatic} call,
+ * which the JVM resolves lazily per JVMS §5.4 — the imperative types
+ * load only when an async method is actually present and
+ * {@link DetectionAsync#isPresent()} has returned {@code true}.</p>
  *
  * <p><strong>Internal API.</strong> Public for cross-package
- * reference from {@code ProxyBuilder}; not part of the stable
- * public surface.</p>
+ * reference from {@code ProxyBuilder}; not part of the stable public
+ * surface.</p>
  */
 public final class MethodDispatchEntryFactory {
 
@@ -70,15 +73,12 @@ public final class MethodDispatchEntryFactory {
     }
 
     /**
-     * Builds the entry for one service method.
-     *
-     * @param method    the service-interface method
-     * @param plan      the evaluator's plan for this method
-     * @param pipeline  the pipeline (for element resolution)
-     * @param target    the real target (for binding the
-     *                  {@link MethodInvoker})
-     * @param implClass the implementation class (for the
-     *                  "overridden default" check)
+     * Convenience overload that builds the type-and-name index
+     * internally. Prefer
+     * {@link #createEntry(Method, MethodPlan, InqPipeline, Object,
+     * Class, Map)} when constructing entries for multiple methods
+     * against the same pipeline — that form lets the caller share the
+     * index across calls.
      */
     public static MethodDispatchEntry createEntry(
             Method method,
@@ -86,18 +86,45 @@ public final class MethodDispatchEntryFactory {
             InqPipeline pipeline,
             Object target,
             Class<?> implClass) {
+        return createEntry(method, plan, pipeline, target, implClass,
+                ElementResolver.indexByTypeAndName(pipeline));
+    }
+
+    /**
+     * Builds the entry for one service method from a paradigm-stamped
+     * plan. The paradigm is read directly from the plan; no per-call
+     * detection is performed.
+     *
+     * <p>For {@link MethodPlan.Decorated} plans classified as a
+     * paradigm without a resilience-element implementation
+     * ({@link ReactiveTag}, {@link RxJava3Tag}, {@link CoroutinesTag}),
+     * throws {@link InqAnnotationConfigurationException} at construction
+     * time with a specific, actionable error message naming the method,
+     * the paradigm, and the annotated elements. The corresponding
+     * {@link MethodPlan.PassThrough} plans (same paradigms but no
+     * resilience annotation in effect) dispatch normally as
+     * pass-through.</p>
+     */
+    public static MethodDispatchEntry createEntry(
+            Method method,
+            MethodPlan plan,
+            InqPipeline pipeline,
+            Object target,
+            Class<?> implClass,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
 
         Objects.requireNonNull(method, "method");
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(pipeline, "pipeline");
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(implClass, "implClass");
+        Objects.requireNonNull(elementsByTypeAndName, "elementsByTypeAndName");
 
         return switch (plan) {
-            case MethodPlan.PassThrough passThrough ->
+            case MethodPlan.PassThrough pt ->
                     buildPassThrough(method, target, implClass);
-            case MethodPlan.Decorated decorated ->
-                    buildDecorated(method, decorated, pipeline, target);
+            case MethodPlan.Decorated d ->
+                    buildDecorated(method, d, target, elementsByTypeAndName);
         };
     }
 
@@ -113,36 +140,48 @@ public final class MethodDispatchEntryFactory {
     private static MethodDispatchEntry buildDecorated(
             Method method,
             MethodPlan.Decorated plan,
-            InqPipeline pipeline,
-            Object target) {
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
 
-        if (ParadigmDetector.isAsyncMethod(method)) {
-            if (!DetectionAsync.isPresent()) {
-                throw new IllegalStateException(
-                        "Method " + method + " returns CompletionStage but "
-                                + "inqudium-imperative is not on the classpath. "
-                                + "Add inqudium-imperative as a runtime dependency "
-                                + "to enable async dispatch (ADR-037 §3).");
+        ParadigmTag paradigm = plan.paradigm();
+        return switch (paradigm) {
+            case SyncTag s ->
+                    buildSyncDecorated(method, plan, target, elementsByTypeAndName);
+            case AsyncTag a -> {
+                if (!DetectionAsync.isPresent()) {
+                    throw new IllegalStateException(
+                            "Method " + method + " is classified as AsyncTag "
+                                    + "but inqudium-imperative is not on the "
+                                    + "classpath. Add inqudium-imperative as a "
+                                    + "runtime dependency to enable async "
+                                    + "dispatch (ADR-037 §3).");
+                }
+                // Class-loading discipline: AsyncEntryBuilder is reached
+                // via a plain invokestatic, which the JVM resolves lazily
+                // per JVMS §5.4. No imperative type literal appears in
+                // this class.
+                yield buildAsyncDecorated(method, plan, target, elementsByTypeAndName);
             }
-            // Class-loading discipline: the async-build flow lives in
-            // AsyncEntryBuilder, referenced only from
-            // buildAsyncDecorated via a plain invokestatic call. The
-            // JVM resolves AsyncEntryBuilder (and the imperative types
-            // it touches) lazily per JVMS §5.4 — only when this branch
-            // is first executed.
-            return buildAsyncDecorated(method, plan, pipeline, target);
-        }
-        return buildSyncDecorated(method, plan, pipeline, target);
+            case ReactiveTag r ->
+                    throw unsupportedParadigm(method, "ReactiveTag",
+                            "reactive (Mono/Flux)", plan);
+            case RxJava3Tag rx ->
+                    throw unsupportedParadigm(method, "RxJava3Tag",
+                            "RxJava 3", plan);
+            case CoroutinesTag c ->
+                    throw unsupportedParadigm(method, "CoroutinesTag",
+                            "Kotlin coroutines", plan);
+        };
     }
 
     private static MethodDispatchEntry buildSyncDecorated(
             Method method,
             MethodPlan.Decorated plan,
-            InqPipeline pipeline,
-            Object target) {
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
 
-        List<InqElement> elements = ElementResolver.resolveNames(
-                plan.elementNamesOuterToInner(), pipeline);
+        List<InqElement> elements = ElementResolver.resolveTriples(
+                plan.elementsOuterToInner(), elementsByTypeAndName);
         SyncParadigmValidator.validate(elements, method);
 
         List<LayerAction<Void, Object>> layerActions = elements.stream()
@@ -162,9 +201,34 @@ public final class MethodDispatchEntryFactory {
     private static MethodDispatchEntry buildAsyncDecorated(
             Method method,
             MethodPlan.Decorated plan,
-            InqPipeline pipeline,
-            Object target) {
-        return AsyncEntryBuilder.build(method, plan, pipeline, target);
+            Object target,
+            Map<ElementResolver.ElementTypeAndName, InqElement> elementsByTypeAndName) {
+        return AsyncEntryBuilder.build(method, plan, target, elementsByTypeAndName);
+    }
+
+    private static InqAnnotationConfigurationException unsupportedParadigm(
+            Method method,
+            String tagFamily,
+            String paradigmDescription,
+            MethodPlan.Decorated plan) {
+
+        String elementSummary = plan.elementsOuterToInner().stream()
+                .map(ref -> ref.elementType() + " '" + ref.name() + "'")
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("(none)");
+
+        return new InqAnnotationConfigurationException(
+                "Method " + method.getDeclaringClass().getSimpleName() + "#"
+                        + method.getName() + "(...) is classified as "
+                        + tagFamily + " (" + paradigmDescription + ") but the "
+                        + "resilience-element implementation for this paradigm "
+                        + "is not yet available. The library currently "
+                        + "implements resilience elements only for the sync "
+                        + "(SyncTag) and async (AsyncTag) paradigms. "
+                        + "Annotated elements on this method: " + elementSummary
+                        + ". Either remove the resilience annotation(s) from "
+                        + "this method, or restrict the method's return type "
+                        + "to a sync or async imperative shape.");
     }
 
     /**

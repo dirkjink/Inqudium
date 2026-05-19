@@ -2,10 +2,8 @@ package eu.inqudium.config.dsl;
 
 import eu.inqudium.config.ConfigurationException;
 import eu.inqudium.config.runtime.DefaultInqRuntime;
-import eu.inqudium.config.runtime.ImperativeTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.runtime.ParadigmContainer;
-import eu.inqudium.config.runtime.ParadigmTag;
 import eu.inqudium.config.runtime.ParadigmUnavailableException;
 import eu.inqudium.config.snapshot.ComponentSnapshot;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
@@ -16,6 +14,8 @@ import eu.inqudium.config.validation.ConsistencyRule;
 import eu.inqudium.config.validation.ConsistencyRulePipeline;
 import eu.inqudium.config.validation.CrossComponentRule;
 import eu.inqudium.config.validation.ValidationFinding;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -34,16 +34,12 @@ import java.util.stream.Stream;
  * {@link ServiceLoader}, materialize each declared section through its provider, and assemble
  * the {@link DefaultInqRuntime}. If a paradigm section is declared but no provider is on the
  * classpath, build raises {@link ParadigmUnavailableException} naming the missing module.
- *
- * <p>Phase&nbsp;1 covers only the imperative section. Reactive, RxJava&nbsp;3, and coroutine
- * paradigm entry points join the {@link InqudiumBuilder} interface as their providers come
- * online.
  */
 public final class DefaultInqudiumBuilder implements InqudiumBuilder {
 
     private final GeneralSnapshotBuilder generalBuilder = new GeneralSnapshotBuilder();
     private final Map<ParadigmTag, ParadigmProvider> providers;
-    private DefaultImperativeSection imperativeSection;
+    private BulkheadPatchAccumulator accumulator;
     private boolean strict;
 
     public DefaultInqudiumBuilder() {
@@ -74,11 +70,7 @@ public final class DefaultInqudiumBuilder implements InqudiumBuilder {
     }
 
     /**
-     * Load every class-3 {@link ConsistencyRule} discoverable via {@link ServiceLoader}. Same
-     * iteration-order discipline as {@link #loadCrossComponentRules}: deterministic within a
-     * classpath, so build reports remain reproducible. Application code adds its own rules by
-     * shipping a {@code META-INF/services/eu.inqudium.config.validation.ConsistencyRule} entry —
-     * the framework no longer hardcodes the rule list.
+     * Load every class-3 {@link ConsistencyRule} discoverable via {@link ServiceLoader}.
      */
     private static List<ConsistencyRule<?>> loadConsistencyRules() {
         List<ConsistencyRule<?>> result = new ArrayList<>();
@@ -95,19 +87,35 @@ public final class DefaultInqudiumBuilder implements InqudiumBuilder {
     }
 
     @Override
-    public InqudiumBuilder imperative(Consumer<ImperativeSection> configurer) {
-        ParadigmProvider provider = providers.get(ImperativeTag.INSTANCE);
+    public InqudiumBuilder sync(Consumer<SyncSection> configurer) {
+        ParadigmProvider provider = requireImperativeProvider();
+        configurer.accept(new DefaultSyncSection(ensureAccumulator(), provider));
+        return this;
+    }
+
+    @Override
+    public InqudiumBuilder async(Consumer<AsyncSection> configurer) {
+        ParadigmProvider provider = requireImperativeProvider();
+        configurer.accept(new DefaultAsyncSection(ensureAccumulator(), provider));
+        return this;
+    }
+
+    private BulkheadPatchAccumulator ensureAccumulator() {
+        if (accumulator == null) {
+            accumulator = new BulkheadPatchAccumulator();
+        }
+        return accumulator;
+    }
+
+    private ParadigmProvider requireImperativeProvider() {
+        ParadigmProvider provider = providers.get(SyncTag.INSTANCE);
         if (provider == null) {
             throw new ParadigmUnavailableException(
-                    "The 'imperative' paradigm requires module 'inqudium-imperative' on the "
-                            + "classpath. Add it as a dependency or remove .imperative(...) "
-                            + "sections from your configuration.");
+                    "The 'sync' / 'async' paradigms require module 'inqudium-imperative' "
+                            + "on the classpath. Add it as a dependency or remove "
+                            + ".sync(...) / .async(...) sections from your configuration.");
         }
-        if (imperativeSection == null) {
-            imperativeSection = new DefaultImperativeSection(provider);
-        }
-        configurer.accept(imperativeSection);
-        return this;
+        return provider;
     }
 
     @Override
@@ -122,25 +130,20 @@ public final class DefaultInqudiumBuilder implements InqudiumBuilder {
 
         Map<ParadigmTag, ParadigmContainer<?>> containers = new LinkedHashMap<>();
 
-        // Imperative paradigm: materialize from declared section, or supply an empty container
-        // when the provider is on the classpath but no .imperative(...) was declared. Per
-        // ADR-026, "an empty paradigm is a normal state".
-        ParadigmProvider imperativeProvider = providers.get(ImperativeTag.INSTANCE);
+        // Imperative paradigm: materialize from accumulated patches, or supply an empty
+        // container when the provider is on the classpath but no .sync(...) / .async(...)
+        // was declared. Per ADR-026, "an empty paradigm is a normal state".
+        ParadigmProvider imperativeProvider = providers.get(SyncTag.INSTANCE);
         if (imperativeProvider != null) {
-            ParadigmSectionPatches patches = imperativeSection != null
-                    ? imperativeSection.finish()
+            ParadigmSectionPatches patches = accumulator != null
+                    ? accumulator.finish()
                     : new ParadigmSectionPatches(Map.of());
             containers.put(
-                    ImperativeTag.INSTANCE,
+                    SyncTag.INSTANCE,
                     imperativeProvider.createContainer(general, patches));
         }
 
-        // Class-3 validation: run every registered consistency rule against every materialized
-        // snapshot. Class-1 (DSL setters) and class-2 (snapshot compact constructors) have
-        // already fired by the time we get here; reaching this point means every snapshot is
-        // internally well-formed. Strict mode elevates warnings to errors before the
-        // success/failure decision so a configuration that would have produced only warnings in
-        // lenient mode aborts in strict mode.
+        // Class-3 validation.
         Stream<? extends ComponentSnapshot> snapshots = containers.values().stream()
                 .flatMap(ParadigmContainer::snapshots);
         List<ValidationFinding> findings =

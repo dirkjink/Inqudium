@@ -501,11 +501,11 @@ class AsyncPipelineTerminalTest {
         void should_construct_terminal_when_pipeline_contains_only_an_InqBulkhead() {
             // Given — a real InqBulkhead built through the standard runtime DSL
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("payments", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("payments", b -> b.balanced()))
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("payments");
+                        runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
                 InqPipeline pipeline = InqPipeline.builder()
                         .shield(bulkhead)
                         .build();
@@ -531,11 +531,11 @@ class AsyncPipelineTerminalTest {
             // mixed pipeline, with the synthetic decorator inside the bulkhead
             // (BH order=400 outer, CB order=500 inner per ADR-021).
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("payments", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("payments", b -> b.balanced()))
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("payments");
+                        runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
                 List<String> trace = new ArrayList<>();
                 InqPipeline pipeline = InqPipeline.builder()
                         .shield(bulkhead)
