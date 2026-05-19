@@ -34,10 +34,9 @@ import java.util.function.LongSupplier;
  * @param <T> the delegate type this wrapper wraps around (e.g. {@code Runnable},
  *            {@code Supplier<T>}, or another wrapper)
  * @param <S> the concrete self-type (recursive generic bound), used by
- *            {@link Wrapper#inner()} to return the correct type without casting
+ *            {@link #inner()} to return the correct type without casting
  */
-public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>>
-        implements Wrapper<S> {
+public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>> {
 
     /**
      * The wrapped delegate — either a plain functional interface or another wrapper layer.
@@ -164,17 +163,19 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the chain ID shared by all wrapper layers in this chain.
+     *
+     * @return the chain ID
      */
-    @Override
     public long chainId() {
         return chainId;
     }
 
     /**
-     * {@inheritDoc}
+     * Returns a short human-readable description of this layer (its name).
+     *
+     * @return the layer description
      */
-    @Override
     public String layerDescription() {
         return name;
     }
@@ -199,8 +200,54 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
      * @return the next inner wrapper of the same concrete type, or {@code null}
      */
     @SuppressWarnings("unchecked")
-    @Override
     public S inner() {
         return this.getClass().isInstance(delegate) ? (S) delegate : null;
+    }
+
+    /**
+     * Renders the entire wrapper hierarchy as a formatted tree string,
+     * starting from this layer and traversing inward via {@link #inner()}.
+     *
+     * <p>The output includes the chain ID as a header, followed by each layer's
+     * description indented with tree-drawing characters. Example output:</p>
+     * <pre>
+     * Chain-ID: 42
+     * auth
+     *   └── timing
+     *     └── logging
+     * </pre>
+     *
+     * <p>A depth guard (maximum 100 layers) protects against corrupted or
+     * accidentally cyclic chains. If the limit is reached, the output is
+     * truncated with a warning message.</p>
+     *
+     * @return a multi-line string representation of the wrapper stack
+     */
+    public String toStringHierarchy() {
+        int maxDepth = 100;
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("Chain-ID: ")
+                .append(chainId())
+                .append("\n");
+
+        AbstractBaseWrapper<?, ?> current = this;
+        int depth = 0;
+        while (current != null) {
+            if (depth >= maxDepth) {
+                sb.repeat("  ", depth - 1).append("  └── ... (chain truncated at depth ")
+                        .append(maxDepth).append(")\n");
+                break;
+            }
+
+            if (depth > 0) {
+                sb.repeat("  ", depth - 1).append("  └── ");
+            }
+
+            sb.append(current.layerDescription()).append("\n");
+            current = current.inner();
+            depth++;
+        }
+        return sb.toString();
     }
 }

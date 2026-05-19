@@ -38,10 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * // Safe lookup
  * Optional<InqElement> maybeCb = registry.find("paymentCb");
- *
- * // Used by PipelineFactory (in inqudium-annotation-processor):
- * ScanResult scan = InqAnnotationScanner.scan(method);
- * InqPipeline pipeline = PipelineFactory.build(scan, registry);
  * }</pre>
  *
  * <h3>Thread safety</h3>
