@@ -14,11 +14,11 @@ import java.util.Objects;
 
 /**
  * @deprecated Replaced by {@link eu.inqudium.config.dsl.BulkheadBuilderBase} as part of the
- *             configuration redesign (ADR-025). Retained because
- *             {@link eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfigBuilder}
- *             still extends it; both are removed once the legacy resilience surface (top-level
- *             {@code Resilience} DSL, pre-{@code Inqudium.configure()} bulkhead and
- *             circuit-breaker stacks) is dismantled.
+ *             configuration redesign (ADR-025). Removed once the remaining legacy resilience
+ *             surface (top-level {@code Bulkhead} class, pre-{@code Inqudium.configure()}
+ *             circuit-breaker stacks) is dismantled. The previous downstream caller
+ *             {@code InqImperativeBulkheadConfigBuilder} was removed in 0.10.x; this base
+ *             class stays as long as its other deprecated sibling classes do.
  */
 @Deprecated(forRemoval = true, since = "0.4.0")
 public abstract class InqBulkheadConfigBuilder

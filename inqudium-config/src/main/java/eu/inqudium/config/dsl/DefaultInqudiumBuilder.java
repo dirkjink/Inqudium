@@ -81,14 +81,14 @@ public final class DefaultInqudiumBuilder implements InqudiumBuilder {
 
     @Override
     public InqudiumBuilder sync(Consumer<SyncSection> configurer) {
-        ParadigmProvider provider = requireImperativeProvider();
+        ParadigmProvider provider = requireSyncProvider();
         configurer.accept(new DefaultSyncSection(ensureAccumulator(), provider));
         return this;
     }
 
     @Override
     public InqudiumBuilder async(Consumer<AsyncSection> configurer) {
-        ParadigmProvider provider = requireImperativeProvider();
+        ParadigmProvider provider = requireSyncProvider();
         configurer.accept(new DefaultAsyncSection(ensureAccumulator(), provider));
         return this;
     }
@@ -100,7 +100,7 @@ public final class DefaultInqudiumBuilder implements InqudiumBuilder {
         return accumulator;
     }
 
-    private ParadigmProvider requireImperativeProvider() {
+    private ParadigmProvider requireSyncProvider() {
         ParadigmProvider provider = providers.get(SyncTag.INSTANCE);
         if (provider == null) {
             throw new ParadigmUnavailableException(
