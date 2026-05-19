@@ -185,38 +185,30 @@ Consequences:
   parameter. Inner layers never draw their own IDs; they only forward
   the one they received.
 
-### Resolved pipelines: `ResolvedPipelineState`
+### Pre-composed pipelines and fold-once identity
 
-Pre-composed pipelines (`InqPipeline` + `SyncPipelineTerminal`,
-`AsyncPipelineTerminal`, `HybridAspectPipelineTerminal`, etc.) fold their
-layers once at construction time rather than lazily via the wrapper
-hierarchy. They maintain their identity state in an immutable
-`ResolvedPipelineState`:
+Some integrations fold their layers once at construction time rather
+than lazily via the wrapper hierarchy. Such pre-composed pipelines
+maintain their identity state in an immutable carrier object: the
+chain ID is fixed at construction time (drawn from
+`PipelineIds.nextChainId()`), and a private per-pipeline call-ID
+supplier (from `PipelineIds.newInstanceCallIdSource()`) feeds every
+`execute(...)`.
 
-```java
-public static ResolvedPipelineState create(List<String> layerNames) {
-    return new ResolvedPipelineState(
-            PipelineIds.nextChainId(),
-            PipelineIds.newInstanceCallIdSource(),
-            layerNames);
-}
-```
+On each invocation, the terminal draws the chain ID from the carrier
+(a single field load) and the next call ID from the supplier (a single
+CAS), then composes the layer-action chain and invokes it. Empty
+pipelines use a shared sentinel whose `nextCallId()` is hard-wired to
+zero, so empty pipelines across the JVM do not share or mutate a
+counter.
 
-On every `execute(...)`, the terminal draws the chain ID from the
-pipeline state (a single field load) and the next call ID from the
-private supplier (a single CAS), then composes the layer-action chain
-and invokes it:
-
-```java
-long callId = pipelineState.nextCallId();
-long cid    = pipelineState.chainId();
-// ...compose actions into an InternalExecutor `current`...
-return current.execute(cid, callId, null);
-```
-
-Empty pipelines use the shared `EMPTY` sentinel whose `nextCallId()` is
-hard-wired to zero, so empty pipelines across the JVM do not share or
-mutate a counter.
+The concrete classes that implemented this pattern in the original
+proxy/aspect stack (`SyncPipelineTerminal`, `AsyncPipelineTerminal`,
+`HybridAspectPipelineTerminal`, `ResolvedPipelineState`) were removed
+in Phase A of the post-polish refactor sequence; see the "Historical
+implementation" section at the end of this ADR. The pattern itself
+remains valid and is the model for how any future pre-composed
+paradigm integration must propagate identity.
 
 ### How `InqEvent` and `InqException` consume the identity
 
@@ -333,7 +325,43 @@ No thread-local setup, no mocked generators, no UUID brittleness.
 
 - `long chainId` / `long callId` are core observability contract types.
   Their presence on `InqEvent` and `InqException` is a stable API; the
-  underlying generation strategy (global counter, per-instance supplier,
-  inheritance rules) is an implementation detail of `PipelineIds`,
-  `AbstractBaseWrapper`, and `ResolvedPipelineState` and can evolve
-  without breaking consumers.
+  underlying generation strategy (global counter, per-instance
+  supplier, inheritance rules) is an implementation detail of
+  `PipelineIds` and `AbstractBaseWrapper`, and can evolve without
+  breaking consumers.
+
+## Historical implementation
+
+The pre-composed-pipeline pattern described in the "Pre-composed
+pipelines and fold-once identity" section was originally implemented
+by `ResolvedPipelineState` and the matched terminals
+`SyncPipelineTerminal`, `AsyncPipelineTerminal`, and
+`HybridAspectPipelineTerminal`. Their shapes — recorded here for
+readers tracing the architectural lineage — were:
+
+```java
+// ResolvedPipelineState — historical, removed 2026-05-19
+public static ResolvedPipelineState create(List<String> layerNames) {
+    return new ResolvedPipelineState(
+            PipelineIds.nextChainId(),
+            PipelineIds.newInstanceCallIdSource(),
+            layerNames);
+}
+```
+
+```java
+// Sync terminal hot-path — historical, removed 2026-05-19
+long callId = pipelineState.nextCallId();
+long cid    = pipelineState.chainId();
+// ...compose actions into an InternalExecutor `current`...
+return current.execute(cid, callId, null);
+```
+
+The classes were removed in Phase A of the post-polish refactor
+sequence (PR #100). The decorator chains in `inqudium-core`'s
+`AbstractBaseWrapper`/`BaseWrapper` and the new proxy stack in
+`inqudium-proxy` are now the production-grade carriers of the same
+identity-propagation contract. A future paradigm integration that
+needs fold-once semantics again is expected to re-introduce a similar
+immutable carrier, modelled on `AbstractBaseWrapper`'s chain-ID
+inheritance pattern.

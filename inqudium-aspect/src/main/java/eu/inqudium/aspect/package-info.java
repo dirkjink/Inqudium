@@ -9,7 +9,5 @@
  * <p>The POM stays in place so dependent modules can keep
  * their dependency declaration; the artifact ships as an
  * empty jar.</p>
- *
- * @see <a href="https://github.com/dirkjink/inqudium/blob/main/REFACTORING_LEGACY_PROXY_REMOVAL.md">Phase A plan</a>
  */
 package eu.inqudium.aspect;

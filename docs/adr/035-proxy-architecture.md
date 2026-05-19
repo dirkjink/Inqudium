@@ -35,9 +35,11 @@ Key artefacts realising this ADR:
   §10 algorithm
 
 The legacy proxy implementation in `eu.inqudium.core.pipeline.proxy`
-is preserved untouched per the Strategy-G greenfield-parallel
-approach taken during the rewrite. Its removal is a separate
-refactor.
+was preserved untouched during the new proxy's introduction (per the
+Strategy-G greenfield-parallel approach), then removed in Phase A of
+the post-polish refactor sequence (2026-05-19, PRs #98 and #100). The
+new proxy in `eu.inqudium.proxy` is now the sole proxy implementation
+in the library.
 
 ## Context
 
