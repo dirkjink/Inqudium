@@ -1,7 +1,8 @@
 package eu.inqudium.imperative.core.pipeline;
 
+import eu.inqudium.config.Inqudium;
+import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.core.config.GeneralConfig;
-import eu.inqudium.core.config.InqConfig;
 import eu.inqudium.core.config.InqElementCommonConfig;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
@@ -15,7 +16,7 @@ import eu.inqudium.core.pipeline.InqPipeline;
 import eu.inqudium.core.pipeline.PipelineOrdering;
 import eu.inqudium.core.pipeline.SyncPipelineTerminal;
 import eu.inqudium.core.time.InqNanoTimeSource;
-import eu.inqudium.imperative.bulkhead.Bulkhead;
+import eu.inqudium.imperative.bulkhead.InqBulkhead;
 import eu.inqudium.imperative.circuitbreaker.ImperativeCircuitBreaker;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -30,14 +31,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static eu.inqudium.imperative.bulkhead.config.InqImperativeBulkheadConfigBuilder.bulkhead;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 /**
  * End-to-end integration test verifying the full pipeline chain with
- * <strong>real</strong> {@link Bulkhead} and {@link ImperativeCircuitBreaker}
+ * <strong>real</strong> {@link InqBulkhead} and {@link ImperativeCircuitBreaker}
  * implementations composed via {@link InqPipeline} and executed through
  * {@link SyncPipelineTerminal}.
  *
@@ -87,14 +87,14 @@ class InqPipelineEndToEndTest {
     // Element factories
     // =========================================================================
 
-    private Bulkhead<Void, Object> createBulkhead(String name, int maxConcurrent) {
-        var config = InqConfig.configure()
-                .general()
-                .with(bulkhead(), c -> c
-                        .name(name)
-                        .maxConcurrentCalls(maxConcurrent)
-                ).build();
-        return Bulkhead.of(config);
+    @SuppressWarnings("unchecked")
+    private InqBulkhead<Void, Object> createBulkhead(String name, int maxConcurrent) {
+        InqRuntime runtime = Inqudium.configure()
+                .sync(s -> s.bulkhead(name, b -> b
+                        .balanced()
+                        .maxConcurrentCalls(maxConcurrent)))
+                .build();
+        return runtime.sync().bulkhead(name).unwrap(InqBulkhead.class);
     }
 
     private ImperativeCircuitBreaker<Void, Object> createCircuitBreaker(
@@ -211,7 +211,7 @@ class InqPipelineEndToEndTest {
             terminal.execute(() -> "first");
 
             // Then — permit released, second call succeeds
-            assertThat(bh.getAvailablePermits()).isEqualTo(1);
+            assertThat(bh.availablePermits()).isEqualTo(1);
             Object second = terminal.execute(() -> "second");
             assertThat(second).isEqualTo("second");
         }
@@ -232,7 +232,7 @@ class InqPipelineEndToEndTest {
             }
 
             // Then — permit still released
-            assertThat(bh.getAvailablePermits()).isEqualTo(1);
+            assertThat(bh.availablePermits()).isEqualTo(1);
         }
 
         @Test
@@ -396,7 +396,7 @@ class InqPipelineEndToEndTest {
 
             // Then
             assertThat(result).isEqualTo("pipeline-result");
-            assertThat(bh.getAvailablePermits()).isEqualTo(5);
+            assertThat(bh.availablePermits()).isEqualTo(5);
             assertThat(cb.getState()).isEqualTo(CircuitState.CLOSED);
         }
 
@@ -458,12 +458,12 @@ class InqPipelineEndToEndTest {
 
             // Then — CB is OPEN, BH still has all 5 permits
             assertThat(cb.getState()).isEqualTo(CircuitState.OPEN);
-            assertThat(bh.getAvailablePermits()).isEqualTo(5);
+            assertThat(bh.availablePermits()).isEqualTo(5);
 
             // And — next call: BH acquires permit, CB rejects inside, BH releases permit
             assertThatThrownBy(() -> terminal.execute(() -> "blocked"))
                     .isInstanceOf(CircuitBreakerException.class);
-            assertThat(bh.getAvailablePermits()).isEqualTo(5);
+            assertThat(bh.availablePermits()).isEqualTo(5);
         }
 
         @Test
@@ -492,7 +492,7 @@ class InqPipelineEndToEndTest {
             // Phase 3: Rejection phase — CB rejects, BH still works
             assertThatThrownBy(() -> terminal.execute(() -> "blocked"))
                     .isInstanceOf(CircuitBreakerException.class);
-            assertThat(bh.getAvailablePermits()).isEqualTo(5);
+            assertThat(bh.availablePermits()).isEqualTo(5);
 
             // Phase 4: Recovery — advance time, successful probes
             advancePastWaitDuration();
@@ -503,7 +503,7 @@ class InqPipelineEndToEndTest {
             // Phase 5: Back to normal
             Object recovered = terminal.execute(() -> "recovered");
             assertThat(recovered).isEqualTo("recovered");
-            assertThat(bh.getAvailablePermits()).isEqualTo(5);
+            assertThat(bh.availablePermits()).isEqualTo(5);
             assertThat(cb.getState()).isEqualTo(CircuitState.CLOSED);
         }
     }
