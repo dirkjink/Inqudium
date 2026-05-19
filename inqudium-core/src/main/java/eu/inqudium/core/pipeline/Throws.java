@@ -73,8 +73,7 @@ import java.util.concurrent.CompletionException;
  *   <li>Use {@link #wrapChecked(Throwable)} and
  *       {@link #unwrapAndRethrow(CompletionException)} as a matched pair — the
  *       wrapping/unwrapping boundary should be as narrow as possible, ideally
- *       confined to a single method like
- *       {@link eu.inqudium.aspect.pipeline.ResolvedPipeline#execute}.</li>
+ *       confined to a single point in the dispatch chain.</li>
  * </ol>
  *
  * @since 0.5.0

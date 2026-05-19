@@ -6,7 +6,6 @@ import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerTerminal;
-import eu.inqudium.spring.InqShieldAspect;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,8 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * non-static {@code @Nested} test classes coexist with the static
  * {@code @Configuration} inner class in the same outer test, Spring Boot's
  * {@code TestTypeExcludeFilter} stops excluding the configuration from
- * other tests' default component scans. The flat shape keeps
- * {@link InqSpringBootIntegrationTest}'s context isolated.</p>
+ * other tests' default component scans. The flat shape keeps the test's
+ * context isolated from other Spring Boot tests in the module.</p>
  */
 @SpringBootTest(classes = InqCustomRegistryTest.CustomRegistryConfig.class)
 @DisplayName("Custom registry overrides auto-configuration")
@@ -54,9 +53,6 @@ class InqCustomRegistryTest {
 
     @Autowired
     ApplicationContext context;
-
-    @Autowired
-    InqShieldAspect aspect;
 
     @Test
     void user_registry_contains_only_the_manually_registered_element() {
@@ -93,24 +89,6 @@ class InqCustomRegistryTest {
         // Then
         assertThat(bean).isNotNull();
         assertThat(bean.name()).isEqualTo("autoDiscovered");
-    }
-
-    @Test
-    void inq_shield_aspect_bean_exists_when_only_the_registry_is_overridden() {
-        // What is being tested: when the user replaces only the registry, the
-        //                       second @Bean method in InqAutoConfiguration
-        //                       (inqShieldAspect) must still fire and produce a
-        //                       working aspect wired against the user registry.
-        // Why it counts as success: the InqShieldAspect bean is autowired and
-        //                           non-null in the test instance.
-        // Why this matters: a naive @ConditionalOnMissingBean on the configuration
-        //                   class itself (rather than per-bean) would suppress the
-        //                   aspect too. We need both bean methods to gate
-        //                   independently — only the registry method is skipped,
-        //                   not the aspect method.
-
-        // Then
-        assertThat(aspect).isNotNull();
     }
 
     // =========================================================================
