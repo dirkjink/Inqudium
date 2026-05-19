@@ -3,11 +3,11 @@
 **Status:** Proposed  
 **Date:** 2026-05-14  
 **Deciders:** Core team  
-**Related:** ADR-020 (superseded by this ADR and ADR-044), ADR-032 (superseded by this ADR, ADR-044, ADR-046),
+**Related:** ADR-020 (superseded by this ADR and ADR-044), ADR-032 (superseded by this ADR, ADR-044, ADR-047),
 ADR-003 (event publisher model), ADR-009 (exception model), ADR-010 (TimeLimiter and orphaned calls),
 ADR-015 (registry contract), ADR-027 (validation strategy), ADR-028 (component lifecycle contract),
 ADR-029 (lifecycle implementation pattern), ADR-042 (pipeline contracts), ADR-043 (update propagation),
-ADR-044 (bulkhead strategies and hot-swap), ADR-046 (bulkhead imperative implementation).
+ADR-044 (bulkhead strategies and hot-swap), ADR-046 (paradigm tagging), ADR-047 (Bulkhead component specification).
 
 ## Context
 
