@@ -6,7 +6,5 @@
  * was removed in Phase A of the post-polish refactor sequence.
  * A future refactor rebuilds this example against the new
  * pipeline interface.
- *
- * @see <a href="https://github.com/dirkjink/inqudium/blob/main/REFACTORING_LEGACY_PROXY_REMOVAL.md">Phase A plan</a>
  */
 package eu.inqudium.bulkhead.integration.function;

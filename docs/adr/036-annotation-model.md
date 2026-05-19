@@ -127,7 +127,7 @@ Authors who want a specific order must declare it explicitly via `customOrder`.
 ### 4. Pipeline-as-universe rule
 
 The annotation evaluator selects elements from the pipeline that the integration was configured with (e.g. the
-pipeline passed to `InqAsyncProxyFactory.of(pipeline)` for proxy integration). The selection is constrained:
+pipeline passed to the proxy at construction time). The selection is constrained:
 
 - An annotation referencing a name not present in the pipeline causes a configuration error. The error surfaces
   at construction time (eager validation), not at first invocation.
