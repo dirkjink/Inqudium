@@ -35,7 +35,7 @@ public class SlidingWindowCounterStrategy implements RateLimiterStrategy<Sliding
         long windowMs = config.refillPeriod().toMillis();
         long elapsedMs = now.toEpochMilli() - state.currentWindowStart().toEpochMilli();
 
-        // Gewichtung des alten Fensters nimmt linear ab, je weiter wir im aktuellen Fenster sind
+        // Gewichtung des alten Fensters nimmt linear ab, je weiter wir s aktuellen Fenster sind
         double previousWeight = 1.0 - ((double) elapsedMs / windowMs);
         // Verhindere negative Gewichtung bei asynchronen Race-Conditions
         previousWeight = Math.max(0.0, Math.min(1.0, previousWeight));

@@ -39,13 +39,13 @@ class BulkheadSpringBootShutdownTest {
         @Bean(destroyMethod = "close")
         public InqRuntime inqRuntime() {
             return Inqudium.configure()
-                    .imperative(im -> im.bulkhead("aopShutdown", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("aopShutdown", b -> b.balanced()))
                     .build();
         }
 
         @Bean
         public InqElement aopShutdown(InqRuntime runtime) {
-            return (InqElement) runtime.imperative().bulkhead("aopShutdown");
+            return (InqElement) runtime.sync().bulkhead("aopShutdown");
         }
     }
 
@@ -67,7 +67,7 @@ class BulkheadSpringBootShutdownTest {
         InqRuntime runtime = context.getBean(InqRuntime.class);
         @SuppressWarnings("unchecked")
         InqBulkhead<Void, Object> bh =
-                (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("aopShutdown");
+                (InqBulkhead<Void, Object>) runtime.sync().bulkhead("aopShutdown");
 
         assertThat(bh.name()).isEqualTo("aopShutdown");
 
@@ -75,7 +75,7 @@ class BulkheadSpringBootShutdownTest {
         context.close();
 
         // Then — the runtime fails fast on any subsequent paradigm-section access. The
-        // current contract is "closed runtime is not navigable": runtime.imperative()
+        // current contract is "closed runtime is not navigable": runtime.sync()
         // throws IllegalStateException("runtime is closed") rather than returning an
         // empty view or a phantom view. Pinning that here.
         //
@@ -85,7 +85,7 @@ class BulkheadSpringBootShutdownTest {
         // The handle is therefore still callable but its underlying live container is
         // no longer driven by the runtime — a regression around that wiring would be
         // caught by a future test that pins the desired markRemoved-on-close contract.
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> runtime.imperative())
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> runtime.sync())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("closed");
     }

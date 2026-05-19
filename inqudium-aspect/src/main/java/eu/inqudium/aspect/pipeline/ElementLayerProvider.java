@@ -38,13 +38,13 @@ import java.util.concurrent.CompletionStage;
  * — the handles are real {@code InqDecorator}s after ADR-033, no wrapping required:</p>
  * <pre>{@code
  * InqRuntime runtime = Inqudium.configure()
- *         .imperative(im -> im
+ *         .sync(s -> s
  *                 .bulkhead("paymentBh", b -> b.balanced())
  *                 .retry("paymentRetry", r -> r.attempts(3)))
  *         .build();
  *
- * InqElement paymentBh    = (InqElement) runtime.imperative().bulkhead("paymentBh");
- * InqElement paymentRetry = (InqElement) runtime.imperative().retry("paymentRetry");
+ * InqElement paymentBh    = (InqElement) runtime.sync().bulkhead("paymentBh");
+ * InqElement paymentRetry = (InqElement) runtime.sync().retry("paymentRetry");
  *
  * // Standard ordering — derived from InqElementType.defaultPipelineOrder():
  * // BULKHEAD(100) → RETRY(400)

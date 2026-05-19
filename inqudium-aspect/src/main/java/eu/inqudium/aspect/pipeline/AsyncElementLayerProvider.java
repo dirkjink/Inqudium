@@ -38,11 +38,11 @@ import java.util.Objects;
  * synchronous side via {@link ElementLayerProvider}:</p>
  * <pre>{@code
  * InqRuntime runtime = Inqudium.configure()
- *         .imperative(im -> im
+ *         .sync(s -> s
  *                 .retry("paymentRetry", r -> r.attempts(3)))
  *         .build();
  *
- * InqElement paymentRetry = (InqElement) runtime.imperative().retry("paymentRetry");
+ * InqElement paymentRetry = (InqElement) runtime.sync().retry("paymentRetry");
  *
  * // Standard ordering — derived from InqElementType.defaultPipelineOrder()
  * @Aspect

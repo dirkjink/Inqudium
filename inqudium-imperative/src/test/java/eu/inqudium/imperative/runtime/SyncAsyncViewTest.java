@@ -6,7 +6,7 @@ import eu.inqudium.config.runtime.BulkheadHandle;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.runtime.Sync;
 import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.element.paradigm.SyncTag;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * accessors introduced in Q.5a. The tests build a real runtime via
  * {@code Inqudium.configure()...build()}, then exercise the
  * paradigm-tagged views and verify that both views project the
- * same underlying {@code Imperative} container.
+ * same underlying {@code Sync} container.
  *
  * <p>Identity-sharing is verified by reference equality on the
  * underlying handle returned by the view wrappers'
@@ -37,7 +37,7 @@ class SyncAsyncViewTest {
         void runtime_exposes_sync_and_async_accessors() {
             // Given a runtime with one bulkhead
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
 
                 // When obtained via both views
@@ -56,12 +56,12 @@ class SyncAsyncViewTest {
         void deprecated_imperative_accessor_still_works() {
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
 
                 // When / Then
-                assertThat(runtime.imperative()).isNotNull();
-                assertThat(runtime.imperative().bulkheadNames()).contains("foo");
+                assertThat(runtime.sync()).isNotNull();
+                assertThat(runtime.sync().bulkheadNames()).contains("foo");
             }
         }
 
@@ -69,7 +69,7 @@ class SyncAsyncViewTest {
         void sync_view_paradigm_returns_sync_tag() {
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 // When / Then
                 assertThat(runtime.sync().paradigm()).isSameAs(SyncTag.INSTANCE);
@@ -80,7 +80,7 @@ class SyncAsyncViewTest {
         void async_view_paradigm_returns_async_tag() {
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 // When / Then
                 assertThat(runtime.async().paradigm()).isSameAs(AsyncTag.INSTANCE);
@@ -95,7 +95,7 @@ class SyncAsyncViewTest {
         void sync_bulkhead_returns_handle_typed_with_sync_tag() {
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 // When
                 BulkheadHandle<SyncTag> handle = runtime.sync().bulkhead("foo");
@@ -109,7 +109,7 @@ class SyncAsyncViewTest {
         void async_bulkhead_returns_handle_typed_with_async_tag() {
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 // When
                 BulkheadHandle<AsyncTag> handle = runtime.async().bulkhead("foo");
@@ -123,12 +123,12 @@ class SyncAsyncViewTest {
         void sync_handle_exposes_the_same_snapshot_as_imperative_handle() {
             // Given a runtime with one bulkhead
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo",
+                    .sync(s -> s.bulkhead("foo",
                             b -> b.balanced().maxConcurrentCalls(7)))
                     .build()) {
                 // When
                 BulkheadHandle<SyncTag> syncHandle = runtime.sync().bulkhead("foo");
-                BulkheadHandle<ImperativeTag> impHandle = runtime.imperative().bulkhead("foo");
+                BulkheadHandle<SyncTag> impHandle = runtime.sync().bulkhead("foo");
                 // Then both surface the same snapshot values
                 assertThat(syncHandle.snapshot().name())
                         .isEqualTo(impHandle.snapshot().name());
@@ -160,7 +160,7 @@ class SyncAsyncViewTest {
 
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo",
+                    .sync(s -> s.bulkhead("foo",
                             b -> b.balanced().maxConcurrentCalls(10)))
                     .build()) {
 
@@ -194,7 +194,7 @@ class SyncAsyncViewTest {
 
             // Given a runtime with one bulkhead at max=10
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo",
+                    .sync(s -> s.bulkhead("foo",
                             b -> b.balanced().maxConcurrentCalls(10)))
                     .build()) {
 
@@ -207,7 +207,7 @@ class SyncAsyncViewTest {
                 // When an update bumps the max to 20 via the legacy
                 // imperative DSL (the only available DSL path today;
                 // Q.5b adds sync()/async() DSL entry points)
-                runtime.update(b -> b.imperative(im -> im.bulkhead("foo",
+                runtime.update(b -> b.sync(s -> s.bulkhead("foo",
                         bh -> bh.balanced().maxConcurrentCalls(20))));
 
                 // Then both views see the new value
@@ -225,7 +225,7 @@ class SyncAsyncViewTest {
         @Test
         void sync_find_returns_empty_for_unknown_name() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 assertThat(runtime.sync().findBulkhead("nope")).isEmpty();
             }
@@ -234,7 +234,7 @@ class SyncAsyncViewTest {
         @Test
         void async_find_returns_empty_for_unknown_name() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 assertThat(runtime.async().findBulkhead("nope")).isEmpty();
             }
@@ -243,7 +243,7 @@ class SyncAsyncViewTest {
         @Test
         void sync_find_returns_present_for_known_name() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 assertThat(runtime.sync().findBulkhead("foo")).isPresent();
             }
@@ -252,7 +252,7 @@ class SyncAsyncViewTest {
         @Test
         void async_find_returns_present_for_known_name() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .build()) {
                 assertThat(runtime.async().findBulkhead("foo")).isPresent();
             }
@@ -265,7 +265,7 @@ class SyncAsyncViewTest {
         @Test
         void sync_view_lists_all_configured_bulkhead_names() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced())
                             .bulkhead("b", b -> b.balanced()))
                     .build()) {
@@ -276,7 +276,7 @@ class SyncAsyncViewTest {
         @Test
         void async_view_lists_all_configured_bulkhead_names() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced())
                             .bulkhead("b", b -> b.balanced()))
                     .build()) {

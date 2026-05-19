@@ -52,12 +52,12 @@ class BulkheadWrapperLifecycleTest {
             // bypass the transition or run on stale state.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
 
                 // Given — wrapper built while bulkhead is cold; subscribe to the runtime
                 // publisher so the cold-to-hot event is observable.
@@ -89,12 +89,12 @@ class BulkheadWrapperLifecycleTest {
             // the wrappers' shared identity (their underlying bulkhead) drives the transition.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
 
                 List<ComponentBecameHotEvent> hotEvents = new ArrayList<>();
                 runtime.general().eventPublisher()
@@ -137,12 +137,12 @@ class BulkheadWrapperLifecycleTest {
             // plus phase-reference re-read on every execute is what makes this test pass.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
 
                 Supplier<String> protected_ = bh.decorateSupplier(() -> "ok");
 
@@ -152,7 +152,7 @@ class BulkheadWrapperLifecycleTest {
                         .isInstanceOf(SemaphoreStrategyConfig.class);
 
                 // When — quiescent strategy swap under the same wrapper.
-                runtime.update(u -> u.imperative(im -> im.bulkhead("inventory", b -> b
+                runtime.update(u -> u.sync(s -> s.bulkhead("inventory", b -> b
                         .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                 .interval(Duration.ofMillis(500))))));
 
@@ -175,20 +175,20 @@ class BulkheadWrapperLifecycleTest {
             // benefit of the lifecycle architecture.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b
+                    .sync(s -> s.bulkhead("inventory", b -> b
                             .balanced().maxConcurrentCalls(2)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
 
                 Supplier<String> protected_ = bh.decorateSupplier(() -> "ok");
                 assertThat(protected_.get()).isEqualTo("ok");
                 assertThat(bh.availablePermits()).isEqualTo(2);
 
                 // When — patch the limit upward.
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(7))));
 
                 // Then — the same wrapper sees the new limit on its next call.
@@ -215,18 +215,18 @@ class BulkheadWrapperLifecycleTest {
             // component was supposed to be gone.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
 
                 Supplier<String> protected_ = bh.decorateSupplier(() -> "ok");
                 assertThat(protected_.get()).isEqualTo("ok");
 
                 // When — remove the bulkhead from the runtime.
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 // Then — the wrapper invocation fails on the inert handle.
                 assertThatThrownBy(protected_::get)
@@ -242,15 +242,15 @@ class BulkheadWrapperLifecycleTest {
             // not be a "way around" the removal contract.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, String> bh =
-                        (InqBulkhead<Void, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<Void, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, null, (cid, callId, arg) -> null);
 
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 Supplier<String> protected_ = bh.decorateSupplier(() -> "ok");
 

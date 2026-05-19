@@ -80,7 +80,7 @@ class DynamicProxyWrapperTest {
             String result = loggingProxy.performAction();
 
             // Dann: Analysiere die Struktur über den Wrapper-Mechanismus
-            // Da wir zur Laufzeit keine direkte Referenz auf den Wrapper im Handler halten,
+            // Da wir zur Laufzeit keine direkte Referenz auf den Wrapper s Handler halten,
             // nutzen wir die toStringHierarchy() des letzten erzeugten Wrappers (simuliert).
 
             // In diesem Test validieren wir die korrekte Delegation

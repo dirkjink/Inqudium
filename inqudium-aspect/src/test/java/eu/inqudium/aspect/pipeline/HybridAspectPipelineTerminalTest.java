@@ -556,11 +556,11 @@ class HybridAspectPipelineTerminalTest {
         void should_construct_terminal_when_pipeline_contains_only_an_InqBulkhead() {
             // Given — a real InqBulkhead built through the standard runtime DSL
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("payments", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("payments", b -> b.balanced()))
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("payments");
+                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
 
                 // When
                 HybridAspectPipelineTerminal terminal = HybridAspectPipelineTerminal.of(
@@ -583,11 +583,11 @@ class HybridAspectPipelineTerminalTest {
             // to prove the terminal accepts a mixed pipeline that includes a real
             // InqBulkhead, not to exercise pipeline composition behaviour.
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("payments", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("payments", b -> b.balanced()))
                     .build()) {
                 @SuppressWarnings("unchecked")
                 InqBulkhead<Void, Object> bulkhead =
-                        (InqBulkhead<Void, Object>) runtime.imperative().bulkhead("payments");
+                        (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
                 List<String> trace = new ArrayList<>();
 
                 // When

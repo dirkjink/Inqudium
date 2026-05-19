@@ -2,7 +2,7 @@ package eu.inqudium.imperative.runtime;
 
 import eu.inqudium.config.Inqudium;
 import eu.inqudium.config.runtime.BulkheadHandle;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
@@ -27,19 +27,19 @@ class InqudiumConfigureTest {
         void should_build_a_runtime_with_one_bulkhead_and_query_it() {
             // What is to be tested: the entire build pipeline — DSL → patch accumulation →
             // ServiceLoader-discovered ImperativeProvider → DefaultImperative materialization.
-            // Why successful: the bulkhead is reachable through runtime.imperative() with the
+            // Why successful: the bulkhead is reachable through runtime.sync() with the
             // configuration the user wrote in the lambda.
             // Why important: this is the central phase-1 acceptance criterion (build a runtime
             // with one bulkhead, verify it can be queried).
 
             // Given / When
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("inventory", b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 // Then
-                BulkheadHandle<ImperativeTag> bh = runtime.imperative().bulkhead("inventory");
+                BulkheadHandle<SyncTag> bh = runtime.sync().bulkhead("inventory");
                 BulkheadSnapshot snapshot = bh.snapshot();
                 assertThat(snapshot.name()).isEqualTo("inventory");
                 assertThat(snapshot.maxConcurrentCalls()).isEqualTo(15);
@@ -55,7 +55,7 @@ class InqudiumConfigureTest {
             // Given / When
             try (InqRuntime runtime = Inqudium.configure().build()) {
                 // Then
-                assertThat(runtime.imperative().bulkheadNames()).isEmpty();
+                assertThat(runtime.sync().bulkheadNames()).isEmpty();
             }
         }
 
@@ -63,14 +63,14 @@ class InqudiumConfigureTest {
         void should_register_multiple_bulkheads_in_one_section() {
             // Given / When
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced())
                             .bulkhead("b", b -> b.protective())
                             .bulkhead("c", b -> b.permissive()))
                     .build()) {
 
                 // Then
-                assertThat(runtime.imperative().bulkheadNames())
+                assertThat(runtime.sync().bulkheadNames())
                         .containsExactlyInAnyOrder("a", "b", "c");
             }
         }
@@ -84,10 +84,10 @@ class InqudiumConfigureTest {
         void should_throw_when_bulkhead_is_unknown_to_strict_lookup() {
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("a", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("a", b -> b.balanced()))
                     .build()) {
                 // When / Then
-                assertThatThrownBy(() -> runtime.imperative().bulkhead("missing"))
+                assertThatThrownBy(() -> runtime.sync().bulkhead("missing"))
                         .isInstanceOf(IllegalArgumentException.class)
                         .hasMessageContaining("missing")
                         .hasMessageContaining("Available: [a]");
@@ -99,7 +99,7 @@ class InqudiumConfigureTest {
             // Given
             try (InqRuntime runtime = Inqudium.configure().build()) {
                 // When / Then
-                assertThat(runtime.imperative().findBulkhead("missing"))
+                assertThat(runtime.sync().findBulkhead("missing"))
                         .isEqualTo(Optional.empty());
             }
         }
@@ -108,10 +108,10 @@ class InqudiumConfigureTest {
         void findBulkhead_should_return_the_handle_when_known() {
             // Given
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("a", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("a", b -> b.balanced()))
                     .build()) {
                 // When / Then
-                Optional<BulkheadHandle<ImperativeTag>> handle = runtime.imperative().findBulkhead("a");
+                Optional<BulkheadHandle<SyncTag>> handle = runtime.sync().findBulkhead("a");
                 assertThat(handle).isPresent();
                 assertThat(handle.get().name()).isEqualTo("a");
             }
@@ -126,7 +126,7 @@ class InqudiumConfigureTest {
         void config_bulkheads_should_aggregate_imperative_bulkhead_snapshots() {
             // Given / When
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced())
                             .bulkhead("b", b -> b.protective()))
                     .build()) {
@@ -143,12 +143,12 @@ class InqudiumConfigureTest {
         void config_findBulkhead_should_disambiguate_by_paradigm() {
             // Given / When
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("a", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("a", b -> b.balanced()))
                     .build()) {
 
                 // Then
                 Optional<BulkheadSnapshot> found =
-                        runtime.config().findBulkhead("a", ImperativeTag.INSTANCE);
+                        runtime.config().findBulkhead("a", SyncTag.INSTANCE);
                 assertThat(found).isPresent();
                 assertThat(found.get().name()).isEqualTo("a");
             }
@@ -177,7 +177,7 @@ class InqudiumConfigureTest {
             runtime.close();
 
             // Then
-            assertThatThrownBy(runtime::imperative)
+            assertThatThrownBy(runtime::sync)
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("closed");
             assertThatThrownBy(runtime::general)
@@ -197,7 +197,7 @@ class InqudiumConfigureTest {
             runtime.close();
 
             // Then — no exception; AutoCloseable contract honoured
-            assertThatThrownBy(runtime::imperative)
+            assertThatThrownBy(runtime::sync)
                     .isInstanceOf(IllegalStateException.class);
         }
     }
@@ -216,11 +216,11 @@ class InqudiumConfigureTest {
             // field existed.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 BulkheadSnapshot snapshot =
-                        runtime.imperative().bulkhead("inventory").snapshot();
+                        runtime.sync().bulkhead("inventory").snapshot();
 
                 assertThat(snapshot.strategy()).isInstanceOf(SemaphoreStrategyConfig.class);
             }

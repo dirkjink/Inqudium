@@ -9,7 +9,7 @@ import eu.inqudium.config.lifecycle.ChangeDecision;
 import eu.inqudium.config.lifecycle.ChangeRequest;
 import eu.inqudium.config.lifecycle.ChangeRequestListener;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.config.validation.ApplyOutcome;
@@ -34,7 +34,7 @@ class RuntimeDryRunTest {
             (chainId, callId, argument) -> argument;
 
     private static final ComponentKey INVENTORY_KEY =
-            new ComponentKey("inventory", ImperativeTag.INSTANCE);
+            new ComponentKey("inventory", SyncTag.INSTANCE);
 
     @Nested
     @DisplayName("happy path")
@@ -52,16 +52,16 @@ class RuntimeDryRunTest {
             // real update, and any silent mutation would defeat the safety net.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
 
                 // When
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
@@ -73,7 +73,7 @@ class RuntimeDryRunTest {
                         .isEqualTo(15);
 
                 // Sanity: the same patch applied via update flips the value.
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
                 assertThat(bh.snapshot().maxConcurrentCalls()).isEqualTo(40);
             }
@@ -85,11 +85,11 @@ class RuntimeDryRunTest {
             // UNCHANGED on dryRun, mirroring update's behaviour.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(15))));
 
                 assertThat(report.componentOutcomes())
@@ -113,15 +113,15 @@ class RuntimeDryRunTest {
 
             try (InqRuntime runtime = Inqudium.configure().build()) {
 
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.balanced())));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(INVENTORY_KEY, ApplyOutcome.ADDED);
-                assertThat(runtime.imperative().findBulkhead("inventory"))
+                assertThat(runtime.sync().findBulkhead("inventory"))
                         .as("dryRun does not materialize a real bulkhead")
                         .isEmpty();
-                assertThat(runtime.imperative().bulkheadNames()).isEmpty();
+                assertThat(runtime.sync().bulkheadNames()).isEmpty();
             }
         }
     }
@@ -138,20 +138,20 @@ class RuntimeDryRunTest {
             // the container's tear-down.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .removeBulkhead("inventory")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(INVENTORY_KEY, ApplyOutcome.REMOVED);
-                assertThat(runtime.imperative().findBulkhead("inventory")).isPresent();
+                assertThat(runtime.sync().findBulkhead("inventory")).isPresent();
                 // Handle still works post-dryRun (would throw ComponentRemovedException after a
                 // real removal).
                 assertThat(bh.execute(2L, 2L, "still-here", IDENTITY))
@@ -166,12 +166,12 @@ class RuntimeDryRunTest {
 
             try (InqRuntime runtime = Inqudium.configure().build()) {
 
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .removeBulkhead("does-not-exist")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("does-not-exist", ImperativeTag.INSTANCE),
+                                new ComponentKey("does-not-exist", SyncTag.INSTANCE),
                                 ApplyOutcome.UNCHANGED);
             }
         }
@@ -188,17 +188,17 @@ class RuntimeDryRunTest {
             // produced. Confirms the decide-only path runs the full listener chain.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(req -> ChangeDecision.veto("policy: limits frozen"));
 
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 assertThat(report.componentOutcomes())
@@ -217,12 +217,12 @@ class RuntimeDryRunTest {
         @Test
         void should_report_VETOED_for_a_listener_vetoed_hot_removal() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override
@@ -236,7 +236,7 @@ class RuntimeDryRunTest {
                     }
                 });
 
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .removeBulkhead("inventory")));
 
                 assertThat(report.componentOutcomes())
@@ -244,7 +244,7 @@ class RuntimeDryRunTest {
                 assertThat(report.vetoFindings()).hasSize(1);
                 assertThat(report.vetoFindings().get(0).reason())
                         .isEqualTo("policy: do not remove during peak");
-                assertThat(runtime.imperative().findBulkhead("inventory"))
+                assertThat(runtime.sync().findBulkhead("inventory"))
                         .as("vetoed dryRun on removal leaves the component in place")
                         .isPresent();
             }
@@ -266,7 +266,7 @@ class RuntimeDryRunTest {
             // validation, breaking the "validate before commit" workflow this method exists for.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("alpha", b -> b.balanced())
                             .bulkhead("beta", b -> b.balanced())
                             .bulkhead("gamma", b -> b.balanced()))
@@ -275,7 +275,7 @@ class RuntimeDryRunTest {
                 // Warm gamma so a hot-patch listener veto can engage.
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> gamma =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("gamma");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("gamma");
                 gamma.execute(1L, 1L, "warm", IDENTITY);
                 gamma.onChangeRequest(req -> ChangeDecision.veto("frozen"));
 
@@ -290,7 +290,7 @@ class RuntimeDryRunTest {
                         .onEvent(RuntimeComponentVetoedEvent.class, received::add);
 
                 // When — every shape of outcome in a single dryRun.
-                runtime.dryRun(u -> u.imperative(im -> im
+                runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("delta", b -> b.protective())                // ADDED
                         .bulkhead("alpha", b -> b.maxConcurrentCalls(99))      // PATCHED
                         .removeBulkhead("beta")                                 // REMOVED
@@ -317,20 +317,20 @@ class RuntimeDryRunTest {
             // that the verdict is stable as long as the runtime is.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("inventory", b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport first = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport first = runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))
                         .bulkhead("payments", b -> b.protective())));
 
-                BuildReport second = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport second = runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))
                         .bulkhead("payments", b -> b.protective())));
 
@@ -340,7 +340,7 @@ class RuntimeDryRunTest {
                 assertThat(second.vetoFindings())
                         .as("vetoFindings match across consecutive dryRuns")
                         .isEqualTo(first.vetoFindings());
-                assertThat(runtime.imperative().findBulkhead("payments"))
+                assertThat(runtime.sync().findBulkhead("payments"))
                         .as("payments was never actually added")
                         .isEmpty();
                 assertThat(bh.snapshot().maxConcurrentCalls())
@@ -361,30 +361,30 @@ class RuntimeDryRunTest {
             // and the runtime stays unchanged.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("alpha", b -> b.balanced().maxConcurrentCalls(10))
                             .bulkhead("beta", b -> b.balanced()))
                     .build()) {
 
-                BuildReport report = runtime.dryRun(u -> u.imperative(im -> im
+                BuildReport report = runtime.dryRun(u -> u.sync(s -> s
                         .bulkhead("alpha", b -> b.maxConcurrentCalls(99))
                         .bulkhead("gamma", b -> b.protective())
                         .removeBulkhead("beta")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("alpha", ImperativeTag.INSTANCE),
+                                new ComponentKey("alpha", SyncTag.INSTANCE),
                                 ApplyOutcome.PATCHED)
                         .containsEntry(
-                                new ComponentKey("gamma", ImperativeTag.INSTANCE),
+                                new ComponentKey("gamma", SyncTag.INSTANCE),
                                 ApplyOutcome.ADDED)
                         .containsEntry(
-                                new ComponentKey("beta", ImperativeTag.INSTANCE),
+                                new ComponentKey("beta", SyncTag.INSTANCE),
                                 ApplyOutcome.REMOVED);
-                assertThat(runtime.imperative().bulkheadNames())
+                assertThat(runtime.sync().bulkheadNames())
                         .as("runtime is unchanged after the dryRun")
                         .containsExactlyInAnyOrder("alpha", "beta");
-                assertThat(runtime.imperative().bulkhead("alpha").snapshot()
+                assertThat(runtime.sync().bulkhead("alpha").snapshot()
                         .maxConcurrentCalls())
                         .isEqualTo(10);
             }

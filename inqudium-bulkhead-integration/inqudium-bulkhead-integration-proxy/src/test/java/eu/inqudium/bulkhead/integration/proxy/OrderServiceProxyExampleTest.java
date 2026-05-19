@@ -1,7 +1,7 @@
 package eu.inqudium.bulkhead.integration.proxy;
 
 import eu.inqudium.config.runtime.BulkheadHandle;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;
@@ -49,7 +49,7 @@ class OrderServiceProxyExampleTest {
 
     @SuppressWarnings("unchecked")
     private static InqBulkhead<Object, Object> orderBulkhead(InqRuntime runtime) {
-        return (InqBulkhead<Object, Object>) runtime.imperative()
+        return (InqBulkhead<Object, Object>) runtime.sync()
                 .bulkhead(BulkheadConfig.BULKHEAD_NAME);
     }
 
@@ -298,14 +298,14 @@ class OrderServiceProxyExampleTest {
             runtime = null;
 
             try (InqRuntime first = BulkheadConfig.newRuntime()) {
-                BulkheadHandle<ImperativeTag> firstHandle =
-                        first.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+                BulkheadHandle<SyncTag> firstHandle =
+                        first.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
                 assertThat(firstHandle.name()).isEqualTo(BulkheadConfig.BULKHEAD_NAME);
             }
 
             try (InqRuntime second = BulkheadConfig.newRuntime()) {
-                BulkheadHandle<ImperativeTag> secondHandle =
-                        second.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+                BulkheadHandle<SyncTag> secondHandle =
+                        second.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
                 assertThat(secondHandle.name()).isEqualTo(BulkheadConfig.BULKHEAD_NAME);
                 assertThat(secondHandle.availablePermits()).isEqualTo(2);
             }

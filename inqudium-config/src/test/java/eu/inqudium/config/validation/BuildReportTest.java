@@ -1,7 +1,7 @@
 package eu.inqudium.config.validation;
 
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -50,8 +50,8 @@ class BuildReportTest {
             // Given
             List<ValidationFinding> mutableFindings = new ArrayList<>();
             mutableFindings.add(warning("R"));
-            ComponentKey keyC = new ComponentKey("c", ImperativeTag.INSTANCE);
-            ComponentKey keyC2 = new ComponentKey("c2", ImperativeTag.INSTANCE);
+            ComponentKey keyC = new ComponentKey("c", SyncTag.INSTANCE);
+            ComponentKey keyC2 = new ComponentKey("c2", SyncTag.INSTANCE);
             Map<ComponentKey, ApplyOutcome> mutableOutcomes = new HashMap<>();
             mutableOutcomes.put(keyC, ApplyOutcome.PATCHED);
 
@@ -127,7 +127,7 @@ class BuildReportTest {
 
             // Given
             VetoFinding veto = new VetoFinding(
-                    new ComponentKey("c", ImperativeTag.INSTANCE),
+                    new ComponentKey("c", SyncTag.INSTANCE),
                     java.util.Set.of(),
                     "policy",
                     VetoFinding.Source.LISTENER);

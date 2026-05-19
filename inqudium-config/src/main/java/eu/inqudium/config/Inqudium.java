@@ -9,7 +9,7 @@ import eu.inqudium.config.dsl.InqudiumBuilder;
  * <pre>{@code
  * InqRuntime runtime = Inqudium.configure()
  *     .general(g -> g.clock(systemClock))
- *     .imperative(im -> im
+ *     .sync(s -> s
  *         .bulkhead("inventory", b -> b.balanced().maxConcurrentCalls(15))
  *     )
  *     .build();

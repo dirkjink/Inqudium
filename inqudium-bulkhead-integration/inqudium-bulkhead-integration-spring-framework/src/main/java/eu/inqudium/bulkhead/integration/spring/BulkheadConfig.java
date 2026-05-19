@@ -32,7 +32,7 @@ public final class BulkheadConfig {
      */
     public static InqRuntime newRuntime() {
         return Inqudium.configure()
-                .imperative(im -> im.bulkhead(BULKHEAD_NAME,
+                .sync(s -> s.bulkhead(BULKHEAD_NAME,
                         b -> b.balanced().maxConcurrentCalls(2)))
                 .build();
     }

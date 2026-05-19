@@ -112,7 +112,7 @@ class SyncAsyncDslTest {
             try (InqRuntime runtime = Inqudium.configure()
                     .sync(s -> s.bulkhead("foo",
                             b -> b.balanced().maxConcurrentCalls(1)))
-                    .imperative(im -> im.bulkhead("foo",
+                    .sync(s -> s.bulkhead("foo",
                             b -> b.balanced().maxConcurrentCalls(3)))
                     .build()) {
                 assertThat(runtime.sync().bulkhead("foo").snapshot()
@@ -146,7 +146,7 @@ class SyncAsyncDslTest {
             // Same configuration as the first sync test, but via the
             // deprecated .imperative(...) entry. Result is identical.
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo",
+                    .sync(s -> s.bulkhead("foo",
                             b -> b.balanced().maxConcurrentCalls(7)))
                     .build()) {
                 assertThat(runtime.sync().bulkhead("foo").snapshot()
@@ -180,7 +180,7 @@ class SyncAsyncDslTest {
             // removes. Demonstrates the shared accumulator handles
             // removals across surfaces too.
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("foo", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("foo", b -> b.balanced()))
                     .async(a -> a.removeBulkhead("foo"))
                     .build()) {
                 assertThat(runtime.sync().bulkheadNames()).doesNotContain("foo");

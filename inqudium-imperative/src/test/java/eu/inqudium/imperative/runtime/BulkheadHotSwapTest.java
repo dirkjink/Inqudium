@@ -3,7 +3,7 @@ package eu.inqudium.imperative.runtime;
 import eu.inqudium.config.Inqudium;
 import eu.inqudium.config.lifecycle.ChangeDecision;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.AdaptiveInstantStrategyConfig;
 import eu.inqudium.config.snapshot.AdaptiveStrategyConfig;
@@ -38,7 +38,7 @@ class BulkheadHotSwapTest {
             (chainId, callId, argument) -> argument;
 
     private static final ComponentKey INVENTORY_KEY =
-            new ComponentKey("inventory", ImperativeTag.INSTANCE);
+            new ComponentKey("inventory", SyncTag.INSTANCE);
 
     @Nested
     @DisplayName("zero in-flight")
@@ -51,17 +51,17 @@ class BulkheadHotSwapTest {
             // calls run through the swapped strategy.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(SemaphoreStrategyConfig.class);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                         .interval(Duration.ofMillis(500))))));
@@ -82,26 +82,26 @@ class BulkheadHotSwapTest {
             // Semaphore -> CoDel -> Adaptive(AIMD) -> Semaphore.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                runtime.update(u -> u.imperative(im -> im.bulkhead("inventory", b -> b
+                runtime.update(u -> u.sync(s -> s.bulkhead("inventory", b -> b
                         .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                 .interval(Duration.ofMillis(500))))));
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(CoDelStrategyConfig.class);
 
-                runtime.update(u -> u.imperative(im -> im.bulkhead("inventory", b -> b
+                runtime.update(u -> u.sync(s -> s.bulkhead("inventory", b -> b
                         .adaptive(a -> a.aimd(x -> x.initialLimit(7))))));
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(AdaptiveStrategyConfig.class);
 
-                runtime.update(u -> u.imperative(im -> im.bulkhead("inventory", b -> b
+                runtime.update(u -> u.sync(s -> s.bulkhead("inventory", b -> b
                         .semaphore())));
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(SemaphoreStrategyConfig.class);
@@ -127,12 +127,12 @@ class BulkheadHotSwapTest {
             // the only way a swap can commit without races.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 CountDownLatch holding = new CountDownLatch(1);
                 CountDownLatch acquired = new CountDownLatch(1);
                 LayerTerminal<String, String> blocking = (cid, callId, arg) -> {
@@ -149,7 +149,7 @@ class BulkheadHotSwapTest {
                 assertThat(acquired.await(5, TimeUnit.SECONDS)).isTrue();
 
                 try {
-                    BuildReport report = runtime.update(u -> u.imperative(im -> im
+                    BuildReport report = runtime.update(u -> u.sync(s -> s
                             .bulkhead("inventory", b -> b
                                     .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                             .interval(Duration.ofMillis(500))))));
@@ -186,17 +186,17 @@ class BulkheadHotSwapTest {
             // in-flight check.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(req -> ChangeDecision.veto(
                         "policy: strategy locked by listener"));
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                         .interval(Duration.ofMillis(500))))));
@@ -232,20 +232,20 @@ class BulkheadHotSwapTest {
         void codel_parameter_tweak_with_zero_in_flight_calls_rebuilds_the_running_strategy() {
             // Given a hot CoDel(50ms, 500ms) bulkhead with no in-flight calls.
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()
                             .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                     .interval(Duration.ofMillis(500)))))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(CoDelStrategyConfig.class);
 
                 // When patching to CoDel(80ms, 800ms) — same strategy type, different fields.
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .codel(c -> c.targetDelay(Duration.ofMillis(80))
                                         .interval(Duration.ofMillis(800))))));
@@ -278,14 +278,14 @@ class BulkheadHotSwapTest {
             // gate, and a regression here would let live state get reset under in-flight calls.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()
                             .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                     .interval(Duration.ofMillis(500)))))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 CountDownLatch holding = new CountDownLatch(1);
                 CountDownLatch acquired = new CountDownLatch(1);
                 LayerTerminal<String, String> blocking = (cid, callId, arg) -> {
@@ -302,7 +302,7 @@ class BulkheadHotSwapTest {
                 assertThat(acquired.await(5, TimeUnit.SECONDS)).isTrue();
 
                 try {
-                    BuildReport report = runtime.update(u -> u.imperative(im -> im
+                    BuildReport report = runtime.update(u -> u.sync(s -> s
                             .bulkhead("inventory", b -> b
                                     .codel(c -> c.targetDelay(Duration.ofMillis(80))
                                             .interval(Duration.ofMillis(800))))));
@@ -336,17 +336,17 @@ class BulkheadHotSwapTest {
             // does not promote a no-op patch into a redundant rebuild — same fields → no work.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()
                             .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                     .interval(Duration.ofMillis(500)))))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                         .interval(Duration.ofMillis(500))))));
@@ -377,14 +377,14 @@ class BulkheadHotSwapTest {
             // Vegas" with no observable effect would be a silent operational miss.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()
                             .adaptive(a -> a.aimd(x -> x.initialLimit(5)
                                     .minLimit(1).maxLimit(50)))))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(AdaptiveStrategyConfig.class);
@@ -394,7 +394,7 @@ class BulkheadHotSwapTest {
                         .as("hot AIMD strategy reports the AIMD initial limit")
                         .isEqualTo(5);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .adaptive(a -> a.vegas(x -> x.initialLimit(7)
                                         .minLimit(1).maxLimit(50))))));
@@ -426,20 +426,20 @@ class BulkheadHotSwapTest {
             // flavour for the non-blocking strategy.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()
                             .adaptiveNonBlocking(a -> a.aimd(x -> x.initialLimit(5)
                                     .minLimit(1).maxLimit(50)))))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(AdaptiveInstantStrategyConfig.class);
                 assertThat(bh.availablePermits()).isEqualTo(5);
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b
                                 .adaptiveNonBlocking(a -> a.aimd(x -> x.initialLimit(7)
                                         .minLimit(1).maxLimit(50))))));
@@ -473,18 +473,18 @@ class BulkheadHotSwapTest {
             // a coherent view — they neither block the swap nor see torn state.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 assertThat(bh.snapshot().strategy())
                         .isInstanceOf(SemaphoreStrategyConfig.class);
 
                 // No in-flight at the moment we issue the update.
-                runtime.update(u -> u.imperative(im -> im.bulkhead("inventory", b -> b
+                runtime.update(u -> u.sync(s -> s.bulkhead("inventory", b -> b
                         .codel(c -> c.targetDelay(Duration.ofMillis(50))
                                 .interval(Duration.ofMillis(500))))));
 

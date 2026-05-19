@@ -58,7 +58,7 @@ class RuntimeTopologyEventsTest {
                         .onEvent(RuntimeComponentAddedEvent.class, received::add);
 
                 // When
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.balanced())));
 
                 // Then
@@ -77,14 +77,14 @@ class RuntimeTopologyEventsTest {
             // materialization branch emits Added.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 List<RuntimeComponentAddedEvent> received = new ArrayList<>();
                 runtime.general().eventPublisher()
                         .onEvent(RuntimeComponentAddedEvent.class, received::add);
 
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 assertThat(received).isEmpty();
@@ -106,7 +106,7 @@ class RuntimeTopologyEventsTest {
             // BuildReport.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
@@ -115,7 +115,7 @@ class RuntimeTopologyEventsTest {
                         .onEvent(RuntimeComponentPatchedEvent.class, received::add);
 
                 // When
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
@@ -141,7 +141,7 @@ class RuntimeTopologyEventsTest {
             // re-emission of the desired state by a format adapter would flood subscribers.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
@@ -150,7 +150,7 @@ class RuntimeTopologyEventsTest {
                         .onEvent(RuntimeComponentPatchedEvent.class, received::add);
 
                 // When — repaint the same value
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(15))));
 
                 // Then
@@ -171,13 +171,13 @@ class RuntimeTopologyEventsTest {
             // see the reason and source without parsing every BuildReport.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(req -> ChangeDecision.veto("policy: limits frozen"));
 
@@ -186,7 +186,7 @@ class RuntimeTopologyEventsTest {
                         .onEvent(RuntimeComponentVetoedEvent.class, received::add);
 
                 // When
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 // Then
@@ -212,12 +212,12 @@ class RuntimeTopologyEventsTest {
             // event class for removals.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override
@@ -236,7 +236,7 @@ class RuntimeTopologyEventsTest {
                         .onEvent(RuntimeComponentVetoedEvent.class, received::add);
 
                 // When
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 // Then
                 assertThat(received).hasSize(1);
@@ -270,7 +270,7 @@ class RuntimeTopologyEventsTest {
             // those consumers — the test pins the contract.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced().maxConcurrentCalls(10))
                             .bulkhead("b", b -> b.balanced().maxConcurrentCalls(20)))
                     .build()) {
@@ -282,7 +282,7 @@ class RuntimeTopologyEventsTest {
                         .onEvent(RuntimeComponentRemovedEvent.class, received::add);
 
                 // When — patch on "a", removal on "b" in a single update.
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("a", b -> b.maxConcurrentCalls(99))
                         .removeBulkhead("b")));
 
@@ -305,7 +305,7 @@ class RuntimeTopologyEventsTest {
             // before RemovedEvent.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("legacy", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("legacy", b -> b.balanced()))
                     .build()) {
 
                 List<InqEvent> received = new ArrayList<>();
@@ -314,7 +314,7 @@ class RuntimeTopologyEventsTest {
                 runtime.general().eventPublisher()
                         .onEvent(RuntimeComponentRemovedEvent.class, received::add);
 
-                runtime.update(u -> u.imperative(im -> im
+                runtime.update(u -> u.sync(s -> s
                         .bulkhead("fresh", b -> b.protective())
                         .removeBulkhead("legacy")));
 

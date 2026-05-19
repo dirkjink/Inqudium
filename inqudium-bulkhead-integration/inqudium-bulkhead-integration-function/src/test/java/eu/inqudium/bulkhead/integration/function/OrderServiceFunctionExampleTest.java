@@ -1,7 +1,7 @@
 package eu.inqudium.bulkhead.integration.function;
 
 import eu.inqudium.config.runtime.BulkheadHandle;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;
@@ -35,7 +35,7 @@ class OrderServiceFunctionExampleTest {
 
     @SuppressWarnings("unchecked")
     private static <A, R> InqBulkhead<A, R> orderBulkhead(InqRuntime runtime) {
-        return (InqBulkhead<A, R>) runtime.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+        return (InqBulkhead<A, R>) runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
     }
 
     @Nested
@@ -268,14 +268,14 @@ class OrderServiceFunctionExampleTest {
             // The check is structural — if the example's runtime construction were
             // accidentally tied to a process-level singleton, this would surface.
             try (InqRuntime first = BulkheadConfig.newRuntime()) {
-                BulkheadHandle<ImperativeTag> firstHandle =
-                        first.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+                BulkheadHandle<SyncTag> firstHandle =
+                        first.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
                 assertThat(firstHandle.name()).isEqualTo(BulkheadConfig.BULKHEAD_NAME);
             }
 
             try (InqRuntime second = BulkheadConfig.newRuntime()) {
-                BulkheadHandle<ImperativeTag> secondHandle =
-                        second.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+                BulkheadHandle<SyncTag> secondHandle =
+                        second.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
                 assertThat(secondHandle.name()).isEqualTo(BulkheadConfig.BULKHEAD_NAME);
                 assertThat(secondHandle.availablePermits()).isEqualTo(2);
             }

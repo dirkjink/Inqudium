@@ -10,7 +10,7 @@ import eu.inqudium.config.spi.ParadigmSectionPatches;
 import eu.inqudium.config.validation.ApplyOutcome;
 import eu.inqudium.config.validation.BuildReport;
 import eu.inqudium.config.validation.CrossComponentRule;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.validation.DiagnosisReport;
 import eu.inqudium.config.validation.DiagnosticFinding;
@@ -50,11 +50,13 @@ public final class DefaultInqRuntime implements InqRuntime {
     private final InqConfigView configView;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    // ADR-046 / Q.5a — typed paradigm views over the imperative container.
-    // Held as fields rather than registered in the containers map so the
-    // cross-paradigm snapshot iteration does not double-count components.
-    // Null when the imperative provider is absent; sync()/async() then
-    // raise ParadigmUnavailableException.
+    // ADR-046 — typed paradigm views. Sync is the canonical home of
+    // the imperative container (DefaultImperative implements Sync
+    // directly post-Q.7). Async is a façade over the same Sync
+    // container so cross-paradigm snapshot iteration does not
+    // double-count components. Both null when the imperative
+    // provider is absent; sync()/async() then raise
+    // ParadigmUnavailableException.
     private final Sync syncView;
     private final Async asyncView;
 
@@ -71,14 +73,14 @@ public final class DefaultInqRuntime implements InqRuntime {
         this.crossComponentRules = List.copyOf(
                 Objects.requireNonNull(crossComponentRules, "crossComponentRules"));
         this.configView = new DefaultInqConfigView(this);
-        Imperative imperativeContainer = lookupImperative();
-        this.syncView = imperativeContainer == null ? null : new DefaultSync(imperativeContainer);
-        this.asyncView = imperativeContainer == null ? null : new DefaultAsync(imperativeContainer);
+        Sync syncContainer = lookupSync();
+        this.syncView = syncContainer;
+        this.asyncView = syncContainer == null ? null : new DefaultAsync(syncContainer);
     }
 
-    private Imperative lookupImperative() {
-        ParadigmContainer<?> container = this.containers.get(ImperativeTag.INSTANCE);
-        return container == null ? null : (Imperative) container;
+    private Sync lookupSync() {
+        ParadigmContainer<?> container = this.containers.get(SyncTag.INSTANCE);
+        return container == null ? null : (Sync) container;
     }
 
     @Override
@@ -91,18 +93,6 @@ public final class DefaultInqRuntime implements InqRuntime {
     public InqConfigView config() {
         ensureOpen();
         return configView;
-    }
-
-    @Override
-    public Imperative imperative() {
-        ensureOpen();
-        ParadigmContainer<?> container = containers.get(ImperativeTag.INSTANCE);
-        if (container == null) {
-            throw new ParadigmUnavailableException(
-                    "The 'imperative' paradigm requires module 'inqudium-imperative' on the "
-                            + "classpath.");
-        }
-        return (Imperative) container;
     }
 
     @Override

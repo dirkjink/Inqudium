@@ -92,7 +92,7 @@ public class OrderBulkheadAspect {
      * Caches one {@link HybridAspectPipelineTerminal} per bulkhead name.
      *
      * <p>The runtime's element registry already caches the bulkhead instance behind
-     * {@link InqRuntime#imperative() runtime.imperative()}{@code .bulkhead(name)} — the same
+     * {@link InqRuntime#imperative() runtime.sync()}{@code .bulkhead(name)} — the same
      * name returns the same instance. This cache, however, sits one layer above and holds
      * the {@code Pipeline+Terminal} object built around that bulkhead, which is decidedly
      * not free to reconstruct (see {@code HybridAspectPipelineTerminal}'s constructor):
@@ -225,7 +225,7 @@ public class OrderBulkheadAspect {
         return terminalsByName.computeIfAbsent(bulkheadName, name -> {
             @SuppressWarnings("unchecked")
             InqBulkhead<Object, Object> bh =
-                    (InqBulkhead<Object, Object>) runtime.imperative().bulkhead(name);
+                    (InqBulkhead<Object, Object>) runtime.sync().bulkhead(name);
             return HybridAspectPipelineTerminal.of(
                     InqPipeline.builder().shield(bh).build());
         });
@@ -265,7 +265,7 @@ public class OrderBulkheadAspect {
 
     @SuppressWarnings("unchecked")
     private InqBulkhead<Object, Object> orderBulkhead() {
-        return (InqBulkhead<Object, Object>) runtime.imperative()
+        return (InqBulkhead<Object, Object>) runtime.sync()
                 .bulkhead(BulkheadConfig.BULKHEAD_NAME);
     }
 

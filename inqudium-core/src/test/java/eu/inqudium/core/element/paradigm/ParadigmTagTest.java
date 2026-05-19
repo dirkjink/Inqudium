@@ -112,18 +112,15 @@ class ParadigmTagTest {
     class SealedHierarchy {
 
         @Test
-        void paradigm_tag_permits_the_five_top_level_families_plus_legacy_imperative() {
+        void paradigm_tag_permits_exactly_the_five_top_level_families() {
             // Given
             Class<?>[] permitted = ParadigmTag.class.getPermittedSubclasses();
             // When
             Set<Class<?>> permittedSet = Set.of(permitted);
-            // Then — the five families per ADR-046 plus the deprecated
-            // ImperativeTag transitional permit (removed in a future release;
-            // see REFACTORING_PARADIGM_TAGGING.md Q.5b/Q.7).
+            // Then — the five canonical families per ADR-046
             assertThat(permittedSet).containsExactlyInAnyOrder(
                     SyncTag.class, AsyncTag.class,
-                    ReactiveTag.class, RxJava3Tag.class, CoroutinesTag.class,
-                    ImperativeTag.class);
+                    ReactiveTag.class, RxJava3Tag.class, CoroutinesTag.class);
         }
 
         @Test
@@ -273,7 +270,6 @@ class ParadigmTagTest {
                     case CoroutinesJobTag j -> "coroutine Job";
                     case CoroutinesFlowTag f -> "coroutine Flow";
                 };
-                case ImperativeTag i -> "legacy imperative";
             };
         }
     }

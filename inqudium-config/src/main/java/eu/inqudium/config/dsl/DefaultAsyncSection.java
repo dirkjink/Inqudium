@@ -6,22 +6,21 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Async-paradigm façade over a shared {@link DefaultImperativeSection}.
- *
- * <p>See {@link DefaultSyncSection} for the shared-accumulator rationale
- * and naming-merge semantics. The async section differs only in the
- * builder type it requests from the provider and the
- * {@link AsyncBulkheadBuilder} surface it presents to user code.</p>
+ * Default implementation of {@link AsyncSection}. See
+ * {@link DefaultSyncSection} for the shared-accumulator rationale —
+ * the async section differs only in the builder type it requests
+ * from the provider and the {@link AsyncBulkheadBuilder} surface it
+ * presents to user code.
  *
  * @since 0.9.0
  */
 public final class DefaultAsyncSection implements AsyncSection {
 
-    private final DefaultImperativeSection wrapped;
+    private final BulkheadPatchAccumulator accumulator;
     private final ParadigmProvider provider;
 
-    public DefaultAsyncSection(DefaultImperativeSection wrapped, ParadigmProvider provider) {
-        this.wrapped = Objects.requireNonNull(wrapped, "wrapped");
+    DefaultAsyncSection(BulkheadPatchAccumulator accumulator, ParadigmProvider provider) {
+        this.accumulator = Objects.requireNonNull(accumulator, "accumulator");
         this.provider = Objects.requireNonNull(provider, "provider");
     }
 
@@ -32,13 +31,13 @@ public final class DefaultAsyncSection implements AsyncSection {
         BulkheadBuilderBase<?> base = provider.createAsyncBulkheadBuilder(name);
         AsyncBulkheadBuilder builder = (AsyncBulkheadBuilder) base;
         configurer.accept(builder);
-        wrapped.applyBulkheadPatch(name, base.toPatch());
+        accumulator.applyBulkheadPatch(name, base.toPatch());
         return this;
     }
 
     @Override
     public AsyncSection removeBulkhead(String name) {
-        wrapped.markBulkheadRemoval(name);
+        accumulator.markBulkheadRemoval(name);
         return this;
     }
 }
