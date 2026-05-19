@@ -55,7 +55,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 // When
@@ -156,7 +156,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
@@ -174,7 +174,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::snapshot)
@@ -191,7 +191,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::availablePermits)
@@ -207,7 +207,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::concurrentCalls)
@@ -223,7 +223,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::lifecycleState)
@@ -243,7 +243,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 ComponentRemovedException ex =
@@ -272,7 +272,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override
@@ -327,7 +327,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 // SAM-form lambda — only overrides decide; decideRemoval inherits accept.
                 bh.onChangeRequest(req -> ChangeDecision.veto("vetoes every patch"));
@@ -363,7 +363,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("inventory").target();
                 AutoCloseable handle = bh.onChangeRequest(req -> ChangeDecision.accept());
                 runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
@@ -420,7 +420,7 @@ class BulkheadRemovalTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> a =
-                        runtime.sync().bulkhead("a").unwrap(InqBulkhead.class);
+                        runtime.sync().bulkhead("a").target();
                 a.execute(1L, 1L, "warm", IDENTITY);
                 a.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override

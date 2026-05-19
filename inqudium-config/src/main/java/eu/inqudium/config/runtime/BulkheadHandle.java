@@ -1,87 +1,89 @@
 package eu.inqudium.config.runtime;
 
-import eu.inqudium.config.lifecycle.InternalMutabilityCheck;
-import eu.inqudium.config.lifecycle.LifecycleAware;
-import eu.inqudium.config.lifecycle.ListenerRegistry;
-import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.paradigm.ParadigmTag;
 
 /**
- * Paradigm-agnostic read surface for a live bulkhead.
+ * Paradigm-tagged handle on a {@link BulkheadComponent}.
  *
- * <p>Every paradigm-specific bulkhead handle (the imperative {@code InqBulkhead}, and — in later
- * phases — {@code ReactiveBulkhead} and friends) implements this interface, parameterised by the
- * paradigm tag. The handle exposes only read accessors and listener-registration; paradigm-specific
- * {@code execute} signatures live on the concrete component because they differ in shape
- * (synchronous return vs. {@code Mono}/{@code Flux}/{@code suspend fun}).
+ * <p>The handle is a lightweight wrapper around the underlying
+ * component. It carries the paradigm tag at compile time and exposes
+ * the component via {@link #target()}; every other accessor delegates
+ * to the wrapped component (the handle adds nothing beyond
+ * paradigm-identity and target-access).</p>
  *
- * <p>The {@link LifecycleAware}, {@link ListenerRegistry}, and {@link InternalMutabilityCheck}
- * super-interfaces are paradigm-agnostic by design and are reused unchanged here. Together they
- * give the update dispatcher everything it needs to route a patch through ADR-028's veto chain
- * without ever importing a paradigm module.
+ * <p>Multiple handles may point at the same component — one per
+ * paradigm tag the component supports. The component itself has
+ * exactly one instance per {@code (paradigm-family, name)} registry
+ * key.</p>
  *
- * <p>{@link InqElement} contributes the {@code name()}, {@code elementType()}, and
- * {@code eventPublisher()} accessors (ADR-033 Stage 3). Every bulkhead handle's
- * {@link InqElement#elementType() elementType()} returns
- * {@link eu.inqudium.core.element.InqElementType#BULKHEAD} — the constraint is enforced by the
- * implementations, not the type system.
+ * <h3>Paradigm tags</h3>
  *
- * @param <P> the paradigm tag.
+ * <p>The type parameter {@code P} encodes the paradigm at compile
+ * time. A {@code BulkheadHandle<SyncTag>} is obtained from the
+ * imperative runtime's sync surface; a
+ * {@code BulkheadHandle<AsyncTag>} from the async surface. Both may
+ * back the same underlying component.</p>
+ *
+ * <h3>Accessing the component</h3>
+ *
+ * <p>Callers needing direct access to the component (e.g. for the
+ * decorator methods or for testing lifecycle internals) use
+ * {@link #target()}:</p>
+ *
+ * <pre>{@code
+ * BulkheadHandle<SyncTag> handle = runtime.sync().bulkhead("payment");
+ * InqBulkhead<String, Integer> bh = handle.target();
+ * Function<String, Integer> wrapped = bh.decorateFunction(processor);
+ * }</pre>
+ *
+ * <p>The caller's variable type witnesses the concrete component
+ * class. Using a wrong type — assigning the result to a variable of
+ * an unrelated bulkhead implementation — compiles but raises
+ * {@code ClassCastException} at the assignment. The bound
+ * {@code <T extends InqElement.Kind.Bulkhead>} catches structurally
+ * non-bulkhead types at compile time (assigning to an
+ * {@code InqElement.Kind.CircuitBreaker} variable fails to compile).</p>
+ *
+ * @param <P> the paradigm tag — {@link eu.inqudium.core.element.paradigm.SyncTag},
+ *            {@link eu.inqudium.core.element.paradigm.AsyncTag}, etc.
+ * @since 0.10.0
  */
-public interface BulkheadHandle<P extends ParadigmTag>
-        extends InqElement,
-        LifecycleAware,
-        ListenerRegistry<BulkheadSnapshot>,
-        InternalMutabilityCheck<BulkheadSnapshot> {
+public sealed interface BulkheadHandle<P extends ParadigmTag>
+        extends BulkheadComponent
+        permits SyncBulkheadHandle, AsyncBulkheadHandle {
 
     /**
-     * @return the bulkhead's current snapshot, read directly from the underlying live container.
-     */
-    BulkheadSnapshot snapshot();
-
-    /**
-     * @return the number of permits currently available. When the bulkhead is hot, the value
-     *         comes from the live strategy; when cold, it falls back to the snapshot's
-     *         {@code maxConcurrentCalls}.
-     */
-    int availablePermits();
-
-    /**
-     * @return the number of permits currently held by in-flight calls. Zero when cold.
-     */
-    int concurrentCalls();
-
-    /**
-     * Returns this handle as the requested type. Convenience method
-     * that eliminates the cast pattern
-     * <pre>{@code
-     * InqBulkhead<Void, String> bh =
-     *     (InqBulkhead<Void, String>) runtime.sync().bulkhead("foo");
-     * }</pre>
-     * which now reads as
-     * <pre>{@code
-     * InqBulkhead<Void, String> bh =
-     *     runtime.sync().bulkhead("foo").unwrap(InqBulkhead.class);
-     * }</pre>
+     * Returns the underlying bulkhead component. The caller's variable
+     * type witnesses the concrete component class.
      *
-     * <p>The default implementation does a direct cast and throws
-     * {@code ClassCastException} on mismatch. Wrapper implementations
-     * (the {@link eu.inqudium.config.runtime.BulkheadHandleAsAsyncView}
-     * that exposes a sync handle as a typed async view) override this
-     * method to unwrap their delegate before casting, so async
-     * callers receive the underlying concrete instance.</p>
-     *
-     * @param target the target class
-     * @param <T> the target type
-     * @return this handle as the target type
-     * @throws ClassCastException if this handle's underlying
-     *         implementation is not assignable to {@code target}
-     * @throws NullPointerException if {@code target} is null
-     *
-     * @since 0.10.0
+     * @param <T> the caller-witnessed component type, a subtype of
+     *            {@link InqElement.Kind.Bulkhead}
+     * @return the underlying bulkhead component, cast to {@code T}
      */
-    default <T> T unwrap(Class<T> target) {
-        return target.cast(this);
+    <T extends InqElement.Kind.Bulkhead> T target();
+
+    /**
+     * Factory for {@code BulkheadHandle<SyncTag>}. Used by paradigm
+     * runtime classes outside this package; the sealed concrete class
+     * itself is package-private.
+     *
+     * @param component the underlying bulkhead component; non-null
+     * @return a fresh sync handle wrapping {@code component}
+     */
+    static BulkheadHandle<eu.inqudium.core.element.paradigm.SyncTag> sync(BulkheadComponent component) {
+        return new SyncBulkheadHandle(component);
+    }
+
+    /**
+     * Factory for {@code BulkheadHandle<AsyncTag>}. Used by paradigm
+     * runtime classes outside this package; the sealed concrete class
+     * itself is package-private.
+     *
+     * @param component the underlying bulkhead component; non-null
+     * @return a fresh async handle wrapping {@code component}
+     */
+    static BulkheadHandle<eu.inqudium.core.element.paradigm.AsyncTag> async(BulkheadComponent component) {
+        return new AsyncBulkheadHandle(component);
     }
 }
