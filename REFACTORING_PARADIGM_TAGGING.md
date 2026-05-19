@@ -768,6 +768,31 @@ except the deprecated aliases. Remove the deprecated
 
 ---
 
+### Q.7.5 — All paradigm tags from final classes to sealed interfaces
+
+**Goal:** Convert all 13 leaf-level paradigm tags from
+`public final class` declarations to `public sealed
+interface` declarations, each with one package-private
+default implementation class. Brings the entire paradigm-tag
+hierarchy into structural consistency: every tag is an
+interface, every concrete singleton is package-private.
+Enables generic intersection bounds like
+`<P extends SyncTag & ReactiveTag>` that Java's type system
+forbids on classes.
+
+**Scope:** All 13 leaf tags. The family interfaces themselves
+(`ParadigmTag`, `ReactiveTag`, `RxJava3Tag`, `CoroutinesTag`)
+already have the right shape and need only updates to Javadoc.
+
+**Mode:** Mechanical refactor. No behavioural changes; the
+public API is preserved exactly.
+
+**Effort:** about 1.5-2 hours.
+
+**Branch:** `refactor/all-tags-as-interfaces`.
+
+---
+
 ### Q.8 — Plan deletion + final consistency
 
 **Goal:** After all sub-steps merge, delete this plan
@@ -804,6 +829,7 @@ any remaining drift.
 * [x] Q.5b — DSL + Integration Examples migrate to `sync()` / `async()` (2026-05-19, PR #88)
 * [x] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names (2026-05-19, PR #89)
 * [x] Q.7 — Final cleanup: remove legacy types (2026-05-19, PR #90)
+* [ ] Q.7.5 — All paradigm tags from final classes to sealed interfaces
 * [ ] Q.8 — Plan deletion + final consistency
 
 ---
@@ -823,9 +849,10 @@ Rough numbers for someone familiar with the codebase:
 | Q.5b | 1 day (DSL + 2 integration examples + e2e tests) |
 | Q.6 | 1 hour (mechanical rename) |
 | Q.7 | 2 hours (cleanup + ADR updates) |
+| Q.7.5 | 1.5-2 hours (full tag-hierarchy refactor) |
 | Q.8 | 15 minutes |
 
-Total range: about **6-8 days** for the full sequence at a
+Total range: about **7-9 days** for the full sequence at a
 sustainable pace.
 
 ## When unsure
