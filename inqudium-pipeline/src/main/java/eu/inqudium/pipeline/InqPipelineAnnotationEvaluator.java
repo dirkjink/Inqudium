@@ -65,38 +65,4 @@ public final class InqPipelineAnnotationEvaluator {
                 .forPipeline(legacy)
                 .evaluate(serviceInterface, implementationClass);
     }
-
-    /**
-     * Evaluates the annotation-derived per-method plan with
-     * paradigm-stamped permits, by delegating to the existing
-     * evaluator (ADR-036, ADR-046) with a legacy pipeline built
-     * from the new pipeline's elements.
-     *
-     * <p>The returned plans use
-     * {@link eu.inqudium.annotation.evaluator.MethodPlan.StampedPassThrough}
-     * and
-     * {@link eu.inqudium.annotation.evaluator.MethodPlan.StampedDecorated}
-     * variants, each carrying a
-     * {@link eu.inqudium.core.element.paradigm.ParadigmTag}.</p>
-     *
-     * <p>Preferred over {@link #evaluate(InqPipeline, Class, Class)}
-     * for paradigm-aware consumers. Both methods coexist during the
-     * migration to the stamped plan shape; see ADR-046.</p>
-     *
-     * @since 0.9.0
-     */
-    public static <T> EvaluationResult evaluateStamped(
-            InqPipeline pipeline,
-            Class<T> serviceInterface,
-            Class<? extends T> implementationClass) {
-
-        eu.inqudium.core.pipeline.InqPipeline legacy =
-                eu.inqudium.core.pipeline.InqPipeline.builder()
-                        .shieldAll(pipeline.elements())
-                        .build();
-
-        return AnnotationEvaluator
-                .forPipeline(legacy)
-                .evaluateStamped(serviceInterface, implementationClass);
-    }
 }

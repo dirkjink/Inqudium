@@ -3,10 +3,12 @@ package eu.inqudium.pipeline;
 import eu.inqudium.annotation.InqBulkhead;
 import eu.inqudium.annotation.InqCircuitBreaker;
 import eu.inqudium.annotation.InqRetry;
+import eu.inqudium.annotation.evaluator.ElementRef;
 import eu.inqudium.annotation.evaluator.EvaluationResult;
 import eu.inqudium.annotation.evaluator.InqAnnotationConfigurationException;
 import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElementType;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +40,7 @@ class InqPipelineAnnotationEvaluatorTest {
             // Then
             assertThat(result.plans()).containsKey(interfaceMethod);
             assertThat(result.plans().get(interfaceMethod))
-                    .isEqualTo(new MethodPlan.PassThrough());
+                    .isEqualTo(new MethodPlan.PassThrough(SyncTag.INSTANCE));
         }
 
         @Test
@@ -58,7 +60,9 @@ class InqPipelineAnnotationEvaluatorTest {
 
             // Then
             assertThat(result.plans().get(interfaceMethod))
-                    .isEqualTo(new MethodPlan.Decorated(List.of("bh")));
+                    .isEqualTo(new MethodPlan.Decorated(
+                            SyncTag.INSTANCE,
+                            List.of(new ElementRef(InqElementType.BULKHEAD, "bh"))));
         }
     }
 
@@ -132,7 +136,11 @@ class InqPipelineAnnotationEvaluatorTest {
 
             // Then — both names known, canonical order preserved
             assertThat(result.plans().get(interfaceMethod))
-                    .isEqualTo(new MethodPlan.Decorated(List.of("cb", "rt")));
+                    .isEqualTo(new MethodPlan.Decorated(
+                            SyncTag.INSTANCE,
+                            List.of(
+                                    new ElementRef(InqElementType.CIRCUIT_BREAKER, "cb"),
+                                    new ElementRef(InqElementType.RETRY, "rt"))));
         }
     }
 
