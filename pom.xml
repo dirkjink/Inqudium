@@ -44,7 +44,6 @@
         <module>inqudium-spring-boot</module>
         <module>inqudium-imperative</module>
         <module>inqudium-aspect</module>
-        <module>inqudium-aspect-integration-tests</module>
         <module>inqudium-annotation</module>
         <module>inqudium-annotation-support</module>
         <module>inqudium-spring</module>

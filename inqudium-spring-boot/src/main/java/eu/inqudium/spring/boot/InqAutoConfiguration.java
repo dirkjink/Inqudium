@@ -2,7 +2,6 @@ package eu.inqudium.spring.boot;
 
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementRegistry;
-import eu.inqudium.spring.InqShieldAspect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -21,10 +20,13 @@ import java.util.List;
  *       application context (CircuitBreaker, Retry, Bulkhead, etc.)</li>
  *   <li><strong>Registers</strong> them in an {@link InqElementRegistry}
  *       using {@link InqElement#name()} as the lookup key</li>
- *   <li><strong>Creates</strong> an {@link InqShieldAspect} that intercepts
- *       methods annotated with {@code @InqCircuitBreaker}, {@code @InqRetry},
- *       etc. and routes them through the pipeline</li>
  * </ol>
+ *
+ * <p>The annotation-driven aspect that used to be auto-configured here
+ * was removed in Phase A of the post-polish refactor sequence; a future
+ * Phase B (ADR-039) rebuilds it against the new pipeline interface.
+ * Until then, applications wire pipeline elements directly via the
+ * functional decoration API.</p>
  *
  * <h3>Usage</h3>
  * <p>Add {@code inqudium-spring-boot} to your classpath — auto-configuration activates
@@ -132,18 +134,5 @@ public class InqAutoConfiguration {
                 registry.size(), registry.names());
 
         return registry;
-    }
-
-    /**
-     * Creates the Spring AOP aspect that intercepts annotated methods
-     * and routes them through the Inqudium pipeline.
-     *
-     * @param registry the element registry for name → instance lookup
-     * @return the shield aspect
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    public InqShieldAspect inqShieldAspect(InqElementRegistry registry) {
-        return new InqShieldAspect(registry);
     }
 }
