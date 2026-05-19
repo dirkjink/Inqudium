@@ -2,7 +2,7 @@
  * Runtime container — {@code InqRuntime}, paradigm containers, and the cross-paradigm read view.
  *
  * <p>This package owns the top-level interfaces of ADR-026: {@code InqRuntime},
- * {@code ParadigmContainer&lt;P&gt;}, the paradigm-specific subinterfaces ({@code Imperative},
+ * {@code ParadigmContainer&lt;P&gt;}, the paradigm-specific subinterfaces ({@code Sync},
  * {@code Reactive}, {@code RxJava3}, {@code Coroutines}), {@code InqConfigView}, and the
  * {@code Inqudium#configure()} entry point. Implementations of paradigm containers live in their
  * respective paradigm modules and are bridged to this module via the

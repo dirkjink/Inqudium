@@ -1,6 +1,6 @@
 package eu.inqudium.config.dsl;
 
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.snapshot.AdaptiveInstantStrategyConfig;
 import eu.inqudium.config.snapshot.AdaptiveStrategyConfig;
 import eu.inqudium.config.snapshot.AimdLimitAlgorithmConfig;
@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 @DisplayName("BulkheadBuilder strategy DSL")
 class BulkheadBuilderStrategyDslTest {
 
-    private static final class TestBuilder extends BulkheadBuilderBase<ImperativeTag> {
+    private static final class TestBuilder extends BulkheadBuilderBase<SyncTag> {
         TestBuilder(String name) {
             super(name);
         }
@@ -41,7 +41,7 @@ class BulkheadBuilderStrategyDslTest {
                 BulkheadEventConfig.disabled(), new SemaphoreStrategyConfig());
     }
 
-    private static BulkheadSnapshot snapshotFor(BulkheadBuilder<ImperativeTag> builder) {
+    private static BulkheadSnapshot snapshotFor(BulkheadBuilder<SyncTag> builder) {
         return ((TestBuilder) builder).toPatch().applyTo(systemDefault());
     }
 

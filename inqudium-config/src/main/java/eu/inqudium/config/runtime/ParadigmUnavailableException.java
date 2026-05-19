@@ -2,7 +2,7 @@ package eu.inqudium.config.runtime;
 
 /**
  * Thrown when a paradigm is referenced (via the DSL or via
- * {@code runtime.imperative()} / {@code runtime.reactive()} / ... accessors) but no
+ * {@code runtime.sync()} / {@code runtime.reactive()} / ... accessors) but no
  * {@link eu.inqudium.config.spi.ParadigmProvider ParadigmProvider} for it is on the runtime
  * classpath.
  *

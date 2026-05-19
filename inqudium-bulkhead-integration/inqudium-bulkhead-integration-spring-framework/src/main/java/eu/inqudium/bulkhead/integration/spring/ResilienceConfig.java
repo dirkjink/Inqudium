@@ -67,7 +67,7 @@ public class ResilienceConfig {
         InqElementRegistry registry = InqElementRegistry.create();
         registry.register(
                 BulkheadConfig.BULKHEAD_NAME,
-                (InqElement) runtime.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME));
+                (InqElement) runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME));
         return registry;
     }
 

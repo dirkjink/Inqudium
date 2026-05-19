@@ -43,7 +43,7 @@ class BulkheadSpringBootHotSwapTest {
         @Bean(destroyMethod = "close")
         public InqRuntime inqRuntime() {
             return Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("aopHotSwap", b -> b.balanced())
                             .bulkhead("aopRetune", b -> b.balanced().maxConcurrentCalls(5)))
                     .build();
@@ -51,12 +51,12 @@ class BulkheadSpringBootHotSwapTest {
 
         @Bean
         public InqElement aopHotSwap(InqRuntime runtime) {
-            return (InqElement) runtime.imperative().bulkhead("aopHotSwap");
+            return (InqElement) runtime.sync().bulkhead("aopHotSwap");
         }
 
         @Bean
         public InqElement aopRetune(InqRuntime runtime) {
-            return (InqElement) runtime.imperative().bulkhead("aopRetune");
+            return (InqElement) runtime.sync().bulkhead("aopRetune");
         }
 
         @Bean
@@ -110,12 +110,12 @@ class BulkheadSpringBootHotSwapTest {
         @SuppressWarnings("unchecked")
         eu.inqudium.imperative.bulkhead.InqBulkhead<Void, Object> bh =
                 (eu.inqudium.imperative.bulkhead.InqBulkhead<Void, Object>)
-                        runtime.imperative().bulkhead("aopHotSwap");
+                        runtime.sync().bulkhead("aopHotSwap");
 
         assertThat(swapService.call("warm")).isEqualTo("swap:warm");
         assertThat(bh.snapshot().strategy()).isInstanceOf(SemaphoreStrategyConfig.class);
 
-        runtime.update(u -> u.imperative(im -> im.bulkhead("aopHotSwap", b -> b
+        runtime.update(u -> u.sync(s -> s.bulkhead("aopHotSwap", b -> b
                 .codel(c -> c.targetDelay(Duration.ofMillis(50))
                         .interval(Duration.ofMillis(500))))));
 
@@ -132,7 +132,7 @@ class BulkheadSpringBootHotSwapTest {
         @SuppressWarnings("unchecked")
         eu.inqudium.imperative.bulkhead.InqBulkhead<Void, Object> bh =
                 (eu.inqudium.imperative.bulkhead.InqBulkhead<Void, Object>)
-                        runtime.imperative().bulkhead("aopRetune");
+                        runtime.sync().bulkhead("aopRetune");
 
         // Force a hot transition with a no-op call so availablePermits reads from the
         // strategy thereafter (cold reads from snapshot, hot reads from strategy — both
@@ -141,7 +141,7 @@ class BulkheadSpringBootHotSwapTest {
         retuneService.call("warm");
         assertThat(bh.availablePermits()).isEqualTo(5);
 
-        runtime.update(u -> u.imperative(im -> im
+        runtime.update(u -> u.sync(s -> s
                 .bulkhead("aopRetune", b -> b.maxConcurrentCalls(13))));
 
         assertThat(bh.availablePermits()).isEqualTo(13);

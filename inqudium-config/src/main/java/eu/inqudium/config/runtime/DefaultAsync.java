@@ -5,6 +5,7 @@ import eu.inqudium.config.snapshot.GeneralSnapshot;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
 import eu.inqudium.core.element.paradigm.AsyncTag;
 import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -12,14 +13,19 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Asynchronous-paradigm view over an {@link Imperative} container.
- * Read accessors and lifecycle operations pass through; the underlying
- * registry is shared with {@link DefaultSync}.
+ * Asynchronous-paradigm view over a {@link Sync} container.
  *
- * <p>See {@link DefaultSync} for the façade-pattern rationale and the
- * empty-{@code snapshots()} convention. The async view differs only in
- * the paradigm tag and the wrapper type used to project the underlying
- * handles.</p>
+ * <p>The {@link Sync} container is the canonical home of imperative
+ * bulkhead components (the imperative module's {@code DefaultImperative}
+ * implements {@code Sync} directly). {@code DefaultAsync} wraps that
+ * container as a façade and projects each handle as a
+ * {@code BulkheadHandle<AsyncTag>} via {@link BulkheadHandleAsAsyncView};
+ * the underlying bulkhead instance is shared (Q.5a / ADR-046).</p>
+ *
+ * <p>{@link #snapshots()} returns an empty stream because the wrapped
+ * {@link Sync} container is the single source of truth iterated by
+ * cross-paradigm read paths; the view contributes no additional
+ * snapshots of its own.</p>
  *
  * <p>Package-private — constructed only by {@link DefaultInqRuntime}.</p>
  *
@@ -27,10 +33,10 @@ import java.util.stream.Stream;
  */
 final class DefaultAsync implements Async {
 
-    private final Imperative imperative;
+    private final Sync sync;
 
-    DefaultAsync(Imperative imperative) {
-        this.imperative = Objects.requireNonNull(imperative, "imperative");
+    DefaultAsync(Sync sync) {
+        this.sync = Objects.requireNonNull(sync, "sync");
     }
 
     @Override
@@ -40,29 +46,29 @@ final class DefaultAsync implements Async {
 
     @Override
     public BulkheadHandle<AsyncTag> bulkhead(String name) {
-        return toAsyncHandle(imperative.bulkhead(name));
+        return toAsyncHandle(sync.bulkhead(name));
     }
 
     @Override
     public Optional<BulkheadHandle<AsyncTag>> findBulkhead(String name) {
-        return imperative.findBulkhead(name).map(this::toAsyncHandle);
+        return sync.findBulkhead(name).map(this::toAsyncHandle);
     }
 
     @Override
     public Set<String> bulkheadNames() {
-        return imperative.bulkheadNames();
+        return sync.bulkheadNames();
     }
 
     @Override
     public ParadigmApplyResult applyUpdate(
             GeneralSnapshot general, ParadigmSectionPatches patches) {
-        return imperative.applyUpdate(general, patches);
+        return sync.applyUpdate(general, patches);
     }
 
     @Override
     public ParadigmApplyResult dryRunUpdate(
             GeneralSnapshot general, ParadigmSectionPatches patches) {
-        return imperative.dryRunUpdate(general, patches);
+        return sync.dryRunUpdate(general, patches);
     }
 
     @Override
@@ -70,8 +76,7 @@ final class DefaultAsync implements Async {
         return Stream.empty();
     }
 
-    private BulkheadHandle<AsyncTag> toAsyncHandle(
-            BulkheadHandle<eu.inqudium.core.element.paradigm.ImperativeTag> handle) {
+    private BulkheadHandle<AsyncTag> toAsyncHandle(BulkheadHandle<SyncTag> handle) {
         return new BulkheadHandleAsAsyncView(handle);
     }
 }

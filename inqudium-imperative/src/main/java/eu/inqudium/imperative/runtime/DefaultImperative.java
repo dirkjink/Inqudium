@@ -9,8 +9,8 @@ import eu.inqudium.config.patch.BulkheadPatch;
 import eu.inqudium.config.runtime.BulkheadHandle;
 import eu.inqudium.config.runtime.ComponentKey;
 import eu.inqudium.config.runtime.DispatchResult;
-import eu.inqudium.config.runtime.Imperative;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.config.runtime.Sync;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.ParadigmApplyResult;
 import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.config.runtime.UpdateDispatcher;
@@ -35,7 +35,11 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
 /**
- * Default implementation of the {@link Imperative} paradigm container.
+ * Default implementation of the {@link Sync} paradigm container — the
+ * concrete registry-backed home of the {@code InqBulkhead} instances
+ * served to both sync and async dispatch paths. The async path goes
+ * through {@code DefaultAsync}, which wraps this container as the
+ * shared backing instance (Q.5a façade design).
  *
  * <p>Holds an immutable name-keyed map of {@link Entry} instances. Each entry pairs the
  * {@link InqBulkhead} component with the {@link LiveContainer} backing it — the live container
@@ -48,7 +52,7 @@ import java.util.stream.Stream;
  * bulkheads through the same path that built the initial set when {@link #applyUpdate}
  * encounters a previously-unknown name.
  */
-public final class DefaultImperative implements Imperative {
+public final class DefaultImperative implements Sync {
 
     /**
      * Pair of a live bulkhead component and its backing live container. Stored together so the
@@ -106,11 +110,11 @@ public final class DefaultImperative implements Imperative {
 
     @Override
     public ParadigmTag paradigm() {
-        return ImperativeTag.INSTANCE;
+        return SyncTag.INSTANCE;
     }
 
     @Override
-    public BulkheadHandle<ImperativeTag> bulkhead(String name) {
+    public BulkheadHandle<SyncTag> bulkhead(String name) {
         Map<String, Entry> snapshot = bulkheads.get();
         Entry e = snapshot.get(name);
         if (e == null) {
@@ -121,7 +125,7 @@ public final class DefaultImperative implements Imperative {
     }
 
     @Override
-    public Optional<BulkheadHandle<ImperativeTag>> findBulkhead(String name) {
+    public Optional<BulkheadHandle<SyncTag>> findBulkhead(String name) {
         Entry e = bulkheads.get().get(name);
         return e != null ? Optional.of(e.bulkhead()) : Optional.empty();
     }
@@ -145,7 +149,7 @@ public final class DefaultImperative implements Imperative {
             for (Map.Entry<String, BulkheadPatch> e : patches.bulkheadPatches().entrySet()) {
                 String name = e.getKey();
                 BulkheadPatch patch = e.getValue();
-                ComponentKey key = new ComponentKey(name, ImperativeTag.INSTANCE);
+                ComponentKey key = new ComponentKey(name, SyncTag.INSTANCE);
                 Entry existing = next.get(name);
                 if (existing != null) {
                     DispatchResult result = dispatcher.dispatch(
@@ -171,7 +175,7 @@ public final class DefaultImperative implements Imperative {
                 }
             }
             for (String name : patches.bulkheadRemovals()) {
-                ComponentKey key = new ComponentKey(name, ImperativeTag.INSTANCE);
+                ComponentKey key = new ComponentKey(name, SyncTag.INSTANCE);
                 Entry existing = next.get(name);
                 if (existing == null) {
                     // Removing a name that does not exist is semantically a no-op — the runtime
@@ -223,7 +227,7 @@ public final class DefaultImperative implements Imperative {
         for (Map.Entry<String, BulkheadPatch> e : patches.bulkheadPatches().entrySet()) {
             String name = e.getKey();
             BulkheadPatch patch = e.getValue();
-            ComponentKey key = new ComponentKey(name, ImperativeTag.INSTANCE);
+            ComponentKey key = new ComponentKey(name, SyncTag.INSTANCE);
             Entry existing = snapshot.get(name);
             if (existing != null) {
                 DispatchResult result = dispatcher.decide(
@@ -238,7 +242,7 @@ public final class DefaultImperative implements Imperative {
             }
         }
         for (String name : patches.bulkheadRemovals()) {
-            ComponentKey key = new ComponentKey(name, ImperativeTag.INSTANCE);
+            ComponentKey key = new ComponentKey(name, SyncTag.INSTANCE);
             Entry existing = snapshot.get(name);
             if (existing == null) {
                 outcomes.put(key, ApplyOutcome.UNCHANGED);

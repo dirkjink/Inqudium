@@ -29,19 +29,6 @@ public interface ParadigmProvider {
     ParadigmTag paradigm();
 
     /**
-     * Create a paradigm-specific bulkhead builder for the named bulkhead. The DSL section invokes
-     * this on every {@code .bulkhead("name", ...)} call, hands the returned builder to the
-     * user's configurer (after casting to the paradigm-specific sub-interface), then extracts
-     * the resulting patch via {@link BulkheadBuilderBase#toPatch()}.
-     *
-     * @param name the bulkhead's name; non-null and non-blank.
-     * @return a paradigm-specific {@code BulkheadBuilderBase} instance. The concrete return type
-     *         implements the paradigm's bulkhead-builder sub-interface (e.g.
-     *         {@code ImperativeBulkheadBuilder}).
-     */
-    BulkheadBuilderBase<?> createBulkheadBuilder(String name);
-
-    /**
      * Create a sync-paradigm bulkhead builder for the named bulkhead.
      * Called by {@link eu.inqudium.config.dsl.DefaultSyncSection} on
      * every {@code .sync(...).bulkhead("name", ...)} call.
@@ -50,14 +37,11 @@ public interface ParadigmProvider {
      * {@link UnsupportedOperationException}. Paradigm providers that
      * implement sync-paradigm support override it to return a builder
      * implementing {@link eu.inqudium.config.dsl.SyncBulkheadBuilder}.
-     * The {@link eu.inqudium.imperative.runtime.ImperativeProvider
-     * ImperativeProvider} overrides it.</p>
+     * The imperative module's provider overrides it.</p>
      *
      * @param name the bulkhead's name; non-null and non-blank.
      * @return a paradigm-specific {@code BulkheadBuilderBase} instance
      *         implementing {@link eu.inqudium.config.dsl.SyncBulkheadBuilder}.
-     *
-     * @since 0.9.0
      */
     default BulkheadBuilderBase<?> createSyncBulkheadBuilder(String name) {
         throw new UnsupportedOperationException(
@@ -73,8 +57,6 @@ public interface ParadigmProvider {
      * @param name the bulkhead's name; non-null and non-blank.
      * @return a paradigm-specific {@code BulkheadBuilderBase} instance
      *         implementing {@link eu.inqudium.config.dsl.AsyncBulkheadBuilder}.
-     *
-     * @since 0.9.0
      */
     default BulkheadBuilderBase<?> createAsyncBulkheadBuilder(String name) {
         throw new UnsupportedOperationException(

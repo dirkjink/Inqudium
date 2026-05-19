@@ -7,14 +7,14 @@ import eu.inqudium.config.lifecycle.LifecycleState;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
 
 import java.util.List;
 import java.util.Objects;
 
 /**
- * Wraps a {@link BulkheadHandle} typed as {@link ImperativeTag} as a
+ * Wraps a {@link BulkheadHandle} typed as {@link SyncTag} as a
  * typed {@link BulkheadHandle} of {@link AsyncTag}. Every accessor
  * delegates to the wrapped handle.
  *
@@ -29,13 +29,13 @@ import java.util.Objects;
  */
 final class BulkheadHandleAsAsyncView implements BulkheadHandle<AsyncTag> {
 
-    private final BulkheadHandle<ImperativeTag> wrapped;
+    private final BulkheadHandle<SyncTag> wrapped;
 
-    BulkheadHandleAsAsyncView(BulkheadHandle<ImperativeTag> wrapped) {
+    BulkheadHandleAsAsyncView(BulkheadHandle<SyncTag> wrapped) {
         this.wrapped = Objects.requireNonNull(wrapped, "wrapped");
     }
 
-    BulkheadHandle<ImperativeTag> wrapped() {
+    BulkheadHandle<SyncTag> wrapped() {
         return wrapped;
     }
 

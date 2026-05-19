@@ -44,7 +44,7 @@ class BulkheadWrapperFamilyTest {
      */
     @SuppressWarnings("unchecked")
     private static <A, R> InqBulkhead<A, R> newBulkhead(InqRuntime runtime, String name) {
-        return (InqBulkhead<A, R>) runtime.imperative().bulkhead(name);
+        return (InqBulkhead<A, R>) runtime.sync().bulkhead(name);
     }
 
     @Nested
@@ -54,7 +54,7 @@ class BulkheadWrapperFamilyTest {
         @Test
         void supplier_wrapper_runs_the_supplier_through_the_bulkhead() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, String> bh = newBulkhead(runtime, "inventory");
@@ -67,7 +67,7 @@ class BulkheadWrapperFamilyTest {
         @Test
         void function_wrapper_runs_the_function_through_the_bulkhead() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<String, Integer> bh = newBulkhead(runtime, "inventory");
@@ -80,7 +80,7 @@ class BulkheadWrapperFamilyTest {
         @Test
         void runnable_wrapper_runs_the_runnable_through_the_bulkhead() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, Void> bh = newBulkhead(runtime, "inventory");
@@ -97,7 +97,7 @@ class BulkheadWrapperFamilyTest {
         @Test
         void callable_wrapper_runs_the_callable_through_the_bulkhead() throws Exception {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, String> bh = newBulkhead(runtime, "inventory");
@@ -110,7 +110,7 @@ class BulkheadWrapperFamilyTest {
         @Test
         void joinpoint_wrapper_runs_the_executor_through_the_bulkhead() throws Throwable {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, String> bh = newBulkhead(runtime, "inventory");
@@ -137,7 +137,7 @@ class BulkheadWrapperFamilyTest {
             // want resilience without modifying their service implementation.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, Object> bh = newBulkhead(runtime, "inventory");
@@ -159,7 +159,7 @@ class BulkheadWrapperFamilyTest {
             // whose single element is the real bulkhead routes method calls correctly.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, Object> bh = newBulkhead(runtime, "inventory");
@@ -181,7 +181,7 @@ class BulkheadWrapperFamilyTest {
         @Test
         void sync_pipeline_terminal_executes_join_point_through_the_bulkhead() throws Throwable {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, Object> bh = newBulkhead(runtime, "inventory");
@@ -198,7 +198,7 @@ class BulkheadWrapperFamilyTest {
         @Test
         void sync_pipeline_terminal_decorate_supplier_reuses_chain() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, Object> bh = newBulkhead(runtime, "inventory");
@@ -226,7 +226,7 @@ class BulkheadWrapperFamilyTest {
             // the structural verification.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 InqBulkhead<Void, Object> bh = newBulkhead(runtime, "inventory");

@@ -9,8 +9,8 @@ import java.util.Objects;
  * the runtime (ADR-026).
  *
  * <p>External handle references obtained before the removal — for example via
- * {@link Imperative#bulkhead(String)} or
- * {@link Imperative#findBulkhead(String) findBulkhead} — survive the removal but go inert.
+ * {@link Sync#bulkhead(String)} or
+ * {@link Sync#findBulkhead(String) findBulkhead} — survive the removal but go inert.
  * Subsequent {@code execute(...)}, {@code snapshot()}, {@code availablePermits()}, and
  * {@code concurrentCalls()} calls on such a handle raise this exception. Listener-registration
  * methods do not throw — listeners on a removed handle are silently retained on the inert handle

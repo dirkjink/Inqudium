@@ -62,12 +62,12 @@ class BulkheadConcurrentRemovalAndPatchTest {
             // entries, or an exception escape on either thread.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 // Warm into HOT before the storm so the snapshot-listener path is registered.
                 bh.execute(0L, 0L, "warm", IDENTITY);
 
@@ -81,7 +81,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
                         for (int i = 0; i < 200; i++) {
                             int newLimit = 1 + (i % 16);
                             try {
-                                runtime.update(u -> u.imperative(im -> im
+                                runtime.update(u -> u.sync(s -> s
                                         .bulkhead("inventory",
                                                 b -> b.maxConcurrentCalls(newLimit))));
                             } catch (IllegalArgumentException ignored) {
@@ -102,7 +102,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
                         // in before the removal fires. The exact value is unimportant; what
                         // matters is that the two operations actually interleave.
                         Thread.sleep(1);
-                        runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                        runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
                     } catch (Throwable t) {
                         removerError.set(t);
                     }
@@ -140,17 +140,17 @@ class BulkheadConcurrentRemovalAndPatchTest {
             // the same contract that the live race relies on.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(0L, 0L, "warm", IDENTITY);
 
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))));
 
                 // The patch path treats the absence as "add" rather than UNCHANGED — this
@@ -159,7 +159,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
                 // bulkhead block is interpreted as add-back, not an error. We pin only that
                 // the operation does not throw and the runtime stays usable.
                 assertThat(report).isNotNull();
-                assertThat(runtime.imperative().findBulkhead("inventory"))
+                assertThat(runtime.sync().findBulkhead("inventory"))
                         .as("the second update either added back the bulkhead or left it absent")
                         .satisfiesAnyOf(
                                 opt -> assertThat(opt).isEmpty(),
@@ -179,12 +179,12 @@ class BulkheadConcurrentRemovalAndPatchTest {
             // the race outcome — otherwise the post-storm world would be ambiguously alive.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(0L, 0L, "warm", IDENTITY);
 
                 CountDownLatch ready = new CountDownLatch(2);
@@ -197,7 +197,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
                         for (int i = 0; i < 50; i++) {
                             int limit = 1 + (i % 8);
                             try {
-                                runtime.update(u -> u.imperative(im -> im
+                                runtime.update(u -> u.sync(s -> s
                                         .bulkhead("inventory",
                                                 b -> b.maxConcurrentCalls(limit))));
                             } catch (IllegalArgumentException ignored) {
@@ -213,7 +213,7 @@ class BulkheadConcurrentRemovalAndPatchTest {
                     ready.countDown();
                     try {
                         start.await();
-                        runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                        runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
                     } catch (InterruptedException ignored) {
                         Thread.currentThread().interrupt();
                     }

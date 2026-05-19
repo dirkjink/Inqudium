@@ -201,6 +201,6 @@ public class OrderService {
 
     @SuppressWarnings("unchecked")
     private static <A, R> InqBulkhead<A, R> bulkhead(InqRuntime runtime) {
-        return (InqBulkhead<A, R>) runtime.imperative().bulkhead(BulkheadConfig.BULKHEAD_NAME);
+        return (InqBulkhead<A, R>) runtime.sync().bulkhead(BulkheadConfig.BULKHEAD_NAME);
     }
 }

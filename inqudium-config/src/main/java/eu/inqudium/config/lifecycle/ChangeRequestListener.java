@@ -28,7 +28,7 @@ public interface ChangeRequestListener<S extends ComponentSnapshot> {
     /**
      * Decision for a structural-removal request (ADR-026). The dispatcher iterates listeners
      * with this method when the user calls
-     * {@code runtime.update(u -> u.imperative(im -> im.removeBulkhead(...)))} or its analogue.
+     * {@code runtime.update(u -> u.sync(s -> s.removeBulkhead(...)))} or its analogue.
      *
      * <p>The default implementation returns {@link ChangeDecision#accept()}, so listeners
      * written as lambdas to police snapshot patches do not accidentally veto removals — that

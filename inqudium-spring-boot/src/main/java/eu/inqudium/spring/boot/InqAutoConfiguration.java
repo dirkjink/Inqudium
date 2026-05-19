@@ -38,7 +38,7 @@ import java.util.List;
  *     @Bean(destroyMethod = "close")
  *     public InqRuntime inqRuntime() {
  *         return Inqudium.configure()
- *                 .imperative(im -> im
+ *                 .sync(s -> s
  *                         .bulkhead("paymentBh", b -> b.balanced())
  *                         .retry("paymentRetry", r -> r.attempts(3)))
  *                 .build();
@@ -46,12 +46,12 @@ import java.util.List;
  *
  *     @Bean
  *     public InqElement paymentBh(InqRuntime runtime) {
- *         return (InqElement) runtime.imperative().bulkhead("paymentBh");
+ *         return (InqElement) runtime.sync().bulkhead("paymentBh");
  *     }
  *
  *     @Bean
  *     public InqElement paymentRetry(InqRuntime runtime) {
- *         return (InqElement) runtime.imperative().retry("paymentRetry");
+ *         return (InqElement) runtime.sync().retry("paymentRetry");
  *     }
  * }
  * }</pre>

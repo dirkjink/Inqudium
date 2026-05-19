@@ -55,7 +55,7 @@ class BulkheadSpringBootIntegrationTest {
         @Bean(destroyMethod = "close")
         public InqRuntime inqRuntime() {
             return Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("orderBh", b -> b.balanced().maxConcurrentCalls(2)))
                     .build();
         }
@@ -68,7 +68,7 @@ class BulkheadSpringBootIntegrationTest {
          */
         @Bean
         public InqElement orderBh(InqRuntime runtime) {
-            return (InqElement) runtime.imperative().bulkhead("orderBh");
+            return (InqElement) runtime.sync().bulkhead("orderBh");
         }
 
         @Bean
@@ -185,7 +185,7 @@ class BulkheadSpringBootIntegrationTest {
         // Pinning that the bulkhead bean and the runtime's own bulkhead view return the
         // same underlying handle — i.e. the @Bean is not duplicating identity.
 
-        InqElement bean = (InqElement) runtime.imperative().bulkhead("orderBh");
+        InqElement bean = (InqElement) runtime.sync().bulkhead("orderBh");
         assertThat(bean.name()).isEqualTo("orderBh");
     }
 
@@ -222,7 +222,7 @@ class BulkheadSpringBootIntegrationTest {
         @SuppressWarnings("unchecked")
         eu.inqudium.imperative.bulkhead.InqBulkhead<Void, Object> bh =
                 (eu.inqudium.imperative.bulkhead.InqBulkhead<Void, Object>)
-                        runtime.imperative().bulkhead("orderBh");
+                        runtime.sync().bulkhead("orderBh");
         assertThat(bh.concurrentCalls())
                 .as("permit released on stage completion")
                 .isZero();

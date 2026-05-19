@@ -7,7 +7,7 @@ import eu.inqudium.config.lifecycle.ChangeRequest;
 import eu.inqudium.config.lifecycle.ChangeRequestListener;
 import eu.inqudium.config.runtime.ComponentKey;
 import eu.inqudium.config.runtime.ComponentRemovedException;
-import eu.inqudium.core.element.paradigm.ImperativeTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.config.validation.ApplyOutcome;
@@ -34,7 +34,7 @@ class BulkheadRemovalTest {
             (chainId, callId, argument) -> argument;
 
     private static final ComponentKey INVENTORY_KEY =
-            new ComponentKey("inventory", ImperativeTag.INSTANCE);
+            new ComponentKey("inventory", SyncTag.INSTANCE);
 
     @Nested
     @DisplayName("happy path")
@@ -50,27 +50,27 @@ class BulkheadRemovalTest {
             // leave the runtime in an inconsistent state.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("inventory")));
 
                 // Then
                 assertThat(report.componentOutcomes())
                         .containsEntry(INVENTORY_KEY, ApplyOutcome.REMOVED);
                 assertThat(report.vetoFindings()).isEmpty();
-                assertThat(runtime.imperative().findBulkhead("inventory"))
+                assertThat(runtime.sync().findBulkhead("inventory"))
                         .as("findBulkhead returns Optional.empty after removal")
                         .isEqualTo(Optional.empty());
-                assertThat(runtime.imperative().bulkheadNames()).doesNotContain("inventory");
-                assertThatThrownBy(() -> runtime.imperative().bulkhead("inventory"))
+                assertThat(runtime.sync().bulkheadNames()).doesNotContain("inventory");
+                assertThatThrownBy(() -> runtime.sync().bulkhead("inventory"))
                         .isInstanceOf(IllegalArgumentException.class);
             }
         }
@@ -82,15 +82,15 @@ class BulkheadRemovalTest {
             // accidentally regress the cold-path simplicity.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("inventory")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(INVENTORY_KEY, ApplyOutcome.REMOVED);
-                assertThat(runtime.imperative().findBulkhead("inventory")).isEmpty();
+                assertThat(runtime.sync().findBulkhead("inventory")).isEmpty();
             }
         }
 
@@ -103,14 +103,14 @@ class BulkheadRemovalTest {
             // channels; a regression that wired only one would leave half the consumers blind.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 List<RuntimeComponentRemovedEvent> received = new ArrayList<>();
                 runtime.general().eventPublisher()
                         .onEvent(RuntimeComponentRemovedEvent.class, received::add);
 
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThat(received).hasSize(1);
                 RuntimeComponentRemovedEvent event = received.get(0);
@@ -129,15 +129,15 @@ class BulkheadRemovalTest {
             // current state) must be a clean no-op rather than a warning.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("does-not-exist")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("does-not-exist", ImperativeTag.INSTANCE),
+                                new ComponentKey("does-not-exist", SyncTag.INSTANCE),
                                 ApplyOutcome.UNCHANGED);
                 assertThat(report.vetoFindings()).isEmpty();
             }
@@ -151,14 +151,14 @@ class BulkheadRemovalTest {
         @Test
         void execute_should_throw_ComponentRemovedException() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(() -> bh.execute(2L, 2L, "after-removal", IDENTITY))
                         .isInstanceOf(ComponentRemovedException.class)
@@ -169,13 +169,13 @@ class BulkheadRemovalTest {
         @Test
         void snapshot_should_throw_ComponentRemovedException() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::snapshot)
                         .isInstanceOf(ComponentRemovedException.class)
@@ -186,13 +186,13 @@ class BulkheadRemovalTest {
         @Test
         void availablePermits_should_throw_ComponentRemovedException() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::availablePermits)
                         .isInstanceOf(ComponentRemovedException.class);
@@ -202,13 +202,13 @@ class BulkheadRemovalTest {
         @Test
         void concurrentCalls_should_throw_ComponentRemovedException() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::concurrentCalls)
                         .isInstanceOf(ComponentRemovedException.class);
@@ -218,13 +218,13 @@ class BulkheadRemovalTest {
         @Test
         void lifecycleState_should_throw_ComponentRemovedException() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 assertThatThrownBy(bh::lifecycleState)
                         .isInstanceOf(ComponentRemovedException.class);
@@ -238,13 +238,13 @@ class BulkheadRemovalTest {
             // trace need to identify the component without trawling the message.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 ComponentRemovedException ex =
                         org.junit.jupiter.api.Assertions.assertThrows(
@@ -266,13 +266,13 @@ class BulkheadRemovalTest {
             // reason and Source.LISTENER.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 bh.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override
@@ -287,7 +287,7 @@ class BulkheadRemovalTest {
                 });
 
                 // When
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("inventory")));
 
                 // Then
@@ -298,7 +298,7 @@ class BulkheadRemovalTest {
                 assertThat(finding.componentKey()).isEqualTo(INVENTORY_KEY);
                 assertThat(finding.reason()).isEqualTo("policy: do not remove during peak hours");
                 assertThat(finding.source()).isEqualTo(VetoFinding.Source.LISTENER);
-                assertThat(runtime.imperative().findBulkhead("inventory"))
+                assertThat(runtime.sync().findBulkhead("inventory"))
                         .as("vetoed removal leaves the component in place")
                         .isPresent();
                 assertThat(bh.snapshot().maxConcurrentCalls())
@@ -322,22 +322,22 @@ class BulkheadRemovalTest {
             // adding a patch policy.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 bh.execute(1L, 1L, "warm", IDENTITY);
                 // SAM-form lambda — only overrides decide; decideRemoval inherits accept.
                 bh.onChangeRequest(req -> ChangeDecision.veto("vetoes every patch"));
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("inventory")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(INVENTORY_KEY, ApplyOutcome.REMOVED);
-                assertThat(runtime.imperative().findBulkhead("inventory")).isEmpty();
+                assertThat(runtime.sync().findBulkhead("inventory")).isEmpty();
             }
         }
     }
@@ -358,14 +358,14 @@ class BulkheadRemovalTest {
             // graceful-shutdown path would leak exceptions.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("inventory");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
                 AutoCloseable handle = bh.onChangeRequest(req -> ChangeDecision.accept());
-                runtime.update(u -> u.imperative(im -> im.removeBulkhead("inventory")));
+                runtime.update(u -> u.sync(s -> s.removeBulkhead("inventory")));
 
                 // When / Then — neither close throws.
                 org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> {
@@ -388,24 +388,24 @@ class BulkheadRemovalTest {
             // routed through the same dispatcher.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced().maxConcurrentCalls(10))
                             .bulkhead("b", b -> b.balanced().maxConcurrentCalls(20)))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("a")
                         .bulkhead("b", b -> b.maxConcurrentCalls(99))));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("a", ImperativeTag.INSTANCE),
+                                new ComponentKey("a", SyncTag.INSTANCE),
                                 ApplyOutcome.REMOVED)
                         .containsEntry(
-                                new ComponentKey("b", ImperativeTag.INSTANCE),
+                                new ComponentKey("b", SyncTag.INSTANCE),
                                 ApplyOutcome.PATCHED);
-                assertThat(runtime.imperative().findBulkhead("a")).isEmpty();
-                assertThat(runtime.imperative().bulkhead("b").snapshot().maxConcurrentCalls())
+                assertThat(runtime.sync().findBulkhead("a")).isEmpty();
+                assertThat(runtime.sync().bulkhead("b").snapshot().maxConcurrentCalls())
                         .isEqualTo(99);
             }
         }
@@ -413,14 +413,14 @@ class BulkheadRemovalTest {
         @Test
         void should_keep_one_when_its_removal_is_vetoed_and_proceed_with_another() {
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im
+                    .sync(s -> s
                             .bulkhead("a", b -> b.balanced())
                             .bulkhead("b", b -> b.balanced()))
                     .build()) {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> a =
-                        (InqBulkhead<String, String>) runtime.imperative().bulkhead("a");
+                        (InqBulkhead<String, String>) runtime.sync().bulkhead("a");
                 a.execute(1L, 1L, "warm", IDENTITY);
                 a.onChangeRequest(new ChangeRequestListener<BulkheadSnapshot>() {
                     @Override
@@ -434,20 +434,20 @@ class BulkheadRemovalTest {
                     }
                 });
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("a")
                         .removeBulkhead("b")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(
-                                new ComponentKey("a", ImperativeTag.INSTANCE),
+                                new ComponentKey("a", SyncTag.INSTANCE),
                                 ApplyOutcome.VETOED)
                         .containsEntry(
-                                new ComponentKey("b", ImperativeTag.INSTANCE),
+                                new ComponentKey("b", SyncTag.INSTANCE),
                                 ApplyOutcome.REMOVED);
                 assertThat(report.vetoFindings()).hasSize(1);
-                assertThat(runtime.imperative().findBulkhead("a")).isPresent();
-                assertThat(runtime.imperative().findBulkhead("b")).isEmpty();
+                assertThat(runtime.sync().findBulkhead("a")).isPresent();
+                assertThat(runtime.sync().findBulkhead("b")).isEmpty();
             }
         }
     }
@@ -462,16 +462,16 @@ class BulkheadRemovalTest {
             // bulkhead("x", ...) then removeBulkhead("x") leaves only the removal.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory", b -> b.balanced()))
+                    .sync(s -> s.bulkhead("inventory", b -> b.balanced()))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(99))
                         .removeBulkhead("inventory")));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(INVENTORY_KEY, ApplyOutcome.REMOVED);
-                assertThat(runtime.imperative().findBulkhead("inventory")).isEmpty();
+                assertThat(runtime.sync().findBulkhead("inventory")).isEmpty();
             }
         }
 
@@ -481,18 +481,18 @@ class BulkheadRemovalTest {
             // The runtime is patched (or the component re-added if absent), not removed.
 
             try (InqRuntime runtime = Inqudium.configure()
-                    .imperative(im -> im.bulkhead("inventory",
+                    .sync(s -> s.bulkhead("inventory",
                             b -> b.balanced().maxConcurrentCalls(15)))
                     .build()) {
 
-                BuildReport report = runtime.update(u -> u.imperative(im -> im
+                BuildReport report = runtime.update(u -> u.sync(s -> s
                         .removeBulkhead("inventory")
                         .bulkhead("inventory", b -> b.maxConcurrentCalls(40))));
 
                 assertThat(report.componentOutcomes())
                         .containsEntry(INVENTORY_KEY, ApplyOutcome.PATCHED);
-                assertThat(runtime.imperative().findBulkhead("inventory")).isPresent();
-                assertThat(runtime.imperative().bulkhead("inventory")
+                assertThat(runtime.sync().findBulkhead("inventory")).isPresent();
+                assertThat(runtime.sync().bulkhead("inventory")
                         .snapshot().maxConcurrentCalls()).isEqualTo(40);
             }
         }
