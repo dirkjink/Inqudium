@@ -523,8 +523,8 @@ paradigm classification independently.
 - **Pair-uniqueness becomes naturally type-safe.** The proxy's
   `ElementResolver` keys on `(elementType, name)`. Name
   collisions across element types are legal by construction.
-  The latent crash mode currently documented as finding 1.1 in
-  `REFACTORING_PROXY_POLISH.md` dissolves.
+  The latent crash mode previously documented as finding 1.1
+  in the polish plan dissolves.
 
 - **Eliminates duplication.** The proxy's
   `ParadigmDetector.isAsyncMethod(Method)` is no longer needed;
@@ -616,8 +616,9 @@ paradigm classification independently.
 - ADR-040 (pipeline composition model — pair-uniqueness invariant)
 
 **Related findings:**
-- `REFACTORING_PROXY_POLISH.md` sub-step P.3 (finding 1.1) —
-  dissolved by this ADR's adoption.
+- Polish plan finding 1.1 (sub-step P.3) — dissolved by this
+  ADR's adoption. The plan itself was completed and deleted
+  in 0.10.x; see Git history for the full execution timeline.
 
 **Implementation:**
 
@@ -650,9 +651,9 @@ notable evolutions:
   resilience elements (e.g. a hypothetical `ReactiveBulkhead`
   serving both `Mono` and `Flux`).
 
-Related dissolved finding: `REFACTORING_PROXY_POLISH.md`
-finding 1.1 (`ElementResolver` name-uniqueness across element
-types) was dissolved by Q.4's introduction of
+Related dissolved finding: the polish plan's finding 1.1
+(`ElementResolver` name-uniqueness across element types)
+was dissolved by Q.4's introduction of
 `ElementResolver.resolveTriples(...)` — paradigm-tagged
 plans key on `(elementType, name)` pairs, making name
 collisions across element types safe by construction.
