@@ -154,12 +154,15 @@ class ParadigmTagTest {
         }
 
         @Test
-        void top_level_tag_classes_are_sealed_or_final() {
+        void every_top_level_tag_is_a_sealed_interface() {
             // Given the top-level ParadigmTag permits
             // When inspecting each permit's modifiers
-            // Then SyncTag/AsyncTag are final, the family interfaces are sealed
-            assertThat(Modifier.isFinal(SyncTag.class.getModifiers())).isTrue();
-            assertThat(Modifier.isFinal(AsyncTag.class.getModifiers())).isTrue();
+            // Then all five family-level interfaces are sealed. Post-Q.7.5
+            // the imperative leaf tags (SyncTag/AsyncTag) are also sealed
+            // interfaces (was: final classes), bringing the entire
+            // hierarchy into structural consistency.
+            assertThat(SyncTag.class.isSealed()).isTrue();
+            assertThat(AsyncTag.class.isSealed()).isTrue();
             assertThat(ReactiveTag.class.isSealed()).isTrue();
             assertThat(RxJava3Tag.class.isSealed()).isTrue();
             assertThat(CoroutinesTag.class.isSealed()).isTrue();
@@ -278,20 +281,23 @@ class ParadigmTagTest {
     class NoPublicConstructors {
 
         @Test
-        void every_concrete_tag_has_only_private_constructors() {
-            // Given the full list of concrete tag classes
-            List<Class<?>> concreteTagClasses = List.of(
-                    SyncTag.class, AsyncTag.class,
-                    ReactiveMonoTag.class, ReactiveFluxTag.class,
-                    RxJava3SingleTag.class, RxJava3MaybeTag.class,
-                    RxJava3CompletableTag.class, RxJava3FlowableTag.class,
-                    RxJava3ObservableTag.class,
-                    CoroutinesSuspendTag.class, CoroutinesDeferredTag.class,
-                    CoroutinesJobTag.class, CoroutinesFlowTag.class);
+        void every_concrete_default_class_has_only_a_private_constructor() {
+            // Given the full list of *Default singleton classes — the
+            // package-private concrete implementations introduced by
+            // Q.7.5. The tag interfaces themselves have no constructors,
+            // so the check moves to the *Default classes.
+            List<Class<?>> defaultClasses = List.of(
+                    SyncTagDefault.class, AsyncTagDefault.class,
+                    ReactiveMonoTagDefault.class, ReactiveFluxTagDefault.class,
+                    RxJava3SingleTagDefault.class, RxJava3MaybeTagDefault.class,
+                    RxJava3CompletableTagDefault.class, RxJava3FlowableTagDefault.class,
+                    RxJava3ObservableTagDefault.class,
+                    CoroutinesSuspendTagDefault.class, CoroutinesDeferredTagDefault.class,
+                    CoroutinesJobTagDefault.class, CoroutinesFlowTagDefault.class);
 
             // When inspecting each via reflection
             // Then exactly one constructor exists, and it is private
-            for (Class<?> cls : concreteTagClasses) {
+            for (Class<?> cls : defaultClasses) {
                 Constructor<?>[] ctors = cls.getDeclaredConstructors();
                 assertThat(ctors)
                         .as("Class " + cls.getSimpleName() + " has exactly one declared constructor")
@@ -300,6 +306,88 @@ class ParadigmTagTest {
                         .as("Class " + cls.getSimpleName() + "'s sole constructor is private")
                         .isTrue();
             }
+        }
+    }
+
+    @Nested
+    class LeafTagSealedPermits {
+
+        @Test
+        void sync_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(SyncTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(SyncTagDefault.class);
+        }
+
+        @Test
+        void async_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(AsyncTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(AsyncTagDefault.class);
+        }
+
+        @Test
+        void reactive_mono_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(ReactiveMonoTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(ReactiveMonoTagDefault.class);
+        }
+
+        @Test
+        void reactive_flux_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(ReactiveFluxTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(ReactiveFluxTagDefault.class);
+        }
+
+        @Test
+        void rxjava3_single_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(RxJava3SingleTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(RxJava3SingleTagDefault.class);
+        }
+
+        @Test
+        void rxjava3_maybe_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(RxJava3MaybeTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(RxJava3MaybeTagDefault.class);
+        }
+
+        @Test
+        void rxjava3_completable_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(RxJava3CompletableTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(RxJava3CompletableTagDefault.class);
+        }
+
+        @Test
+        void rxjava3_flowable_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(RxJava3FlowableTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(RxJava3FlowableTagDefault.class);
+        }
+
+        @Test
+        void rxjava3_observable_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(RxJava3ObservableTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(RxJava3ObservableTagDefault.class);
+        }
+
+        @Test
+        void coroutines_suspend_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(CoroutinesSuspendTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(CoroutinesSuspendTagDefault.class);
+        }
+
+        @Test
+        void coroutines_deferred_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(CoroutinesDeferredTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(CoroutinesDeferredTagDefault.class);
+        }
+
+        @Test
+        void coroutines_job_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(CoroutinesJobTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(CoroutinesJobTagDefault.class);
+        }
+
+        @Test
+        void coroutines_flow_tag_permits_exactly_its_default() {
+            assertThat(java.util.Set.of(CoroutinesFlowTag.class.getPermittedSubclasses()))
+                    .containsExactlyInAnyOrder(CoroutinesFlowTagDefault.class);
         }
     }
 }

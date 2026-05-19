@@ -4,13 +4,10 @@ package eu.inqudium.core.element.paradigm;
  * The {@code kotlinx.coroutines.flow.Flow<T>} shape of the
  * Kotlin coroutines paradigm. Cold asynchronous stream.
  *
- * <p>Singleton — use {@link CoroutinesTag#FLOW}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code CoroutinesFlowTagDefault}. Clients
+ * access the canonical instance via {@link CoroutinesTag#FLOW}.</p>
  */
-public final class CoroutinesFlowTag implements CoroutinesTag {
-
-    /** The singleton instance. Package-private; use {@link CoroutinesTag#FLOW}. */
-    static final CoroutinesFlowTag INSTANCE = new CoroutinesFlowTag();
-
-    private CoroutinesFlowTag() {
-    }
+public sealed interface CoroutinesFlowTag extends CoroutinesTag
+        permits CoroutinesFlowTagDefault {
 }

@@ -18,8 +18,8 @@ public sealed interface ReactiveTag extends ParadigmTag
         permits ReactiveMonoTag, ReactiveFluxTag {
 
     /** The {@code Mono<T>} sub-shape. */
-    ReactiveMonoTag MONO = ReactiveMonoTag.INSTANCE;
+    ReactiveMonoTag MONO = ReactiveMonoTagDefault.INSTANCE;
 
     /** The {@code Flux<T>} sub-shape. */
-    ReactiveFluxTag FLUX = ReactiveFluxTag.INSTANCE;
+    ReactiveFluxTag FLUX = ReactiveFluxTagDefault.INSTANCE;
 }

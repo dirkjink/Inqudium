@@ -6,13 +6,10 @@ package eu.inqudium.core.element.paradigm;
  * {@code kotlin.coroutines.Continuation} parameter that the
  * compiler appends to suspend functions.
  *
- * <p>Singleton — use {@link CoroutinesTag#SUSPEND}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code CoroutinesSuspendTagDefault}. Clients
+ * access the canonical instance via {@link CoroutinesTag#SUSPEND}.</p>
  */
-public final class CoroutinesSuspendTag implements CoroutinesTag {
-
-    /** The singleton instance. Package-private; use {@link CoroutinesTag#SUSPEND}. */
-    static final CoroutinesSuspendTag INSTANCE = new CoroutinesSuspendTag();
-
-    private CoroutinesSuspendTag() {
-    }
+public sealed interface CoroutinesSuspendTag extends CoroutinesTag
+        permits CoroutinesSuspendTagDefault {
 }

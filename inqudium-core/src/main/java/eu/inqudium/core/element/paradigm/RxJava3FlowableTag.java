@@ -5,13 +5,10 @@ package eu.inqudium.core.element.paradigm;
  * RxJava 3 paradigm. Zero-or-more values with Reactive Streams
  * backpressure support.
  *
- * <p>Singleton — use {@link RxJava3Tag#FLOWABLE}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code RxJava3FlowableTagDefault}. Clients
+ * access the canonical instance via {@link RxJava3Tag#FLOWABLE}.</p>
  */
-public final class RxJava3FlowableTag implements RxJava3Tag {
-
-    /** The singleton instance. Package-private; use {@link RxJava3Tag#FLOWABLE}. */
-    static final RxJava3FlowableTag INSTANCE = new RxJava3FlowableTag();
-
-    private RxJava3FlowableTag() {
-    }
+public sealed interface RxJava3FlowableTag extends RxJava3Tag
+        permits RxJava3FlowableTagDefault {
 }

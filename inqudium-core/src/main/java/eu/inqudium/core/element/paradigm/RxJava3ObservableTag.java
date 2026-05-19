@@ -5,13 +5,10 @@ package eu.inqudium.core.element.paradigm;
  * the RxJava 3 paradigm. Zero-or-more values without
  * backpressure support.
  *
- * <p>Singleton — use {@link RxJava3Tag#OBSERVABLE}.</p>
+ * <p>Sealed interface with one package-private default
+ * implementation, {@code RxJava3ObservableTagDefault}. Clients
+ * access the canonical instance via {@link RxJava3Tag#OBSERVABLE}.</p>
  */
-public final class RxJava3ObservableTag implements RxJava3Tag {
-
-    /** The singleton instance. Package-private; use {@link RxJava3Tag#OBSERVABLE}. */
-    static final RxJava3ObservableTag INSTANCE = new RxJava3ObservableTag();
-
-    private RxJava3ObservableTag() {
-    }
+public sealed interface RxJava3ObservableTag extends RxJava3Tag
+        permits RxJava3ObservableTagDefault {
 }
