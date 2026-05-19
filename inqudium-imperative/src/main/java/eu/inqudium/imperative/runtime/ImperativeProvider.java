@@ -14,7 +14,9 @@ import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
 import eu.inqudium.config.spi.ParadigmProvider;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;
+import eu.inqudium.imperative.bulkhead.dsl.DefaultAsyncBulkheadBuilder;
 import eu.inqudium.imperative.bulkhead.dsl.DefaultImperativeBulkheadBuilder;
+import eu.inqudium.imperative.bulkhead.dsl.DefaultSyncBulkheadBuilder;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -65,6 +67,16 @@ public final class ImperativeProvider implements ParadigmProvider {
     @Override
     public BulkheadBuilderBase<?> createBulkheadBuilder(String name) {
         return new DefaultImperativeBulkheadBuilder(name);
+    }
+
+    @Override
+    public BulkheadBuilderBase<?> createSyncBulkheadBuilder(String name) {
+        return new DefaultSyncBulkheadBuilder(name);
+    }
+
+    @Override
+    public BulkheadBuilderBase<?> createAsyncBulkheadBuilder(String name) {
+        return new DefaultAsyncBulkheadBuilder(name);
     }
 
     @Override

@@ -48,20 +48,53 @@ public final class DefaultImperativeSection implements ImperativeSection {
         // implements ImperativeBulkheadBuilder.
         ImperativeBulkheadBuilder builder = (ImperativeBulkheadBuilder) base;
         configurer.accept(builder);
-        bulkheadPatches.put(name, base.toPatch());
-        bulkheadRemovals.remove(name);
+        applyBulkheadPatch(name, base.toPatch());
         return this;
     }
 
     @Override
     public ImperativeSection removeBulkhead(String name) {
+        markBulkheadRemoval(name);
+        return this;
+    }
+
+    /**
+     * Apply a fully-formed {@link BulkheadPatch} into the shared
+     * accumulator under the given name and rescind any prior removal
+     * for it. Used by {@link DefaultSyncSection} and
+     * {@link DefaultAsyncSection} to feed their builders' patches into
+     * the same accumulator as {@link ImperativeSection} (ADR-046 / Q.5b:
+     * the three DSL surfaces are independent inputs that share one
+     * underlying patch state).
+     *
+     * <p>Package-private — only sibling section classes call this.</p>
+     *
+     * @since 0.9.0
+     */
+    void applyBulkheadPatch(String name, BulkheadPatch patch) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(patch, "patch");
+        bulkheadPatches.put(name, patch);
+        bulkheadRemovals.remove(name);
+    }
+
+    /**
+     * Mark the named bulkhead for structural removal in the shared
+     * accumulator, rescinding any prior {@code bulkhead(...)} call.
+     * Used by sibling sections via the same shared-state pattern as
+     * {@link #applyBulkheadPatch(String, BulkheadPatch)}.
+     *
+     * <p>Package-private — only sibling section classes call this.</p>
+     *
+     * @since 0.9.0
+     */
+    void markBulkheadRemoval(String name) {
         Objects.requireNonNull(name, "name");
         if (name.isBlank()) {
             throw new IllegalArgumentException("name must not be blank");
         }
         bulkheadPatches.remove(name);
         bulkheadRemovals.add(name);
-        return this;
     }
 
     /**
