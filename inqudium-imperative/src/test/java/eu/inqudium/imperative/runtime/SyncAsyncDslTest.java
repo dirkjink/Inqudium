@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>The tests live in {@code inqudium-imperative} (rather than
  * {@code inqudium-config}) so they exercise the full DSL → provider →
- * runtime path with the real ImperativeProvider on the classpath.</p>
+ * runtime path with the real SyncParadigmProvider on the classpath.</p>
  */
 class SyncAsyncDslTest {
 

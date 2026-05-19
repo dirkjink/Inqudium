@@ -26,7 +26,7 @@ class InqudiumConfigureTest {
         @Test
         void should_build_a_runtime_with_one_bulkhead_and_query_it() {
             // What is to be tested: the entire build pipeline — DSL → patch accumulation →
-            // ServiceLoader-discovered ImperativeProvider → DefaultImperative materialization.
+            // ProviderDiscovery-located SyncParadigmProvider → DefaultImperative materialization.
             // Why successful: the bulkhead is reachable through runtime.sync() with the
             // configuration the user wrote in the lambda.
             // Why important: this is the central phase-1 acceptance criterion (build a runtime
@@ -211,7 +211,7 @@ class InqudiumConfigureTest {
             // What is to be tested: that a bulkhead built without an explicit strategy DSL
             // call (which doesn't exist yet — it lands in 2.10.C) carries
             // SemaphoreStrategyConfig in its snapshot. The default flows through
-            // ImperativeProvider.defaultSnapshot, which 2.10.A pinned to the semaphore variant
+            // SyncParadigmProvider.defaultSnapshot, which 2.10.A pinned to the semaphore variant
             // to keep "user wrote nothing" behaviour exactly as it was before the strategy
             // field existed.
 

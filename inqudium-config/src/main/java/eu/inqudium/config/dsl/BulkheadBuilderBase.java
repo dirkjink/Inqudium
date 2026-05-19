@@ -87,7 +87,7 @@ public abstract class BulkheadBuilderBase<P extends ParadigmTag> implements Bulk
         // disabled(), even when the user only meant to patch maxConcurrentCalls. The correct
         // semantics (analogous to TAGS and DERIVED_FROM_PRESET) is "untouched fields inherit
         // from the base snapshot". The non-null invariant is satisfied by the system-default
-        // snapshot in ImperativeProvider, which sets events to BulkheadEventConfig.disabled()
+        // snapshot in SyncParadigmProvider, which sets events to BulkheadEventConfig.disabled()
         // — so initial materialization still produces a valid snapshot, and updates correctly
         // inherit the live value.
     }
