@@ -133,7 +133,7 @@ invocation.
 #### Phase 2 — per-method materialisation (proxy-construction time)
 
 For each protected method, the library builds a *folded layer-action chain* and stores it in a per-method cache
-entry. The folded chain is a single `InternalExecutor` (sync) or `InternalAsyncExecutor` (async) lambda that, when
+entry. The folded chain is a single `LayerTerminal` (sync) or `AsyncLayerTerminal` (async) lambda that, when
 invoked, runs the entire selected resilience-stack around the real target's method.
 
 The cache entry holds:
@@ -173,11 +173,11 @@ decides whether and how to invoke the next step, and returns a result. There are
 
 - `LayerAction<A, R>` — synchronous. Single abstract method:
   ```java
-  R execute(long stackId, long callId, A argument, InternalExecutor<A, R> next)
+  R execute(long stackId, long callId, A argument, LayerTerminal<A, R> next)
   ```
 - `AsyncLayerAction<A, R>` — asynchronous. Single abstract method:
   ```java
-  CompletionStage<R> executeAsync(long stackId, long callId, A argument, InternalAsyncExecutor<A, R> next)
+  CompletionStage<R> executeAsync(long stackId, long callId, A argument, AsyncLayerTerminal<A, R> next)
   ```
 
 Both interfaces follow the around-advice contract: the implementation is given a reference to `next` and decides
@@ -239,7 +239,7 @@ chain.
 
 The dispatch mode for a method is determined at proxy-construction time (phase 2) from the method's return type:
 methods returning `CompletionStage` are async; all others are sync. Each cache entry records its dispatch mode,
-and phase-3 dispatch invokes the matching chain (`InternalExecutor` or `InternalAsyncExecutor`).
+and phase-3 dispatch invokes the matching chain (`LayerTerminal` or `AsyncLayerTerminal`).
 
 The recognition of the dispatch mode and the routing to the corresponding dispatcher follow the rules of
 ADR-037. Recognition predicates live in `inqudium-pipeline` (the module that owns the pipeline and the proxy

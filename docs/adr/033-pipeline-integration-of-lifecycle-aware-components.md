@@ -2,7 +2,31 @@
 
 ## Status
 
-Proposed.
+**Superseded by ADR-042 (Pipeline contracts — general rules) and
+ADR-047 (Bulkhead component specification — bulkhead-specific
+rules).**
+
+> **Supersession note (2026-05-19).** ADR-033 was a consolidation
+> ADR that combined general pipeline-contract rules (Rules 1, 2, 3,
+> 6 — what every element looks like in the pipeline) with
+> bulkhead-specific applications (Rules 4, 5, 7 — how the bulkhead
+> component fits the pipeline). Both groups have since been absorbed
+> into more focused ADRs:
+>
+> - General rules → **ADR-042 (Pipeline contracts)**, which
+>   normalises them against the current codebase
+>   (`InternalExecutor` / `InternalAsyncExecutor` renamed to
+>   `LayerTerminal` / `AsyncLayerTerminal`) and slightly expands
+>   their treatment.
+> - Bulkhead-specific applications → **ADR-047 (Bulkhead component
+>   specification)**, which extends them with the component-handle
+>   separation that PR #102 delivered, plus paradigm-specific
+>   chapters for sync and async (and a placeholder for future
+>   paradigm families).
+>
+> The body below is preserved as historical record of the original
+> decision. The current normative specifications live in ADR-042
+> and ADR-047.
 
 > **Update — InqExecutor / InqAsyncExecutor removal.** A follow-up refactor
 > reversed the parts of Rule 2 / Rule 6 / Rule 7 that retained an

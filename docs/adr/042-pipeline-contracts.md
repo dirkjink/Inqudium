@@ -45,14 +45,12 @@ mixed with bulkhead-specific decisions.
 This ADR consolidates the general pipeline-contract rules into one place. It says what `LayerAction`,
 `InqElement`, `InqDecorator`, and `InqAsyncDecorator` are; how they relate to each other; and where they
 must sit in a concrete component's class hierarchy. The bulkhead-specific applications of these rules
-(ADR-033's Rules 4, 5, 7) remain in ADR-033 and will be revisited when the bulkhead area is consolidated
-separately.
+(ADR-033's Rules 4, 5, 7) live in ADR-047 (Bulkhead component specification).
 
 A note on history. ADR-033 originally specified four general rules (numbered 1, 2, 3, 6 in that ADR). The
 content of those rules is reproduced here, normalised against the current state of the codebase, and
-slightly expanded where the original was telegraphic. ADR-033 will be updated to reference this ADR for
-the general rules once the bulkhead consolidation is undertaken; until then, the two documents carry the
-general rules in parallel, with the same meaning.
+slightly expanded where the original was telegraphic. ADR-033 was updated in 2026-05-19 to Superseded
+status, pointing at this ADR for the general rules and ADR-047 for the bulkhead-specific applications.
 
 ## Decision
 
@@ -324,7 +322,6 @@ type information at the call site flows naturally into the decorated wrapper.
   `Mono`/`Flux` return types. The pattern established here scales: each paradigm contributes its own
   decorator contract; concrete components implement whichever contracts match their semantic capabilities.
 - The chain-terminator types `LayerTerminal` and `AsyncLayerTerminal` introduced in this ADR replace the
-  earlier names `InternalExecutor` and `InternalAsyncExecutor`. ADR-034 and ADR-035 still reference the
-  earlier names in places (signatures of `execute(...)` and `executeAsync(...)`); those references must
-  be updated to the new names as a small follow-up. The semantics are unchanged — only the type names
-  evolve.
+  earlier names `InternalExecutor` and `InternalAsyncExecutor`. ADR-035's references to the earlier
+  names were updated to the new names alongside ADR-047. The semantics are unchanged — only the type
+  names evolve.

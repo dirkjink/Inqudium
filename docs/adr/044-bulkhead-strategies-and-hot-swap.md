@@ -3,11 +3,11 @@
 **Status:** Proposed  
 **Date:** 2026-05-14  
 **Deciders:** Core team  
-**Related:** ADR-020 (superseded by this ADR and ADR-045), ADR-032 (superseded by this ADR, ADR-045, ADR-046),
+**Related:** ADR-020 (superseded by this ADR and ADR-045), ADR-032 (superseded by this ADR, ADR-045, ADR-047),
 ADR-008 (virtual threads), ADR-010 (TimeLimiter), ADR-027 (validation strategy), ADR-028 (component lifecycle
 contract), ADR-029 (lifecycle implementation pattern), ADR-042 (pipeline contracts),
 ADR-043 (update propagation and veto negotiation), ADR-045 (bulkhead configuration, handle, diagnostics),
-ADR-046 (bulkhead imperative implementation).
+ADR-046 (paradigm tagging), ADR-047 (Bulkhead component specification).
 
 ## Context
 
