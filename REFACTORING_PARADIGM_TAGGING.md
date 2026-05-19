@@ -803,7 +803,7 @@ any remaining drift.
 * [x] Q.5a — Runtime: `Sync` / `Async` accessors and typed handles (2026-05-18, PR #87)
 * [x] Q.5b — DSL + Integration Examples migrate to `sync()` / `async()` (2026-05-19, PR #88)
 * [x] Q.6 — `MethodPlan` rename: `Stamped*` → canonical names (2026-05-19, PR #89)
-* [x] Q.7 — Final cleanup: remove legacy types (2026-05-19, PR #TBD)
+* [x] Q.7 — Final cleanup: remove legacy types (2026-05-19, PR #90)
 * [ ] Q.8 — Plan deletion + final consistency
 
 ---
