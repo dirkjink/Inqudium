@@ -115,7 +115,7 @@ class BulkheadStrategyDslEndToEndTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 String result = bh.execute(1L, 1L, "x", IDENTITY);
 
                 assertThat(result).isEqualTo("x");
@@ -142,7 +142,7 @@ class BulkheadStrategyDslEndToEndTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 BuildReport report = runtime.update(u -> u.sync(s -> s

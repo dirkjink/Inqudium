@@ -52,7 +52,7 @@ class Adr033Stage3ClosureTest {
                 .build()) {
             @SuppressWarnings("unchecked")
             InqBulkhead<Void, Object> bulkhead =
-                    (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
+                    runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
 
             // When
             ElementLayerProvider provider = new ElementLayerProvider(bulkhead, 100);

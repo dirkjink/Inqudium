@@ -75,8 +75,9 @@ class OrderServiceSpringBootExampleTest {
 
     @SuppressWarnings("unchecked")
     private InqBulkhead<Object, Object> bulkhead() {
-        return (InqBulkhead<Object, Object>) runtime.sync()
-                .bulkhead(BulkheadConfig.BULKHEAD_NAME);
+        return runtime.sync()
+                .bulkhead(BulkheadConfig.BULKHEAD_NAME)
+                .unwrap(InqBulkhead.class);
     }
 
     @BeforeEach

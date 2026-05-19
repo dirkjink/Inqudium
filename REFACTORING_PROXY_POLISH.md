@@ -1125,7 +1125,7 @@ Commit subject: `chore: complete proxy polish, delete plan`
 * [x] P.3 — `ElementResolver` name-uniqueness (dissolved by ADR-046, implemented in PR #85) (2026-05-18)
 * [ ] P.4 — Folder lambda hoisting (JMH-validated decision)
 * [x] P.5 — Test-infrastructure hardening (2026-05-17, PR #81)
-* [ ] P.7 — `BulkheadHandle.unwrap(Class<T>)` default method
+* [x] P.7 — `BulkheadHandle.unwrap(Class<T>)` default method (2026-05-19, PR #TBD)
 * [ ] P.8 — Replace `ParadigmProvider` SPI with presence-probe + class rename
 * [ ] P.9 — Remove or rename `InqImperativeBulkheadConfigBuilder`
 * [ ] P.6 — Plan deletion + final architecture polish

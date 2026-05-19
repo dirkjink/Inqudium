@@ -225,7 +225,7 @@ public class OrderBulkheadAspect {
         return terminalsByName.computeIfAbsent(bulkheadName, name -> {
             @SuppressWarnings("unchecked")
             InqBulkhead<Object, Object> bh =
-                    (InqBulkhead<Object, Object>) runtime.sync().bulkhead(name);
+                    runtime.sync().bulkhead(name).unwrap(InqBulkhead.class);
             return HybridAspectPipelineTerminal.of(
                     InqPipeline.builder().shield(bh).build());
         });
@@ -265,8 +265,9 @@ public class OrderBulkheadAspect {
 
     @SuppressWarnings("unchecked")
     private InqBulkhead<Object, Object> orderBulkhead() {
-        return (InqBulkhead<Object, Object>) runtime.sync()
-                .bulkhead(BulkheadConfig.BULKHEAD_NAME);
+        return runtime.sync()
+                .bulkhead(BulkheadConfig.BULKHEAD_NAME)
+                .unwrap(InqBulkhead.class);
     }
 
     /**

@@ -53,7 +53,7 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 BuildReport report = runtime.update(u -> u.sync(s -> s
@@ -80,7 +80,7 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 BuildReport report = runtime.update(u -> u.sync(s -> s
@@ -107,7 +107,7 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 BuildReport report = runtime.update(u -> u.sync(s -> s
@@ -141,7 +141,7 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 bh.execute(1L, 1L, "warm", IDENTITY);
 
                 BuildReport report = runtime.update(u -> u.sync(s -> s
@@ -176,7 +176,7 @@ class BulkheadLiveTunabilityTest {
 
                 @SuppressWarnings("unchecked")
                 InqBulkhead<String, String> bh =
-                        (InqBulkhead<String, String>) runtime.sync().bulkhead("inventory");
+                        runtime.sync().bulkhead("inventory").unwrap(InqBulkhead.class);
                 CountDownLatch holding = new CountDownLatch(1);
                 CountDownLatch acquired = new CountDownLatch(1);
                 LayerTerminal<String, String> blocking = (cid, callId, arg) -> {

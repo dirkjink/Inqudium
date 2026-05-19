@@ -63,7 +63,7 @@ class AsyncElementLayerProviderBulkheadAcceptanceTest {
                 .build()) {
             @SuppressWarnings("unchecked")
             InqBulkhead<Void, Object> bulkhead =
-                    (InqBulkhead<Void, Object>) runtime.sync().bulkhead("payments");
+                    runtime.sync().bulkhead("payments").unwrap(InqBulkhead.class);
 
             // When — wrap in the async provider; this is the structural pin:
             // the constructor call must compile and accept the bulkhead instance.
