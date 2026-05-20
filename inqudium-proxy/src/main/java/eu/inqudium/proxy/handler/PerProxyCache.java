@@ -1,7 +1,7 @@
 package eu.inqudium.proxy.handler;
 
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
-import eu.inqudium.proxy.introspection.MethodLayers;
+import eu.inqudium.pipeline.introspection.MethodLayers;
 import eu.inqudium.proxy.introspection.MethodSignatureFormatter;
 
 import java.lang.reflect.Method;

@@ -1,4 +1,4 @@
-package eu.inqudium.proxy.introspection;
+package eu.inqudium.pipeline.introspection;
 
 import eu.inqudium.core.element.InqElement;
 
@@ -9,20 +9,17 @@ import java.util.Optional;
 /**
  * Introspection DTO for a proxy stack, per ADR-039.
  *
- * <p><strong>Public API. Standalone record</strong> (Option-B
- * scope): does not yet implement an {@code InqStackInfo} sealed
- * interface because that interface and the full library-wide
- * introspection plumbing (including the {@code stackId → stackId}
- * rename) are deferred to a separate refactor. The record's shape
- * matches ADR-039 exactly so future migration into the sealed
- * hierarchy needs no contract change.</p>
+ * <p><strong>Public API.</strong> Implements
+ * {@link InqStackInfo} as the proxy-paradigm permit of the
+ * sealed introspection hierarchy.</p>
  *
  * @param stackId      the per-proxy stack ID allocated by
  *                     {@code PipelineIds.nextStackId()} (per ADR-034)
  * @param targetType   the service interface the proxy implements;
  *                     always present for the proxy paradigm but
  *                     declared as {@link Optional} per ADR-039
- *                     so the type matches the future sealed-interface contract
+ *                     so the type matches the
+ *                     {@link InqStackInfo#targetType() sealed-interface contract}
  * @param elements     the pipeline's elements at construction time
  *                     (immutable snapshot)
  * @param methodLayers one {@link MethodLayers} per service method
@@ -33,13 +30,14 @@ public record ProxyStackInfo(
         long stackId,
         Optional<Class<?>> targetType,
         List<InqElement> elements,
-        List<MethodLayers> methodLayers) {
+        List<MethodLayers> methodLayers
+) implements InqStackInfo {
 
     public ProxyStackInfo {
         Objects.requireNonNull(targetType, "targetType");
-        elements = List.copyOf(
-                Objects.requireNonNull(elements, "elements"));
-        methodLayers = List.copyOf(
-                Objects.requireNonNull(methodLayers, "methodLayers"));
+        Objects.requireNonNull(elements, "elements");
+        Objects.requireNonNull(methodLayers, "methodLayers");
+        elements = List.copyOf(elements);
+        methodLayers = List.copyOf(methodLayers);
     }
 }

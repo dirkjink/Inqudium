@@ -3,7 +3,7 @@ package eu.inqudium.proxy.handler;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.proxy.InqUndeclaredCheckedException;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
-import eu.inqudium.proxy.introspection.MethodLayers;
+import eu.inqudium.pipeline.introspection.MethodLayers;
 import eu.inqudium.proxy.invocation.MethodInvoker;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

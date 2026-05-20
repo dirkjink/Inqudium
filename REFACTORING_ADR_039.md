@@ -679,7 +679,7 @@ sustainable pace.
 
 * [x] B.0 — Audit (no commit) (2026-05-19)
 * [x] B.1 — chainId → stackId rename library-wide (2026-05-20)
-* [ ] B.2 — InqStackInfo sealed hierarchy + DTO migration
+* [x] B.2 — InqStackInfo sealed hierarchy + DTO migration (2026-05-20)
 * [ ] B.3 — FunctionStackAdapter implementation
 * [ ] B.4 — InqIntrospector + InqStackRenderer
 * [ ] B.5 — Bridge-state resolution

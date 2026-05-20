@@ -1,4 +1,4 @@
-package eu.inqudium.proxy.introspection;
+package eu.inqudium.pipeline.introspection;
 
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
