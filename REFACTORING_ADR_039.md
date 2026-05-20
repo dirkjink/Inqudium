@@ -11,11 +11,14 @@ across wrapping paradigms" deferred work. After Phase B:
 - The library-wide `chainId` → `stackId` rename is
   complete.
 - `InqStackInfo` sealed hierarchy and DTOs live in
-  `inqudium-pipeline`.
-- `FunctionStackAdapter` is implemented in
-  `inqudium-core` (or `inqudium-pipeline`).
+  `inqudium-pipeline`. `FunctionStackInfo` exists as
+  an empty permit; its adapter is deferred until
+  Function-Dispatch-Integration lands (see B.3 deferral
+  notice).
 - `InqIntrospector` and `InqStackRenderer` exist as
-  central dispatch utilities in `inqudium-pipeline`.
+  central dispatch utilities in `inqudium-pipeline`,
+  dispatching to `ProxyStackAdapter` (the only
+  implemented adapter for Phase B).
 - The Phase-A bridge state (legacy
   `eu.inqudium.core.pipeline.InqPipeline`,
   `AnnotationEvaluator`, `DefaultAnnotationEvaluator`,
@@ -46,13 +49,17 @@ Two implementation strategies were considered:
   four adapters. Estimated 6-10 days. Substantial scope
   expansion beyond ADR-039.
 
-- **(a) Bare-bones Phase B** — implement the two
-  adapters whose source modules exist
-  (`ProxyStackAdapter` already lives in `inqudium-proxy`;
-  `FunctionStackAdapter` is buildable against
-  `inqudium-core`'s function-wrapper family). Document
-  AspectJ and Spring adapters as anticipated when their
-  modules are rebuilt. Estimated 2-3 days.
+- **(a) Bare-bones Phase B** — implement the adapter
+  whose source module exists today (`ProxyStackAdapter`
+  already lives in `inqudium-proxy`). Document
+  `FunctionStackAdapter`, AspectJ, and Spring adapters
+  as anticipated when their respective integration
+  infrastructure exists. Estimated 2-3 days.
+  *(Note: at planning time, `FunctionStackAdapter` was
+  also assumed buildable against `inqudium-core`'s
+  function-wrapper family. A B.3 pre-audit revealed
+  this assumption was wrong — see the B.3 deferral
+  notice below.)*
 
 **Maintainer's choice: (a).** Aspect/Spring rebuild is
 an independent refactor with its own scope; coupling it
@@ -65,19 +72,21 @@ underlying modules are ready.
 
 1. **chainId → stackId rename** library-wide
 2. **InqStackInfo sealed hierarchy** in `inqudium-pipeline`
-3. **FunctionStackAdapter** in `inqudium-core`
-4. **InqIntrospector** central dispatch in
+   (with `FunctionStackInfo` as an empty future permit)
+3. **InqIntrospector** central dispatch in
+   `inqudium-pipeline` (dispatches to
+   `ProxyStackAdapter` only for Phase B)
+4. **InqStackRenderer** (toTree, toJson) in
    `inqudium-pipeline`
-5. **InqStackRenderer** (toTree, toJson) in
-   `inqudium-pipeline`
-6. **Bridge-state resolution**: replace
+5. **Bridge-state resolution**: replace
    `InqPipelineAnnotationEvaluator` transitional bridge
    with a new `AnnotationEvaluator` that works directly
    against `eu.inqudium.pipeline.InqPipeline`. Delete the
    four legacy bridge files.
-7. **ADR-039 status flip** Proposed → Accepted with
+6. **ADR-039 status flip** Proposed → Accepted with
    anticipated-future-work note for AspectJ/Spring
-   adapters.
+   adapters and for `FunctionStackAdapter` (deferred
+   pending Function-Dispatch-Integration).
 
 ### What's out of scope
 
@@ -180,8 +189,8 @@ inqudium-proxy (proxy integration)
 **Phase B introduces no new module-dependency edges.**
 `InqStackInfo`, `InqIntrospector`, `InqStackRenderer`
 all live in `inqudium-pipeline`. `FunctionStackAdapter`
-lives in `inqudium-core` (or `inqudium-pipeline` —
-decided at B.3 start).
+is deferred (see B.3); when implemented, its placement
+follows Function-Dispatch-Integration's module location.
 
 ### B.0.5 Baselines
 
@@ -206,7 +215,8 @@ interface.
 B.0  — Audit (this document). No commit.
 B.1  — chainId → stackId rename library-wide
 B.2  — InqStackInfo sealed hierarchy + DTO migration
-B.3  — FunctionStackAdapter implementation + tests
+B.3  — FunctionStackAdapter (deferred — see section
+       below for rationale)
 B.4  — InqIntrospector + InqStackRenderer
 B.5  — Bridge-state resolution (new AnnotationEvaluator,
        delete 4 legacy files)
@@ -349,75 +359,80 @@ respective modules are rebuilt."
 
 **Branch:** `refactor/inqstackinfo-sealed-hierarchy`.
 
-## Sub-step B.3 — FunctionStackAdapter implementation
+## Sub-step B.3 — FunctionStackAdapter (deferred)
 
-**Goal:** Implement `FunctionStackAdapter` analogous to
-`ProxyStackAdapter`. The adapter inspects a function
-wrapper instance (`RunnableWrapper`, `SupplierWrapper`,
-`FunctionWrapper`, `CallableWrapper`, `JoinPointWrapper`)
-and produces a `FunctionStackInfo`.
+**Status:** **Deferred to post-Phase-B work.** The
+original B.3 plan was to implement `FunctionStackAdapter`
+analogous to `ProxyStackAdapter`, walking the
+`AbstractBaseWrapper.inner()` chain to collect elements
+and method-layer descriptions.
 
-**New file:**
+**Why deferred:** A pre-audit during B.3 preparation
+revealed an architectural mismatch. ADR-040 §6 specifies
+that `InqPipeline.protect(...)` carries paradigm-specific
+overloads — `protect(Supplier<T>)` for functional
+decoration, `protect(Class<T>, T)` for proxy, and so on
+— each routing to its respective integration dispatcher.
+The proxy overload exists today; the function overload
+(`protect(Supplier<T>)`, `protect(Runnable)`,
+`protect(Function<I, O>)`, `protect(Callable<V>)`,
+`protect(JoinPointExecutor<R>)`) does not.
 
-- `inqudium-pipeline/.../introspection/FunctionStackAdapter.java`
+Without a Function-Dispatch-Integration that produces
+*pipeline-aware* function wrappers, a `FunctionStackAdapter`
+would have to inspect raw `AbstractBaseWrapper` chains
+constructed directly by user code. Those chains don't
+carry a pipeline reference, so the adapter would
+synthesise `InqStackInfo.elements()` from
+`AbstractBaseWrapper.layerDescription()` strings — which
+bypasses ADR-040's "pipeline is the unit of composition"
+contract.
 
-**Adapter shape (matching ProxyStackAdapter):**
+**What needs to happen first:**
 
-```java
-public final class FunctionStackAdapter {
+1. **Function-Dispatch-Integration must exist.** Analogous
+   to `ProxyDispatcher` / `InqInvocationHandler` /
+   `ProxyDelegation`, the function paradigm needs a
+   dispatcher that:
+   - Takes an `InqPipeline` and a function
+     (`Supplier<T>`, `Runnable`, `Function<I, O>`,
+     `Callable<V>`, `JoinPointExecutor<R>`) as input
+   - Produces a wrapper that carries a pipeline reference
+   - Routes invocations through the pipeline's elements
+     in canonical composition order
 
-    /**
-     * Returns true if instance is a function-wrapper that
-     * this adapter can inspect.
-     */
-    public static boolean supports(Object instance) {
-        return instance instanceof AbstractBaseWrapper<?, ?>;
-    }
+2. **`InqPipeline.protect(Supplier<T>)` and siblings**
+   must exist as default methods on `InqPipeline`, with
+   classpath-probing analogous to `DetectionProxy`
+   (`DetectionFunction`) and a reflective bridge
+   analogous to `ProxyDelegation`
+   (`FunctionDelegation`).
 
-    /**
-     * Returns the FunctionStackInfo for the given function
-     * wrapper. Caller must have verified `supports(instance)`.
-     */
-    public static FunctionStackInfo inspect(Object instance) {
-        // Walk the wrapper chain via inner(), collect elements,
-        // extract stackId, derive methodLayers from the SAM.
-    }
-}
-```
+3. **Once those exist,** the `FunctionStackAdapter`
+   becomes a straightforward port of `ProxyStackAdapter`:
+   `supports(Object)` checks for the pipeline-aware
+   wrapper type; `inspect(Object)` extracts the pipeline
+   reference and reads `elements()` / `methodLayers()`
+   from it.
 
-**Implementation details to be decided at B.3 start:**
+**`FunctionStackInfo` stays.** The empty record permit
+created in B.2 remains in the sealed `InqStackInfo`
+hierarchy. It's the correct future permit; when
+Function-Dispatch-Integration lands, the permit is
+ready.
 
-- The function-wrapper chain has `inner()` for chain
-  walk; layer descriptions come from `layerDescription()`
-- `targetType()` is `Optional.of(delegate.getClass())`
-  for `BaseWrapper`; `Optional.empty()` for runnable-only
-  wrappers
-- `methodLayers` has exactly one entry (the SAM method)
-- `elements()` is derived from the wrapper chain — each
-  layer's decorator is an `InqElement`
+**Phase B continues with B.4.** The `InqIntrospector`
+implemented in B.4 dispatches only to `ProxyStackAdapter`
+today. The dispatch surface is the right place for
+future adapters; adding `FunctionStackAdapter` later is
+strictly additive.
 
-**Tests (mandatory per project conventions):**
-
-- `FunctionStackAdapterTest.java` with `@Nested` groupings
-- JUnit 5 + AssertJ, no Mockito
-- Given/When/Then structure with full English sentence
-  method names (snake_case)
-- Coverage: supports() decisions, inspect() output shape,
-  chain walk correctness, edge cases (empty chain,
-  single-layer chain)
-
-**Verification gates:**
-
-- [ ] `mvn verify` green.
-- [ ] `FunctionStackAdapter` exists with `supports()` and
-  `inspect()`.
-- [ ] Tests exist and cover happy path + edge cases.
-- [ ] `@SuppressWarnings` delta documented.
-
-**Estimated effort:** 4-6 hours (tests are 60% of the
-work).
-
-**Branch:** `feat/function-stack-adapter`.
+**ADR-039 acceptance** (B.6) documents this clearly:
+ADR-039 is promoted to Accepted with one implemented
+adapter (`ProxyStackAdapter`); `FunctionStackAdapter`,
+`AspectJStackAdapter`, and `SpringAspectStackAdapter`
+are all anticipated when their respective integration
+infrastructure exists.
 
 ## Sub-step B.4 — InqIntrospector + InqStackRenderer
 
@@ -437,15 +452,16 @@ that dispatches to the available adapters. Plus the
 public final class InqIntrospector {
 
     public static Optional<InqStackInfo> inspect(Object instance) {
-        if (FunctionStackAdapter.supports(instance)) {
-            return Optional.of(FunctionStackAdapter.inspect(instance));
-        }
         // ProxyStackAdapter check via classpath probe
         // (using ProxyStackAdapter directly since both
         // modules are now adjacent in the dep graph)
         if (ProxyStackAdapter.supports(instance)) {
             return Optional.of(ProxyStackAdapter.inspect(instance));
         }
+        // FunctionStackAdapter is deferred (see B.3) —
+        // a future `if (FunctionStackAdapter.supports(...))`
+        // branch will land here when Function-Dispatch-
+        // Integration exists.
         return Optional.empty();
     }
 }
@@ -593,9 +609,12 @@ to "Accepted" with current state. Describe:
   deferred work
 - `chainId` → `stackId` rename completed
 - `InqStackInfo` sealed hierarchy with two initial permits
-  (`FunctionStackInfo`, `ProxyStackInfo`); two more
-  permits anticipated when `inqudium-aspect` and
-  `inqudium-spring` modules are rebuilt
+  (`FunctionStackInfo`, `ProxyStackInfo`). Only
+  `ProxyStackAdapter` is implemented; `FunctionStackInfo`
+  remains an empty permit pending Function-Dispatch-
+  Integration. Two more permits anticipated when
+  `inqudium-aspect` and `inqudium-spring` modules are
+  rebuilt.
 - `InqIntrospector` + `InqStackRenderer` operational
 - Bridge state resolved; legacy `InqPipeline` deleted
 
@@ -605,9 +624,12 @@ In ADR-039, near the Decision section's "Adapter chain"
 listing, add a paragraph:
 
 > **Phase B implementation status (2026-05-19):**
-> Two of the four anticipated adapters
-> (`FunctionStackAdapter`, `ProxyStackAdapter`) are
-> implemented. `AspectJStackAdapter` and
+> One of the four anticipated adapters
+> (`ProxyStackAdapter`) is implemented.
+> `FunctionStackAdapter` is anticipated when
+> Function-Dispatch-Integration on `InqPipeline`
+> (`protect(Supplier<T>)` and siblings, per ADR-040 §6)
+> exists. `AspectJStackAdapter` and
 > `SpringAspectStackAdapter` are anticipated when the
 > `inqudium-aspect` and `inqudium-spring` modules
 > (currently stubbed per Phase A) are rebuilt. The
@@ -666,21 +688,21 @@ Expected: green.
 | B.0 | 1 hour (audit, no commit) |
 | B.1 | 3-4 hours |
 | B.2 | 4-5 hours |
-| B.3 | 4-6 hours |
+| B.3 | 0 hours (deferred) |
 | B.4 | 5-7 hours |
 | B.5 | 5-7 hours |
 | B.6 | 2-3 hours |
 
-**Total range:** 24-33 hours across the 6 active
-sub-steps, distributed over 3-4 working days at
-sustainable pace.
+**Total range:** 19-27 hours across the 5 active
+sub-steps (B.0 audit + B.1, B.2, B.4, B.5, B.6),
+distributed over 3 working days at sustainable pace.
 
 ## Completion log
 
 * [x] B.0 — Audit (no commit) (2026-05-19)
-* [x] B.1 — chainId → stackId rename library-wide (2026-05-20)
-* [x] B.2 — InqStackInfo sealed hierarchy + DTO migration (2026-05-20)
-* [ ] B.3 — FunctionStackAdapter implementation
+* [x] B.1 — chainId → stackId rename library-wide (2026-05-20, PR #106)
+* [x] B.2 — InqStackInfo sealed hierarchy + DTO migration (2026-05-20, PR #107)
+* [~] B.3 — FunctionStackAdapter (deferred 2026-05-20 — see section for rationale)
 * [ ] B.4 — InqIntrospector + InqStackRenderer
 * [ ] B.5 — Bridge-state resolution
 * [ ] B.6 — ADR-039 status flip + final cleanup
@@ -693,6 +715,17 @@ These items are **out of scope** for Phase B:
   (require aspect/spring module rebuild — separate work)
 - **DetectionAspectJ and DetectionSpringAop probes**
   (same reason)
+- **FunctionStackAdapter** — deferred (was B.3; see the
+  deferral notice in the B.3 section). Requires
+  Function-Dispatch-Integration on `InqPipeline`
+  (`protect(Supplier<T>)`, `protect(Runnable)`, etc.)
+  per ADR-040 §6 first.
+- **Function-Dispatch-Integration itself** —
+  `InqPipeline.protect(Supplier<T>)` and siblings,
+  classpath probe (`DetectionFunction`), reflective
+  bridge (`FunctionDelegation`). Anticipated as the
+  prerequisite for `FunctionStackAdapter`. Likely
+  warrants its own refactor plan when undertaken.
 - **SerializedLambda tier-2 method resolution** (ADR-039
   flagged as deferred future enhancement)
 - **Top-level legacy `Bulkhead.java` and
