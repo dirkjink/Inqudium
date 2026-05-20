@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  * (two methods on different classes sharing simple names of
  * declaring class and all parameters) produce identical strings;
  * disambiguation is a renderer-side responsibility, not a
- * formatter responsibility. {@link MethodLayers#method()} carries
+ * formatter responsibility. {@link eu.inqudium.pipeline.introspection.MethodLayers#method()} carries
  * the canonical identity in all cases.</p>
  *
  * <p>Arrays are rendered with trailing brackets ({@code Foo[]});

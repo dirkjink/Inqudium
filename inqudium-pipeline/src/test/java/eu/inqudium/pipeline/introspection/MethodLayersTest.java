@@ -1,4 +1,4 @@
-package eu.inqudium.proxy.introspection;
+package eu.inqudium.pipeline.introspection;
 
 import org.junit.jupiter.api.Test;
 

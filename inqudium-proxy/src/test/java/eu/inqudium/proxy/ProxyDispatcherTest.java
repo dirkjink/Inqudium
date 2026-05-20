@@ -9,9 +9,9 @@ import eu.inqudium.core.pipeline.LayerTerminal;
 import eu.inqudium.imperative.core.pipeline.AsyncLayerTerminal;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
 import eu.inqudium.pipeline.InqPipeline;
-import eu.inqudium.proxy.introspection.MethodLayers;
+import eu.inqudium.pipeline.introspection.MethodLayers;
 import eu.inqudium.proxy.introspection.ProxyStackAdapter;
-import eu.inqudium.proxy.introspection.ProxyStackInfo;
+import eu.inqudium.pipeline.introspection.ProxyStackInfo;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 

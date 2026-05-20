@@ -8,7 +8,7 @@ import eu.inqudium.imperative.core.pipeline.AsyncLayerTerminal;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
 import eu.inqudium.pipeline.InqPipeline;
 import eu.inqudium.proxy.introspection.ProxyStackAdapter;
-import eu.inqudium.proxy.introspection.ProxyStackInfo;
+import eu.inqudium.pipeline.introspection.ProxyStackInfo;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;

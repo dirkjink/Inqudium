@@ -3,7 +3,7 @@ package eu.inqudium.proxy.handler;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
 import eu.inqudium.proxy.exception.ExceptionClassifier;
-import eu.inqudium.proxy.introspection.MethodLayers;
+import eu.inqudium.pipeline.introspection.MethodLayers;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;

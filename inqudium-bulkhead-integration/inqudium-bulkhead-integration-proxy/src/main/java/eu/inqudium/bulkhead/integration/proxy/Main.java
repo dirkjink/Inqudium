@@ -10,9 +10,9 @@ import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;
 import eu.inqudium.pipeline.InqPipeline;
-import eu.inqudium.proxy.introspection.MethodLayers;
+import eu.inqudium.pipeline.introspection.MethodLayers;
 import eu.inqudium.proxy.introspection.ProxyStackAdapter;
-import eu.inqudium.proxy.introspection.ProxyStackInfo;
+import eu.inqudium.pipeline.introspection.ProxyStackInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

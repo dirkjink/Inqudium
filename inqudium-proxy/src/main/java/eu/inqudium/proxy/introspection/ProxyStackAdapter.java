@@ -1,5 +1,6 @@
 package eu.inqudium.proxy.introspection;
 
+import eu.inqudium.pipeline.introspection.ProxyStackInfo;
 import eu.inqudium.proxy.handler.InqInvocationHandler;
 
 import java.lang.reflect.InvocationHandler;

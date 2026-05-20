@@ -1,28 +1,26 @@
 /**
- * Proxy-side introspection adapter per ADR-039 (Option-B scope).
+ * Proxy-side introspection adapter per ADR-039.
  *
- * <p>This package exposes four public types:</p>
+ * <p>This package exposes two public types:</p>
  * <ul>
  *   <li>{@link eu.inqudium.proxy.introspection.ProxyStackAdapter} —
  *       static {@code supports} / {@code inspect} methods for
  *       proxies produced by {@code ProxyDispatcher.protect(...)}.</li>
- *   <li>{@link eu.inqudium.proxy.introspection.ProxyStackInfo} —
- *       standalone DTO record carrying stack id, service interface,
- *       elements snapshot, and per-method layer summary.</li>
- *   <li>{@link eu.inqudium.proxy.introspection.MethodLayers} —
- *       per-method layer description record (signature, descriptions,
- *       canonical {@code Method} for disambiguation).</li>
  *   <li>{@link eu.inqudium.proxy.introspection.MethodSignatureFormatter}
  *       — utility producing ADR-039's canonical
  *       {@code Class.method(P1, P2)} format.</li>
  * </ul>
  *
- * <p>Per the Option-B scope decision, the central
- * {@code InqIntrospector} dispatcher, the {@code InqStackInfo} sealed
- * hierarchy, and the library-wide {@code stackId → stackId} rename are
- * deferred to a separate refactor. The DTO records' shapes already
- * match ADR-039 exactly, so a future migration into the sealed
- * hierarchy will not require a contract change.</p>
+ * <p>The introspection DTOs themselves —
+ * {@link eu.inqudium.pipeline.introspection.ProxyStackInfo
+ * ProxyStackInfo} and its
+ * {@link eu.inqudium.pipeline.introspection.MethodLayers MethodLayers}
+ * components — live in
+ * {@code eu.inqudium.pipeline.introspection} as permits of the
+ * {@link eu.inqudium.pipeline.introspection.InqStackInfo InqStackInfo}
+ * sealed hierarchy. {@code ProxyStackAdapter.inspect(...)} returns a
+ * {@code ProxyStackInfo} populated from the proxy's
+ * {@code InqInvocationHandler}.</p>
  *
  * @see inqudium-proxy/docs/ARCHITECTURE.md
  */

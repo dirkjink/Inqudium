@@ -7,6 +7,8 @@ import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerTerminal;
 import eu.inqudium.pipeline.InqPipeline;
+import eu.inqudium.pipeline.introspection.MethodLayers;
+import eu.inqudium.pipeline.introspection.ProxyStackInfo;
 import eu.inqudium.proxy.ProxyDispatcher;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
