@@ -93,7 +93,7 @@ allocation on the hot path.
 │  │            │                                                  │    │
 │  │            ├── create terminal lambda (1 allocation)          │    │
 │  │            ├── chainFactory.apply(terminal)                   │    │
-│  │            └── chain.execute(chainId, callId, null)           │    │
+│  │            └── chain.execute(stackId, callId, null)           │    │
 │  │                                                               │    │
 │  │  Pre-composed chain (no wrapper objects):                     │    │
 │  │    AUTH.execute → LOG.execute → TIMING.execute → terminal     │    │
@@ -150,7 +150,7 @@ inqudium-aspect/
 
 | Module                | Purpose                                                  |
 |-----------------------|----------------------------------------------------------|
-| `inqudium-core`       | `JoinPointWrapper`, `LayerAction`, `Wrapper`, chain IDs  |
+| `inqudium-core`       | `JoinPointWrapper`, `LayerAction`, `Wrapper`, stack IDs  |
 | `inqudium-imperative` | `AsyncLayerAction`, `AsyncJoinPointWrapper` (async only) |
 | `aspectjrt`           | AspectJ runtime annotations (`@Aspect`, `@Around`)       |
 | `aspectjweaver`       | Compile-time or load-time weaving support                |
@@ -167,11 +167,11 @@ when, whether, and how to invoke it.
 
 ```java
 // A LayerAction is the fundamental unit of behavior.
-// It receives chainId, callId, the argument, and a reference to the next step.
-LayerAction<Void, Object> timing = (chainId, callId, arg, next) -> {
+// It receives stackId, callId, the argument, and a reference to the next step.
+LayerAction<Void, Object> timing = (stackId, callId, arg, next) -> {
             long start = System.nanoTime();
             try {
-                return next.execute(chainId, callId, arg);  // proceed to next layer
+                return next.execute(stackId, callId, arg);  // proceed to next layer
             } finally {
                 long elapsed = System.nanoTime() - start;
                 metrics.record(elapsed);
@@ -183,9 +183,9 @@ Key properties of the chain:
 
 - **Immutable** — once built, the layer relationships are fixed.
 - **Thread-safe** — the same chain can be invoked concurrently.
-- **Introspectable** — every layer exposes `layerDescription()`, `chainId()`,
+- **Introspectable** — every layer exposes `layerDescription()`, `stackId()`,
   `currentCallId()`, and can be traversed via `inner()`.
-- **Zero-allocation IDs** — chain ID and call ID are primitive `long` values
+- **Zero-allocation IDs** — stack ID and call ID are primitive `long` values
   passed through the chain, never boxed.
 
 ### How AspectJ Weaving Bridges into the Pipeline
@@ -306,15 +306,15 @@ public class LoggingLayerProvider implements AspectLayerProvider<Object> {
 
     @Override
     public LayerAction<Void, Object> layerAction() {
-        return (chainId, callId, arg, next) -> {
-            log.info("[chain={}, call={}] entering", chainId, callId);
+        return (stackId, callId, arg, next) -> {
+            log.info("[chain={}, call={}] entering", stackId, callId);
             try {
-                Object result = next.execute(chainId, callId, arg);
-                log.info("[chain={}, call={}] success", chainId, callId);
+                Object result = next.execute(stackId, callId, arg);
+                log.info("[chain={}, call={}] success", stackId, callId);
                 return result;
             } catch (Exception e) {
                 log.error("[chain={}, call={}] failed: {}",
-                        chainId, callId, e.getMessage());
+                        stackId, callId, e.getMessage());
                 throw e;
             }
         };
@@ -429,14 +429,14 @@ A `LayerAction<A, R>` is a functional interface with full control over the
 invocation:
 
 ```java
-R execute(long chainId, long callId, A argument, InternalExecutor<A, R> next);
+R execute(long stackId, long callId, A argument, InternalExecutor<A, R> next);
 ```
 
 The `next` parameter is the next step in the chain. You can:
 
 | Action                | How                                          |
 |-----------------------|----------------------------------------------|
-| **Proceed normally**  | `return next.execute(chainId, callId, arg);` |
+| **Proceed normally**  | `return next.execute(stackId, callId, arg);` |
 | **Short-circuit**     | Return a value without calling `next`        |
 | **Retry**             | Call `next.execute(...)` multiple times      |
 | **Transform result**  | Call `next`, then modify the returned value  |
@@ -449,25 +449,25 @@ The `next` parameter is the next step in the chain. You can:
 #### Pre-processing (fire-and-forget logging)
 
 ```java
-(chainId,callId,arg,next)->{
+(stackId,callId,arg,next)->{
         log.
 
-info("[chain={}, call={}] entering",chainId, callId);
+info("[chain={}, call={}] entering",stackId, callId);
     return next.
 
-execute(chainId, callId, arg);
+execute(stackId, callId, arg);
 }
 ```
 
 #### Pre- and post-processing (timing)
 
 ```java
-(chainId,callId,arg,next)->{
+(stackId,callId,arg,next)->{
 long start = System.nanoTime();
     try{
             return next.
 
-execute(chainId, callId, arg);
+execute(stackId, callId, arg);
     }finally{
             metrics.
 
@@ -479,11 +479,11 @@ record(System.nanoTime() -start);
 #### Exception handling (fallback)
 
 ```java
-(chainId,callId,arg,next)->{
+(stackId,callId,arg,next)->{
         try{
         return next.
 
-execute(chainId, callId, arg);
+execute(stackId, callId, arg);
     }catch(
 Exception e){
         return fallbackValue;
@@ -494,14 +494,14 @@ Exception e){
 #### Conditional execution (caching)
 
 ```java
-(chainId,callId,arg,next)->{
+(stackId,callId,arg,next)->{
         if(cache.
 
 containsKey(arg))return cache.
 
 get(arg);
 
-Object result = next.execute(chainId, callId, arg);
+Object result = next.execute(stackId, callId, arg);
     cache.
 
 put(arg, result);
@@ -512,7 +512,7 @@ put(arg, result);
 #### Retry with backoff
 
 ```java
-(chainId,callId,arg,next)->{
+(stackId,callId,arg,next)->{
 int maxAttempts = 3;
 Exception lastException = null;
     for(
@@ -521,7 +521,7 @@ i<maxAttempts;i++){
         try{
         return next.
 
-execute(chainId, callId, arg);
+execute(stackId, callId, arg);
         }catch(
 RuntimeException e){
 lastException =e;
@@ -539,7 +539,7 @@ pow(2,i) *100);
 #### Authorization (short-circuit)
 
 ```java
-(chainId,callId,arg,next)->{
+(stackId,callId,arg,next)->{
         if(!securityContext.
 
 isAuthorized()){
@@ -549,7 +549,7 @@ SecurityException("Access denied");
     }
             return next.
 
-execute(chainId, callId, arg);
+execute(stackId, callId, arg);
 }
 ```
 
@@ -581,14 +581,14 @@ public class TimingLayerProvider implements AspectLayerProvider<Object> {
 
     @Override
     public LayerAction<Void, Object> layerAction() {
-        return (chainId, callId, arg, next) -> {
+        return (stackId, callId, arg, next) -> {
             long start = System.nanoTime();
             try {
-                return next.execute(chainId, callId, arg);
+                return next.execute(stackId, callId, arg);
             } finally {
                 long elapsed = System.nanoTime() - start;
                 System.out.printf("[chain=%d, call=%d] took %d µs%n",
-                        chainId, callId, elapsed / 1000);
+                        stackId, callId, elapsed / 1000);
             }
         };
     }
@@ -830,7 +830,7 @@ ResolvedPipeline pipeline = aspect.getResolvedPipeline(method);
     System.out.
 
 println(pipeline.toStringHierarchy());
-        // Chain-ID: 42 (current call-ID: 137)
+        // Stack-ID: 42 (current call-ID: 137)
         // AUTHORIZATION
         //   └── LOGGING
         //     └── TIMING
@@ -954,7 +954,7 @@ ResolvedPipeline pipeline = ResolvedPipeline.resolve(providers, method);
 Object result = pipeline.execute(pjp::proceed);
 //   1. Create terminal lambda (captures pjp::proceed)
 //   2. chainFactory.apply(terminal) — applies pre-composed chain
-//   3. chain.execute(chainId, callId, null) — traverses all layers
+//   3. chain.execute(stackId, callId, null) — traverses all layers
 ```
 
 The `chainFactory` is a nested function that contains all `LayerAction`s.
@@ -982,7 +982,7 @@ The design directly mirrors the proxy module's `SyncDispatchExtension`:
 | `Function<InternalExecutor, InternalExecutor>` | `Function<InternalExecutor, InternalExecutor>` |
 | Composed once in `linkInner()`                 | Composed once in `resolve()`                   |
 | `buildTerminal(method, args, target)` per call | Terminal lambda with `pjp::proceed` per call   |
-| `executeChain(chainId, callId, terminal)`      | `chainFactory.apply(terminal).execute(...)`    |
+| `executeChain(stackId, callId, terminal)`      | `chainFactory.apply(terminal).execute(...)`    |
 | `MethodHandleCache` — shared across stack      | `ConcurrentHashMap<Method, ResolvedPipeline>`  |
 | One cache per proxy stack                      | One cache per aspect instance                  |
 
@@ -1027,7 +1027,7 @@ depth();            // 3
 // ID tracking
 pipeline.
 
-chainId();          // globally unique, from CHAIN_ID_COUNTER
+stackId();          // globally unique, from STACK_ID_COUNTER
 pipeline.
 
 currentCallId();    // increments with each execute()
@@ -1037,7 +1037,7 @@ System.out.
 
 println(pipeline.toStringHierarchy());
 // Output:
-// Chain-ID: 42 (current call-ID: 7)
+// Stack-ID: 42 (current call-ID: 7)
 // AUTHORIZATION
 //   └── LOGGING
 //     └── TIMING
@@ -1064,7 +1064,7 @@ rich introspection capabilities:
 public interface Wrapper<S extends Wrapper<S>> {
     S inner();                    // next inner layer, or null
 
-    long chainId();               // shared across all layers
+    long stackId();               // shared across all layers
 
     long currentCallId();         // increments per proceed()
 
@@ -1096,12 +1096,12 @@ inner();
 ### Verifying Shared Chain Identity
 
 ```java
-long expectedChainId = chain.chainId();
+long expectedChainId = chain.stackId();
 Wrapper<?> current = chain;
 while(current !=null){
         assert current.
 
-chainId() ==expectedChainId;
+stackId() ==expectedChainId;
 current =current.
 
 inner();
@@ -1135,7 +1135,7 @@ System.out.println(chain.toStringHierarchy());
 Output:
 
 ```
-Chain-ID: 42 (current call-ID: 0)
+Stack-ID: 42 (current call-ID: 0)
 AUTHORIZATION
   └── LOGGING
     └── TIMING
@@ -1189,7 +1189,7 @@ The `AsyncLayerAction` has a different return type — it produces a
 `CompletionStage<R>` instead of a direct `R`:
 
 ```java
-CompletionStage<R> executeAsync(long chainId, long callId, A argument,
+CompletionStage<R> executeAsync(long stackId, long callId, A argument,
                                 InternalAsyncExecutor<A, R> next);
 ```
 
@@ -1280,11 +1280,11 @@ public class AsyncBulkheadLayerProvider implements AsyncAspectLayerProvider<Obje
 
     @Override
     public AsyncLayerAction<Void, Object> asyncLayerAction() {
-        return (chainId, callId, arg, next) -> {
+        return (stackId, callId, arg, next) -> {
             permits.acquire();                               // start phase
             CompletionStage<Object> stage;
             try {
-                stage = next.executeAsync(chainId, callId, arg);
+                stage = next.executeAsync(stackId, callId, arg);
             } catch (Throwable t) {
                 permits.release();                           // cleanup on sync failure
                 throw t;
@@ -1354,11 +1354,11 @@ public class AuthorizationLayerProvider implements AspectLayerProvider<Object> {
 
     @Override
     public LayerAction<Void, Object> layerAction() {
-        return (chainId, callId, arg, next) -> {
+        return (stackId, callId, arg, next) -> {
             if (!isAuthorized()) {
                 throw new SecurityException("Access denied");
             }
-            return next.execute(chainId, callId, arg);
+            return next.execute(stackId, callId, arg);
         };
     }
 }
@@ -1381,14 +1381,14 @@ public class LoggingLayerProvider implements AspectLayerProvider<Object> {
 
     @Override
     public LayerAction<Void, Object> layerAction() {
-        return (chainId, callId, arg, next) -> {
-            log.info("[chain={}, call={}] entering", chainId, callId);
+        return (stackId, callId, arg, next) -> {
+            log.info("[chain={}, call={}] entering", stackId, callId);
             try {
-                Object result = next.execute(chainId, callId, arg);
-                log.info("[chain={}, call={}] result={}", chainId, callId, result);
+                Object result = next.execute(stackId, callId, arg);
+                log.info("[chain={}, call={}] result={}", stackId, callId, result);
                 return result;
             } catch (Exception e) {
-                log.error("[chain={}, call={}] error={}", chainId, callId, e.getMessage());
+                log.error("[chain={}, call={}] error={}", stackId, callId, e.getMessage());
                 throw e;
             }
         };
@@ -1418,14 +1418,14 @@ public class TimingLayerProvider implements AspectLayerProvider<Object> {
 
     @Override
     public LayerAction<Void, Object> layerAction() {
-        return (chainId, callId, arg, next) -> {
+        return (stackId, callId, arg, next) -> {
             long start = System.nanoTime();
             try {
-                return next.execute(chainId, callId, arg);
+                return next.execute(stackId, callId, arg);
             } finally {
                 long elapsed = System.nanoTime() - start;
                 log.info("[chain={}, call={}] took {} µs",
-                        chainId, callId, elapsed / 1000);
+                        stackId, callId, elapsed / 1000);
             }
         };
     }
@@ -1499,7 +1499,7 @@ public class PipelinedAspect extends AbstractPipelineAspect {
   ResolvedPipeline.execute(pjp::proceed)
     │  create terminal lambda (captures pjp::proceed)
     │  chainFactory.apply(terminal)
-    │  chain.execute(chainId, callId, null)
+    │  chain.execute(stackId, callId, null)
     │
     ▼
   AUTHORIZATION layer
@@ -1541,7 +1541,7 @@ public class PipelinedAspect extends AbstractPipelineAspect {
   ResolvedPipeline.execute(pjp::proceed)
     │  create terminal lambda                ← only per-call allocation
     │  chainFactory.apply(terminal)          ← reuse pre-composed chain
-    │  chain.execute(chainId, callId, null)
+    │  chain.execute(stackId, callId, null)
     │
     ▼
   AUTH → LOG → TIMING → terminal → greet("Alice") → "Hello, Alice!"
@@ -1625,7 +1625,7 @@ void non_pipelined_method_excludes_timing_layer() throws Exception {
 }
 ```
 
-### Verifying Chain IDs and Call IDs
+### Verifying Stack IDs and Call IDs
 
 ```java
 
@@ -1633,11 +1633,11 @@ void non_pipelined_method_excludes_timing_layer() throws Exception {
 void all_layers_share_the_same_chain_id() {
     JoinPointWrapper<Object> chain = aspect.inspectPipeline(() -> "x", method);
 
-    long expectedChainId = chain.chainId();
+    long expectedChainId = chain.stackId();
     Wrapper<?> current = chain;
     while (current != null) {
-        assertThat(current.chainId())
-                .as("chainId of layer '%s'", current.layerDescription())
+        assertThat(current.stackId())
+                .as("stackId of layer '%s'", current.layerDescription())
                 .isEqualTo(expectedChainId);
         current = current.inner();
     }
@@ -1686,7 +1686,7 @@ public Object execute(JoinPointExecutor<Object> coreExecutor) throws Throwable {
         }
     };
     try {
-        return chainFactory.apply(terminal).execute(chainId, callId, null);
+        return chainFactory.apply(terminal).execute(stackId, callId, null);
     } catch (CompletionException e) {
         Throwable cause = e.getCause();
         if (cause == null) {
@@ -1711,11 +1711,11 @@ is needed.
 Each layer can catch and handle exceptions independently:
 
 ```java
-(chainId,callId,arg,next)->{
+(stackId,callId,arg,next)->{
         try{
         return next.
 
-execute(chainId, callId, arg);
+execute(stackId, callId, arg);
     }catch(
 SpecificException e){
         return fallbackValue;  // swallow and substitute
@@ -1764,7 +1764,7 @@ The aspect base class now has a clear separation:
 
 The hot path uses `ResolvedPipeline` (no wrapper objects, pre-composed chain
 factory). The cold path uses `AspectPipelineBuilder` + `JoinPointWrapper` (full
-`Wrapper` interface with `inner()`, `chainId()`, `toStringHierarchy()`). Both
+`Wrapper` interface with `inner()`, `stackId()`, `toStringHierarchy()`). Both
 paths produce identical execution behavior — only the overhead differs.
 
 ### Why default canHandle Returns true?

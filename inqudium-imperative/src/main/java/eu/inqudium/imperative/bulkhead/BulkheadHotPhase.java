@@ -365,7 +365,7 @@ final class BulkheadHotPhase<A, R>
 
     @Override
     public R execute(
-            long chainId, long callId, A argument, LayerTerminal<A, R> next) {
+            long stackId, long callId, A argument, LayerTerminal<A, R> next) {
         BulkheadSnapshot snap = component.snapshot();
         BulkheadEventConfig events = snap.events();
         InqEventPublisher publisher = component.eventPublisher();
@@ -384,16 +384,16 @@ final class BulkheadHotPhase<A, R>
             // wait-trace acquired=false via handleAcquireFailure(rejection=null).
             Thread.currentThread().interrupt();
             throw new InqBulkheadInterruptedException(
-                    chainId, callId, component.name(), optimizeException);
+                    stackId, callId, component.name(), optimizeException);
         }
 
         if (rejection != null) {
-            handleAcquireFailure(chainId, callId, events, publisher, waitStartNanos, rejection);
+            handleAcquireFailure(stackId, callId, events, publisher, waitStartNanos, rejection);
             throw new InqBulkheadFullException(
-                    chainId, callId, component.name(), rejection, optimizeException);
+                    stackId, callId, component.name(), rejection, optimizeException);
         }
 
-        handleAcquireSuccess(chainId, callId, events, publisher, waitStartNanos);
+        handleAcquireSuccess(stackId, callId, events, publisher, waitStartNanos);
 
         // Sample RTT around the downstream call so the strategy can feed its adaptive algorithm
         // (ADR-020). Adaptive algorithms read in-flight count plus RTT to decide whether to
@@ -405,13 +405,13 @@ final class BulkheadHotPhase<A, R>
         long startNanos = component.nanoTimeSource().now();
         Throwable businessError = null;
         try {
-            return next.execute(chainId, callId, argument);
+            return next.execute(stackId, callId, argument);
         } catch (Throwable t) {
             businessError = t;
             throw t;
         } finally {
             long rttNanos = component.nanoTimeSource().now() - startNanos;
-            releaseAndReport(chainId, callId, rttNanos, businessError);
+            releaseAndReport(stackId, callId, rttNanos, businessError);
         }
     }
 
@@ -435,7 +435,7 @@ final class BulkheadHotPhase<A, R>
      */
     @Override
     public CompletionStage<R> executeAsync(
-            long chainId, long callId, A argument, AsyncLayerTerminal<A, R> next) {
+            long stackId, long callId, A argument, AsyncLayerTerminal<A, R> next) {
         BulkheadSnapshot snap = component.snapshot();
         BulkheadEventConfig events = snap.events();
         InqEventPublisher publisher = component.eventPublisher();
@@ -448,30 +448,30 @@ final class BulkheadHotPhase<A, R>
             rejection = tryAcquire(snap.maxWaitDuration());
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            handleAcquireFailure(chainId, callId, events, publisher, waitStartNanos, null);
+            handleAcquireFailure(stackId, callId, events, publisher, waitStartNanos, null);
             throw new InqBulkheadInterruptedException(
-                    chainId, callId, component.name(), optimizeException);
+                    stackId, callId, component.name(), optimizeException);
         }
 
         if (rejection != null) {
-            handleAcquireFailure(chainId, callId, events, publisher, waitStartNanos, rejection);
+            handleAcquireFailure(stackId, callId, events, publisher, waitStartNanos, rejection);
             throw new InqBulkheadFullException(
-                    chainId, callId, component.name(), rejection, optimizeException);
+                    stackId, callId, component.name(), rejection, optimizeException);
         }
 
-        handleAcquireSuccess(chainId, callId, events, publisher, waitStartNanos);
+        handleAcquireSuccess(stackId, callId, events, publisher, waitStartNanos);
 
         long startNanos = component.nanoTimeSource().now();
         CompletionStage<R> stage;
         try {
-            stage = next.executeAsync(chainId, callId, argument);
+            stage = next.executeAsync(stackId, callId, argument);
         } catch (Throwable t) {
             // Synchronous throw during stage construction. Without this catch, the permit
             // would leak — the whenComplete callback never runs because no stage was returned.
             // Throwable is the right catch: any sync failure (including Error) must release;
             // the rethrow leaves Error propagation intact.
             long rttNanos = component.nanoTimeSource().now() - startNanos;
-            releaseAndReport(chainId, callId, rttNanos, t);
+            releaseAndReport(stackId, callId, rttNanos, t);
             throw t;
         }
 
@@ -480,7 +480,7 @@ final class BulkheadHotPhase<A, R>
         // intermediate stage is allocated, no callback is attached.
         if (stage instanceof CompletableFuture<?> cf && cf.isDone()) {
             long rttNanos = component.nanoTimeSource().now() - startNanos;
-            releaseAndReport(chainId, callId, rttNanos, completionError(cf));
+            releaseAndReport(stackId, callId, rttNanos, completionError(cf));
             return stage;
         }
 
@@ -489,7 +489,7 @@ final class BulkheadHotPhase<A, R>
         // stage rather than getting swallowed on a detached branch.
         return stage.whenComplete((result, error) -> {
             long rttNanos = component.nanoTimeSource().now() - startNanos;
-            releaseAndReport(chainId, callId, rttNanos, error);
+            releaseAndReport(stackId, callId, rttNanos, error);
         });
     }
 
@@ -519,7 +519,7 @@ final class BulkheadHotPhase<A, R>
      * entirely to preserve its pre-refactor "no events on interrupt" behaviour.
      */
     private void handleAcquireFailure(
-            long chainId,
+            long stackId,
             long callId,
             BulkheadEventConfig events,
             InqEventPublisher publisher,
@@ -528,12 +528,12 @@ final class BulkheadHotPhase<A, R>
         if (events.waitTrace()) {
             long waitNanos = component.nanoTimeSource().now() - waitStartNanos;
             publisher.publish(new BulkheadWaitTraceEvent(
-                    chainId, callId, component.name(), waitNanos, false,
+                    stackId, callId, component.name(), waitNanos, false,
                     component.clock().instant()));
         }
         if (rejection != null && events.onReject()) {
             publisher.publish(new BulkheadOnRejectEvent(
-                    chainId, callId, component.name(), rejection,
+                    stackId, callId, component.name(), rejection,
                     component.clock().instant()));
         }
     }
@@ -544,7 +544,7 @@ final class BulkheadHotPhase<A, R>
      * via {@link #publishWhileHoldingPermit}, which is shared with the sync rollback path.
      */
     private void handleAcquireSuccess(
-            long chainId,
+            long stackId,
             long callId,
             BulkheadEventConfig events,
             InqEventPublisher publisher,
@@ -554,17 +554,17 @@ final class BulkheadHotPhase<A, R>
             publishWhileHoldingPermit(
                     publisher, events,
                     new BulkheadWaitTraceEvent(
-                            chainId, callId, component.name(), waitNanos, true,
+                            stackId, callId, component.name(), waitNanos, true,
                             component.clock().instant()),
-                    chainId, callId);
+                    stackId, callId);
         }
         if (events.onAcquire()) {
             publishWhileHoldingPermit(
                     publisher, events,
                     new BulkheadOnAcquireEvent(
-                            chainId, callId, component.name(), strategy.concurrentCalls(),
+                            stackId, callId, component.name(), strategy.concurrentCalls(),
                             component.clock().instant()),
-                    chainId, callId);
+                    stackId, callId);
         }
     }
 
@@ -581,7 +581,7 @@ final class BulkheadHotPhase<A, R>
      * thread-safe and the per-component publisher is thread-safe per ADR-030.
      */
     private void releaseAndReport(
-            long chainId, long callId, long rttNanos, Throwable businessError) {
+            long stackId, long callId, long rttNanos, Throwable businessError) {
         try {
             strategy.onCallComplete(rttNanos, businessError == null);
         } catch (RuntimeException algorithmFailure) {
@@ -598,7 +598,7 @@ final class BulkheadHotPhase<A, R>
         BulkheadEventConfig events = component.snapshot().events();
         if (events.onRelease()) {
             component.eventPublisher().publish(new BulkheadOnReleaseEvent(
-                    chainId, callId, component.name(), strategy.concurrentCalls(),
+                    stackId, callId, component.name(), strategy.concurrentCalls(),
                     component.clock().instant()));
         }
     }
@@ -621,7 +621,7 @@ final class BulkheadHotPhase<A, R>
             InqEventPublisher publisher,
             BulkheadEventConfig events,
             InqEvent event,
-            long chainId,
+            long stackId,
             long callId) {
         try {
             publisher.publish(event);
@@ -635,7 +635,7 @@ final class BulkheadHotPhase<A, R>
             if (events.rollbackTrace()) {
                 try {
                     publisher.publish(new BulkheadRollbackTraceEvent(
-                            chainId, callId, component.name(),
+                            stackId, callId, component.name(),
                             primary.getClass().getName(),
                             component.clock().instant()));
                 } catch (Throwable secondary) {
@@ -648,7 +648,7 @@ final class BulkheadHotPhase<A, R>
             }
 
             throw new BulkheadEventPublishFailureException(
-                    chainId, callId, component.name(),
+                    stackId, callId, component.name(),
                     event.getClass().getSimpleName(), primary);
         }
     }

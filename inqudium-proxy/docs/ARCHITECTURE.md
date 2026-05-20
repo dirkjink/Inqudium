@@ -253,7 +253,7 @@ public final class InqInvocationHandler implements InvocationHandler {
 }
 ```
 
-`stackId` is allocated from `PipelineIds.nextChainId()` (mechanism specified by ADR-034). `callIdSource` is a `LongSupplier` from `PipelineIds.newInstanceCallIdSource()` — backed internally by an `AtomicLong` private to this handler, with no contention between proxies. The class is `public` for cross-package reference (e.g. from `eu.inqudium.proxy.entries.ObjectMethodEntry`) but is labelled "Internal API" in its Javadoc; it is not part of the stable user-facing API.
+`stackId` is allocated from `PipelineIds.nextStackId()` (mechanism specified by ADR-034). `callIdSource` is a `LongSupplier` from `PipelineIds.newInstanceCallIdSource()` — backed internally by an `AtomicLong` private to this handler, with no contention between proxies. The class is `public` for cross-package reference (e.g. from `eu.inqudium.proxy.entries.ObjectMethodEntry`) but is labelled "Internal API" in its Javadoc; it is not part of the stable user-facing API.
 
 The three introspection accessors (`serviceInterface()`, `elements()`, `methodLayers()`) are cold-path: `serviceInterface()` returns the constructor-supplied interface, `elements()` returns an immutable `List.copyOf` snapshot of `pipeline.elements()` taken at construction time, and `methodLayers()` delegates to `PerProxyCache` which materialises one `MethodLayers` per cached entry on demand. None participate in the dispatch hot path.
 
@@ -686,7 +686,7 @@ public final class ProxyStackAdapter {
 
 `InqInvocationHandler` exposes the three introspection accessors directly as cross-package public methods (`serviceInterface()`, `elements()`, `methodLayers()`); `PerProxyCache` stays package-private and the handler delegates `methodLayers()` to a `methodLayers()` builder on the cache. The `MethodLayers` records are materialised on demand from the cached entries — one per method — with `Optional.of(method)` populated for every entry (tier-1 of ADR-039's method resolution; the proxy paradigm always has a concrete `Method`).
 
-**Option-B scope discipline.** The proxy module lands only the proxy-side adapter: standalone DTO records (`ProxyStackInfo`, `MethodLayers`) without an `InqStackInfo` sealed hierarchy, and no central `InqIntrospector` dispatcher. The library-wide `chainId → stackId` rename is likewise deferred — `BulkheadOnAcquireEvent`, `InqRuntimeException`, etc. keep their existing `chainId` parameter names. The record shapes already match ADR-039 exactly, so a future full-implementation refactor can fold `ProxyStackInfo` into the sealed hierarchy without changing the DTO contract.
+**Option-B scope discipline.** The proxy module lands only the proxy-side adapter: standalone DTO records (`ProxyStackInfo`, `MethodLayers`) without an `InqStackInfo` sealed hierarchy, and no central `InqIntrospector` dispatcher. The library-wide `stackId → stackId` rename is likewise deferred — `BulkheadOnAcquireEvent`, `InqRuntimeException`, etc. keep their existing `stackId` parameter names. The record shapes already match ADR-039 exactly, so a future full-implementation refactor can fold `ProxyStackInfo` into the sealed hierarchy without changing the DTO contract.
 
 ---
 

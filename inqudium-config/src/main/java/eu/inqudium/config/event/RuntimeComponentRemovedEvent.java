@@ -14,7 +14,7 @@ import java.time.Instant;
  * component-internal mutability check produces a {@code RuntimeComponentVetoedEvent} instead and
  * does not fire this event.
  *
- * <p>Identity fields {@code chainId} and {@code callId} are zero — removals are triggered by
+ * <p>Identity fields {@code stackId} and {@code callId} are zero — removals are triggered by
  * {@code runtime.update(...)}, not by an in-flight execute. The {@code elementName} and
  * {@code elementType} identify the removed component.
  */

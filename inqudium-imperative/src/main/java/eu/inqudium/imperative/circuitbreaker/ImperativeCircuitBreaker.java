@@ -229,7 +229,7 @@ public class ImperativeCircuitBreaker<A, R> implements CircuitBreaker<A, R> {
      * they typically represent JVM-level problems (OutOfMemoryError, StackOverflowError)
      * that should not influence the circuit breaker's failure rate.</p>
      *
-     * @param chainId  pipeline chain identifier for event correlation (ADR-022)
+     * @param stackId  pipeline stack identifier for event correlation (ADR-022)
      * @param callId   per-invocation call identifier for event correlation (ADR-022)
      * @param argument the argument flowing through the pipeline, passed through unchanged
      * @param next     the next element in the composition chain
@@ -237,11 +237,11 @@ public class ImperativeCircuitBreaker<A, R> implements CircuitBreaker<A, R> {
      * @throws CircuitBreakerException if the circuit breaker is OPEN and rejects the call
      */
     @Override
-    public R execute(long chainId, long callId, A argument, LayerTerminal<A, R> next) {
+    public R execute(long stackId, long callId, A argument, LayerTerminal<A, R> next) {
         acquirePermissionOrThrow();
         boolean outcomeRecorded = false;
         try {
-            R result = next.execute(chainId, callId, argument);
+            R result = next.execute(stackId, callId, argument);
             recordSuccess();
             outcomeRecorded = true;
             return result;
@@ -290,7 +290,7 @@ public class ImperativeCircuitBreaker<A, R> implements CircuitBreaker<A, R> {
      * throws (e.g., a bug in {@link #handleThrowable}), the exception surfaces on
      * the caller's future rather than disappearing silently on a detached branch.</p>
      *
-     * @param chainId  pipeline chain identifier for event correlation (ADR-022)
+     * @param stackId  pipeline stack identifier for event correlation (ADR-022)
      * @param callId   per-invocation call identifier for event correlation (ADR-022)
      * @param argument the argument flowing through the pipeline, passed through unchanged
      * @param next     the next element in the async composition chain
@@ -298,14 +298,14 @@ public class ImperativeCircuitBreaker<A, R> implements CircuitBreaker<A, R> {
      * @throws CircuitBreakerException if the circuit breaker is OPEN and rejects the call
      */
     @Override
-    public CompletionStage<R> executeAsync(long chainId, long callId, A argument,
+    public CompletionStage<R> executeAsync(long stackId, long callId, A argument,
                                            AsyncLayerTerminal<A, R> next) {
         // Synchronous fast-fail: reject immediately if the circuit is OPEN
         acquirePermissionOrThrow();
 
         CompletionStage<R> stage;
         try {
-            stage = next.executeAsync(chainId, callId, argument);
+            stage = next.executeAsync(stackId, callId, argument);
         } catch (Throwable t) {
             // Synchronous failure during stage creation — record outcome now
             if (t instanceof Exception e) {

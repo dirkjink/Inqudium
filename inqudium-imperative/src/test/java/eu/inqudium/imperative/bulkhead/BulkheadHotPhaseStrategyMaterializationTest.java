@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BulkheadHotPhaseStrategyMaterializationTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     private static GeneralSnapshot defaultGeneral() {
         return new GeneralSnapshotBuilder().build();

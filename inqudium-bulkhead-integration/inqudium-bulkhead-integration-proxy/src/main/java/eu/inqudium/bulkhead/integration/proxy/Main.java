@@ -128,7 +128,7 @@ public final class Main {
      *
      * <p>The "all methods on this proxy share one protection topology" property is preserved:
      * the {@code stackId} appears identical on every emitted line. The improvement over the
-     * legacy per-proxy chain-id reading is that each method now carries its own per-method
+     * legacy per-proxy stack-id reading is that each method now carries its own per-method
      * layer list, so a service with mixed protected and unprotected methods would produce a
      * heterogeneous log instead of N identical lines.
      *

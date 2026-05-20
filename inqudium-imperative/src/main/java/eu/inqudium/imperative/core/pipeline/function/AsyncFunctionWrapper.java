@@ -36,7 +36,7 @@ public class AsyncFunctionWrapper<I, O>
     }
 
     private static <I, O> AsyncLayerTerminal<I, O> coreFor(Function<I, CompletionStage<O>> delegate) {
-        return (chainId, callId, input) -> delegate.apply(input);
+        return (stackId, callId, input) -> delegate.apply(input);
     }
 
     @Override

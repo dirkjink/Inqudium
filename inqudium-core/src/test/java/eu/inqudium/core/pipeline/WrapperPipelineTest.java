@@ -172,10 +172,10 @@ class WrapperPipelineTest {
      * then forwards to the next step. Replaces the old TrackingXxxWrapper subclasses.
      */
     static <A, R> LayerAction<A, R> trackingAction(String layerName, ExecutionLog log) {
-        return (chainId, callId, argument, next) -> {
+        return (stackId, callId, argument, next) -> {
             log.layerNames.add(layerName);
             log.callIds.add(callId);
-            return next.execute(chainId, callId, argument);
+            return next.execute(stackId, callId, argument);
         };
     }
 
@@ -262,20 +262,20 @@ class WrapperPipelineTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.core.pipeline.WrapperPipelineTest#allWrapperTypes")
-        @DisplayName("should generate a positive chain id for a single wrapper")
-        void should_generate_a_positive_chain_id_for_a_single_wrapper(WrapperScenario scenario) {
+        @DisplayName("should generate a positive stack id for a single wrapper")
+        void should_generate_a_positive_stack_id_for_a_single_wrapper(WrapperScenario scenario) {
             // Given / When
             ExecutionLog log = new ExecutionLog();
             BaseWrapper<?, ?, ?, ?> wrapper = scenario.createSingle("layer", log);
 
             // Then
-            assertThat(wrapper.chainId()).isGreaterThan(0L);
+            assertThat(wrapper.stackId()).isGreaterThan(0L);
         }
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.core.pipeline.WrapperPipelineTest#allWrapperTypes")
-        @DisplayName("should inherit the chain id from the inner wrapper")
-        void should_inherit_the_chain_id_from_the_inner_wrapper(WrapperScenario scenario) {
+        @DisplayName("should inherit the stack id from the inner wrapper")
+        void should_inherit_the_stack_id_from_the_inner_wrapper(WrapperScenario scenario) {
             // Given
             ExecutionLog log = new ExecutionLog();
             BaseWrapper<?, ?, ?, ?> inner = scenario.createSingle("inner", log);
@@ -284,13 +284,13 @@ class WrapperPipelineTest {
             BaseWrapper<?, ?, ?, ?> outer = scenario.wrapAround("outer", inner, log);
 
             // Then
-            assertThat(outer.chainId()).isEqualTo(inner.chainId());
+            assertThat(outer.stackId()).isEqualTo(inner.stackId());
         }
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.core.pipeline.WrapperPipelineTest#allWrapperTypes")
-        @DisplayName("should assign different chain ids to independent chains")
-        void should_assign_different_chain_ids_to_independent_chains(WrapperScenario scenario) {
+        @DisplayName("should assign different stack ids to independent chains")
+        void should_assign_different_stack_ids_to_independent_chains(WrapperScenario scenario) {
             // Given / When
             ExecutionLog log1 = new ExecutionLog();
             ExecutionLog log2 = new ExecutionLog();
@@ -298,7 +298,7 @@ class WrapperPipelineTest {
             BaseWrapper<?, ?, ?, ?> chain2 = scenario.createSingle("chain2", log2);
 
             // Then
-            assertThat(chain1.chainId()).isNotEqualTo(chain2.chainId());
+            assertThat(chain1.stackId()).isNotEqualTo(chain2.stackId());
         }
 
         @ParameterizedTest(name = "{0}")
@@ -452,9 +452,9 @@ class WrapperPipelineTest {
             SupplierWrapper<String> wrapper = new SupplierWrapper<>("around", () -> {
                 events.add("core");
                 return "value";
-            }, (chainId, callId, arg, next) -> {
+            }, (stackId, callId, arg, next) -> {
                 events.add("before");
-                String result = next.execute(chainId, callId, arg);
+                String result = next.execute(stackId, callId, arg);
                 events.add("after");
                 return result;
             });
@@ -477,9 +477,9 @@ class WrapperPipelineTest {
                     Thread.sleep(10);
                 } catch (InterruptedException ignored) {
                 }
-            }, (chainId, callId, arg, next) -> {
+            }, (stackId, callId, arg, next) -> {
                 long start = System.nanoTime();
-                Void result = next.execute(chainId, callId, arg);
+                Void result = next.execute(stackId, callId, arg);
                 elapsed.set(System.nanoTime() - start);
                 return result;
             });
@@ -497,9 +497,9 @@ class WrapperPipelineTest {
             // Given
             SupplierWrapper<String> wrapper = new SupplierWrapper<>("resilient", () -> {
                 throw new RuntimeException("boom");
-            }, (chainId, callId, arg, next) -> {
+            }, (stackId, callId, arg, next) -> {
                 try {
-                    return next.execute(chainId, callId, arg);
+                    return next.execute(stackId, callId, arg);
                 } catch (Exception e) {
                     return "fallback";
                 }
@@ -520,7 +520,7 @@ class WrapperPipelineTest {
             SupplierWrapper<String> wrapper = new SupplierWrapper<>("cached", () -> {
                 coreInvoked.set(true);
                 return "from-core";
-            }, (chainId, callId, arg, next) -> {
+            }, (stackId, callId, arg, next) -> {
                 // Skip the chain entirely — return cached value
                 return "from-cache";
             });
@@ -544,12 +544,12 @@ class WrapperPipelineTest {
                     throw new RuntimeException("transient failure #" + attempts.size());
                 }
                 return "success";
-            }, (chainId, callId, arg, next) -> {
+            }, (stackId, callId, arg, next) -> {
                 // Retry up to 3 times
                 RuntimeException lastException = null;
                 for (int i = 0; i < 3; i++) {
                     try {
-                        return next.execute(chainId, callId, arg);
+                        return next.execute(stackId, callId, arg);
                     } catch (RuntimeException e) {
                         lastException = e;
                     }
@@ -571,9 +571,9 @@ class WrapperPipelineTest {
             // Given
             FunctionWrapper<String, String> wrapper = new FunctionWrapper<>("normalizer",
                     String::toUpperCase,
-                    (chainId, callId, input, next) -> {
+                    (stackId, callId, input, next) -> {
                         // Trim whitespace before passing to the core
-                        return next.execute(chainId, callId, input.trim());
+                        return next.execute(stackId, callId, input.trim());
                     }
             );
 
@@ -590,8 +590,8 @@ class WrapperPipelineTest {
             // Given
             SupplierWrapper<String> wrapper = new SupplierWrapper<>("postprocessor",
                     () -> "hello",
-                    (chainId, callId, arg, next) -> {
-                        String result = next.execute(chainId, callId, arg);
+                    (stackId, callId, arg, next) -> {
+                        String result = next.execute(stackId, callId, arg);
                         return result.toUpperCase();
                     }
             );
@@ -612,18 +612,18 @@ class WrapperPipelineTest {
             });
 
             SupplierWrapper<String> inner = new SupplierWrapper<>("metrics", core,
-                    (chainId, callId, arg, next) -> {
+                    (stackId, callId, arg, next) -> {
                         events.add("metrics-before");
-                        String result = next.execute(chainId, callId, arg);
+                        String result = next.execute(stackId, callId, arg);
                         events.add("metrics-after");
                         return result;
                     }
             );
 
             SupplierWrapper<String> outer = new SupplierWrapper<>("logging", inner,
-                    (chainId, callId, arg, next) -> {
+                    (stackId, callId, arg, next) -> {
                         events.add("logging-before");
-                        String result = next.execute(chainId, callId, arg);
+                        String result = next.execute(stackId, callId, arg);
                         events.add("logging-after");
                         return result;
                     }
@@ -640,17 +640,17 @@ class WrapperPipelineTest {
         }
 
         @Test
-        @DisplayName("should provide chain id and call id to the layer action")
-        void should_provide_chain_id_and_call_id_to_the_layer_action() {
+        @DisplayName("should provide stack id and call id to the layer action")
+        void should_provide_stack_id_and_call_id_to_the_layer_action() {
             // Given
             AtomicReference<Long> capturedChainId = new AtomicReference<>();
             AtomicReference<Long> capturedCallId = new AtomicReference<>();
 
             SupplierWrapper<String> wrapper = new SupplierWrapper<>("tracing", () -> "ok",
-                    (chainId, callId, arg, next) -> {
-                        capturedChainId.set(chainId);
+                    (stackId, callId, arg, next) -> {
+                        capturedChainId.set(stackId);
                         capturedCallId.set(callId);
-                        return next.execute(chainId, callId, arg);
+                        return next.execute(stackId, callId, arg);
                     }
             );
 
@@ -658,7 +658,7 @@ class WrapperPipelineTest {
             wrapper.get();
 
             // Then
-            assertThat(capturedChainId.get()).isEqualTo(wrapper.chainId());
+            assertThat(capturedChainId.get()).isEqualTo(wrapper.stackId());
             assertThat(capturedCallId.get()).isGreaterThan(0L);
         }
     }
@@ -694,8 +694,8 @@ class WrapperPipelineTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.core.pipeline.WrapperPipelineTest#allWrapperTypes")
-        @DisplayName("should share the same chain id when wrapping the same inner delegate")
-        void should_share_the_same_chain_id_when_wrapping_the_same_inner_delegate(WrapperScenario scenario) {
+        @DisplayName("should share the same stack id when wrapping the same inner delegate")
+        void should_share_the_same_stack_id_when_wrapping_the_same_inner_delegate(WrapperScenario scenario) {
             // Given
             ExecutionLog log = new ExecutionLog();
             BaseWrapper<?, ?, ?, ?> shared = scenario.createSingle("shared", log);
@@ -705,9 +705,9 @@ class WrapperPipelineTest {
             BaseWrapper<?, ?, ?, ?> outerB = scenario.wrapAround("B", shared, log);
 
             // Then
-            assertThat(outerA.chainId())
-                    .isEqualTo(outerB.chainId())
-                    .isEqualTo(shared.chainId());
+            assertThat(outerA.stackId())
+                    .isEqualTo(outerB.stackId())
+                    .isEqualTo(shared.stackId());
         }
     }
 
@@ -854,8 +854,8 @@ class WrapperPipelineTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.core.pipeline.WrapperPipelineTest#allWrapperTypes")
-        @DisplayName("should render a single layer hierarchy with chain id and layer name")
-        void should_render_a_single_layer_hierarchy_with_chain_id_and_layer_name(WrapperScenario scenario) {
+        @DisplayName("should render a single layer hierarchy with stack id and layer name")
+        void should_render_a_single_layer_hierarchy_with_stack_id_and_layer_name(WrapperScenario scenario) {
             // Given
             ExecutionLog log = new ExecutionLog();
             BaseWrapper<?, ?, ?, ?> wrapper = scenario.createSingle("my-layer", log);
@@ -865,8 +865,8 @@ class WrapperPipelineTest {
 
             // Then
             assertThat(hierarchy)
-                    .startsWith("Chain-ID: ")
-                    .contains(Long.toString(wrapper.chainId()))
+                    .startsWith("Stack-ID: ")
+                    .contains(Long.toString(wrapper.stackId()))
                     .contains("my-layer");
         }
 

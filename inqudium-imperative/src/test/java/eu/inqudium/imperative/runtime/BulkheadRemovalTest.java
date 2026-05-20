@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class BulkheadRemovalTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     private static final ComponentKey INVENTORY_KEY =
             new ComponentKey("inventory", SyncTag.INSTANCE);

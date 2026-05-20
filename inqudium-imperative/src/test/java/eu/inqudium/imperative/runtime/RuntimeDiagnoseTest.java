@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RuntimeDiagnoseTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     @Nested
     @DisplayName("MULTIPLE_BULKHEADS_NO_AGGREGATE_LIMIT canary rule")

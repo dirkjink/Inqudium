@@ -19,10 +19,10 @@ public interface AsyncLayerTerminal<A, R> {
     /**
      * Executes this layer and propagates to the next.
      *
-     * @param chainId  identifies the wrapper chain
+     * @param stackId  identifies the wrapper chain
      * @param callId   identifies this particular invocation
      * @param argument the argument flowing through the chain
      * @return a CompletionStage that completes with the result of the innermost delegate
      */
-    CompletionStage<R> executeAsync(long chainId, long callId, A argument);
+    CompletionStage<R> executeAsync(long stackId, long callId, A argument);
 }

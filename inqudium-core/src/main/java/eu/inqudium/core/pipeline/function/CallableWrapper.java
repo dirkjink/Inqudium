@@ -79,7 +79,7 @@ public class CallableWrapper<V>
      * @return a terminal {@link LayerTerminal} with checked-exception wrapping
      */
     private static <V> LayerTerminal<Void, V> coreFor(Callable<V> delegate) {
-        return (chainId, callId, arg) -> {
+        return (stackId, callId, arg) -> {
             try {
                 return delegate.call();
             } catch (Throwable t) {

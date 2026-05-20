@@ -1,11 +1,11 @@
 # Chain-id allocation across stack-construction mechanisms — analysis report
 
-> **Resolution note (post-audit).** Path (f) — the third chainId-allocation
+> **Resolution note (post-audit).** Path (f) — the third stackId-allocation
 > surface fed by `PipelineIds.nextStandaloneCallId()` and consumed by
 > `InqExecutor.executeXxx` / `InqAsyncExecutor.executeXxx` — has been
 > removed. The `InqExecutor` and `InqAsyncExecutor` interfaces, all five
 > default methods on each, and the `STANDALONE_CALL_ID_COUNTER` field
-> behind `nextStandaloneCallId()` are deleted. The remaining chainId
+> behind `nextStandaloneCallId()` are deleted. The remaining stackId
 > allocation surfaces in this report — paths (a) through (e) — are
 > unchanged. The body below is preserved as the audit's original record;
 > file paths and line numbers in section (f) refer to deleted code.
@@ -42,35 +42,35 @@ Adjacent surfaces examined and rejected as separate stack mechanisms:
 
 ## Question 3 — Chain-id allocation point per mechanism
 
-**Source.** `PipelineIds.nextChainId()` is defined once at `inqudium-core/src/main/java/eu/inqudium/core/pipeline/PipelineIds.java:92`. It is the only chainId source. It is invoked from these call sites in main code (verified by grep over `*.java`, excluding `/target/` and `/test/`):
+**Source.** `PipelineIds.nextStackId()` is defined once at `inqudium-core/src/main/java/eu/inqudium/core/pipeline/PipelineIds.java:92`. It is the only stackId source. It is invoked from these call sites in main code (verified by grep over `*.java`, excluding `/target/` and `/test/`):
 
 - `inqudium-core/.../AbstractBaseWrapper.java:108`
 - `inqudium-core/.../ResolvedPipelineState.java:83`
 - `inqudium-core/.../InqExecutor.java:62, 86, 113, 144, 171`
 - `inqudium-imperative/.../InqAsyncExecutor.java:42, 58, 74, 104, 120`
 
-There is no other chainId-producing primitive — no second counter, no `UUID`-based path, no separate Spring or AspectJ allocator.
+There is no other stackId-producing primitive — no second counter, no `UUID`-based path, no separate Spring or AspectJ allocator.
 
 ### (a) Nested wrapper decoration (`decorateXxx`)
 
-- **Allocated at:** `AbstractBaseWrapper.java:108`, in the wrapper constructor's `else` branch when the delegate is *not* already an `AbstractBaseWrapper`. If the delegate is a wrapper, the chainId is *inherited* (`AbstractBaseWrapper.java:101`).
-- **Holder:** `AbstractBaseWrapper.chainId` field, exposed via `Wrapper.chainId()`.
-- **Lifetime:** per construction of the *innermost* wrapper, then shared up the entire nested chain. A `decorateFunction(...)` called once produces one chainId; repeated re-decoration of the same delegate would produce a new chainId only on the innermost call.
-- **Public exposure:** Yes, `Wrapper.chainId()` on every wrapper in the chain returns the same value.
+- **Allocated at:** `AbstractBaseWrapper.java:108`, in the wrapper constructor's `else` branch when the delegate is *not* already an `AbstractBaseWrapper`. If the delegate is a wrapper, the stackId is *inherited* (`AbstractBaseWrapper.java:101`).
+- **Holder:** `AbstractBaseWrapper.stackId` field, exposed via `Wrapper.stackId()`.
+- **Lifetime:** per construction of the *innermost* wrapper, then shared up the entire nested chain. A `decorateFunction(...)` called once produces one stackId; repeated re-decoration of the same delegate would produce a new stackId only on the innermost call.
+- **Public exposure:** Yes, `Wrapper.stackId()` on every wrapper in the chain returns the same value.
 
 ### (b) `InqPipeline` + terminals (`SyncPipelineTerminal`, `HybridAspectPipelineTerminal`, `AsyncPipelineTerminal`)
 
 - **Allocated at:** `ResolvedPipelineState.java:83`, inside `ResolvedPipelineState.create(layerNames)`, called once per terminal construction.
-- **Holder:** `ResolvedPipelineState.chainId` field (line 61), held by the terminal instance.
-- **Lifetime:** per-terminal instance. All invocations through the same terminal share one chainId.
-- **Public exposure:** Yes, via `ResolvedPipelineState.chainId()` (line 106) and any terminal-level accessor that exposes the resolved state.
+- **Holder:** `ResolvedPipelineState.stackId` field (line 61), held by the terminal instance.
+- **Lifetime:** per-terminal instance. All invocations through the same terminal share one stackId.
+- **Public exposure:** Yes, via `ResolvedPipelineState.stackId()` (line 106) and any terminal-level accessor that exposes the resolved state.
 
 ### (c) `InqProxyFactory.of(InqPipeline)` and `InqAsyncProxyFactory.of(InqPipeline)`
 
 - **Allocated at:** `AbstractBaseWrapper.java:108`, when the proxy instance is constructed by `ProxyWrapper.createProxy(serviceInterface, target, name, extension)` (`InqProxyFactory.java:94, 161`). The proxy itself implements `Wrapper` and inherits the `AbstractBaseWrapper` constructor logic.
-- **Holder:** the proxy instance's `chainId` field; exposed via `Wrapper.chainId()` on the proxy.
-- **Lifetime:** per-proxy instance. All method invocations on a given proxy go through `ProxyWrapper.java:265` which reads `chainId()` from the proxy itself and forwards to `extension.dispatch(chainId, callId, ...)`. Stacking proxies via `protect(...)` of an already-proxied target inherits the inner chainId via the same `AbstractBaseWrapper` constructor path.
-- **Public exposure:** Yes, via `Wrapper.chainId()` on the proxy.
+- **Holder:** the proxy instance's `stackId` field; exposed via `Wrapper.stackId()` on the proxy.
+- **Lifetime:** per-proxy instance. All method invocations on a given proxy go through `ProxyWrapper.java:265` which reads `stackId()` from the proxy itself and forwards to `extension.dispatch(stackId, callId, ...)`. Stacking proxies via `protect(...)` of an already-proxied target inherits the inner stackId via the same `AbstractBaseWrapper` constructor path.
+- **Public exposure:** Yes, via `Wrapper.stackId()` on the proxy.
 
 ### (d) `HybridAspectPipelineTerminal.of(InqPipeline)`
 
@@ -78,27 +78,27 @@ Same as (b) — uses `ResolvedPipelineState.create(...)`. ChainId is allocated o
 
 ### (e) `InqShieldAspect` (Spring AOP)
 
-- **Allocated at:** `AbstractBaseWrapper.java:108`, reached by the chain factory invocation in `InqShieldAspect.java:223` (sync path: `cached.syncFactory().apply(terminal).proceed()`) or `:217` (async path). The factory (`buildSyncChainFactory` at `:359-366`) folds each pipeline element via `element.decorateJoinPoint(accFn.apply(executor))`; the innermost `JoinPointWrapper` triggers fresh chainId allocation in the `AbstractBaseWrapper` constructor, and outer layers inherit it.
+- **Allocated at:** `AbstractBaseWrapper.java:108`, reached by the chain factory invocation in `InqShieldAspect.java:223` (sync path: `cached.syncFactory().apply(terminal).proceed()`) or `:217` (async path). The factory (`buildSyncChainFactory` at `:359-366`) folds each pipeline element via `element.decorateJoinPoint(accFn.apply(executor))`; the innermost `JoinPointWrapper` triggers fresh stackId allocation in the `AbstractBaseWrapper` constructor, and outer layers inherit it.
 - **Holder:** the freshly built `JoinPointWrapper` chain — discarded after the invocation completes.
-- **Lifetime:** **per invocation**. The `ResolvedShieldPipeline` cached per `Method` (in `InqShieldAspect.cache`, line 126) holds the `InqPipeline` and the chain factory `Function`, but no chainId; the chainId is allocated each time `factory.apply(terminal)` materialises a new wrapper chain.
-- **Public exposure:** Not via the cache. `ResolvedShieldPipeline` has no `chainId()` accessor (verified by the field list at lines 59-65 and by the absence of any `chainId` mention in the file). Each invocation's chainId only surfaces externally if observed mid-execution by the layers themselves (e.g. through the `LayerAction.execute(chainId, callId, …)` parameters).
+- **Lifetime:** **per invocation**. The `ResolvedShieldPipeline` cached per `Method` (in `InqShieldAspect.cache`, line 126) holds the `InqPipeline` and the chain factory `Function`, but no stackId; the stackId is allocated each time `factory.apply(terminal)` materialises a new wrapper chain.
+- **Public exposure:** Not via the cache. `ResolvedShieldPipeline` has no `stackId()` accessor (verified by the field list at lines 59-65 and by the absence of any `stackId` mention in the file). Each invocation's stackId only surfaces externally if observed mid-execution by the layers themselves (e.g. through the `LayerAction.execute(stackId, callId, …)` parameters).
 
 **Verifying the `ResolvedShieldPipeline` Javadoc claim** (`ResolvedShieldPipeline.java:27-32`):
 
-> "The Spring aspect's hot path produces a fresh `JoinPointWrapper` chain per invocation (with its own chain identifier from `PipelineIds`); there is no stable per-method chain identifier in the cache."
+> "The Spring aspect's hot path produces a fresh `JoinPointWrapper` chain per invocation (with its own stack identifier from `PipelineIds`); there is no stable per-method stack identifier in the cache."
 
-**Confirmed.** The per-invocation allocation site is `AbstractBaseWrapper.java:108`, reached via `InqShieldAspect.java:223` (sync) and `:217` (async), through the `decorateJoinPoint` fold defined at `:363-365`. The cache (`InqShieldAspect.cache`, line 126) holds only the immutable `InqPipeline` and chain-factory `Function`; neither carries a chainId. `ResolvedShieldPipeline` has no `chainId()` method.
+**Confirmed.** The per-invocation allocation site is `AbstractBaseWrapper.java:108`, reached via `InqShieldAspect.java:223` (sync) and `:217` (async), through the `decorateJoinPoint` fold defined at `:363-365`. The cache (`InqShieldAspect.cache`, line 126) holds only the immutable `InqPipeline` and chain-factory `Function`; neither carries a stackId. `ResolvedShieldPipeline` has no `stackId()` method.
 
 ### (f) `InqExecutor.executeXxx` and `InqAsyncExecutor.executeXxx`
 
-Not requested by Q1 as a stack mechanism, but listed here because it is a separate chainId-allocation surface that any element implementing `InqExecutor` (or wrapper composed of decorators that ultimately implement it) inherits.
+Not requested by Q1 as a stack mechanism, but listed here because it is a separate stackId-allocation surface that any element implementing `InqExecutor` (or wrapper composed of decorators that ultimately implement it) inherits.
 
 - **Allocated at:** `InqExecutor.java:62, 86, 113, 144, 171` and `InqAsyncExecutor.java:42, 58, 74, 104, 120`.
-- **Holder:** none — the chainId is passed as a parameter into `LayerAction.execute(...)` and dies with the call.
+- **Holder:** none — the stackId is passed as a parameter into `LayerAction.execute(...)` and dies with the call.
 - **Lifetime:** per `executeXxx` call.
-- **Public exposure:** none — only flows through the layer-action `chainId` parameter.
+- **Public exposure:** none — only flows through the layer-action `stackId` parameter.
 
-Note that `executeXxx` invoked on a wrapper would allocate a *fresh* chainId at the executor level rather than reusing the wrapper's `chainId()`, because `executeXxx` is a default method on the `InqExecutor`/`LayerAction` interface and ignores wrapper state.
+Note that `executeXxx` invoked on a wrapper would allocate a *fresh* stackId at the executor level rather than reusing the wrapper's `stackId()`, because `executeXxx` is a default method on the `InqExecutor`/`LayerAction` interface and ignores wrapper state.
 
 ## Question 4 — Does a unifying "Stack" type exist?
 
@@ -106,9 +106,9 @@ Note that `executeXxx` invoked on a wrapper would allocate a *fresh* chainId at 
 
 **Evidence:**
 
-- **`InqPipeline`** (`inqudium-core/src/main/java/eu/inqudium/core/pipeline/InqPipeline.java`) is a passive, immutable composition value object: an ordered list of `InqElement`s plus a `chain(seed, fold)` fold combinator (`InqPipeline.java:192-200`). It does *not* implement `Wrapper`, does *not* implement `LayerAction`, has no `chainId()`, and is never produced by `decorateXxx`.
+- **`InqPipeline`** (`inqudium-core/src/main/java/eu/inqudium/core/pipeline/InqPipeline.java`) is a passive, immutable composition value object: an ordered list of `InqElement`s plus a `chain(seed, fold)` fold combinator (`InqPipeline.java:192-200`). It does *not* implement `Wrapper`, does *not* implement `LayerAction`, has no `stackId()`, and is never produced by `decorateXxx`.
 
-- **`Wrapper<S>`** (`inqudium-core/src/main/java/eu/inqudium/core/pipeline/Wrapper.java`) is the type produced by `decorateXxx` (concrete subclasses `FunctionWrapper`, `SupplierWrapper`, `CallableWrapper`, `RunnableWrapper`, `JoinPointWrapper`, plus the proxy via `AbstractProxyWrapper`). It exposes `chainId()`, `inner()`, `toStringHierarchy()`. It is never produced by `InqPipeline.builder()`.
+- **`Wrapper<S>`** (`inqudium-core/src/main/java/eu/inqudium/core/pipeline/Wrapper.java`) is the type produced by `decorateXxx` (concrete subclasses `FunctionWrapper`, `SupplierWrapper`, `CallableWrapper`, `RunnableWrapper`, `JoinPointWrapper`, plus the proxy via `AbstractProxyWrapper`). It exposes `stackId()`, `inner()`, `toStringHierarchy()`. It is never produced by `InqPipeline.builder()`.
 
 - **No common supertype with stack semantics.** `InqDecorator` (the element type) extends `LayerAction` and does not abstract over "the whole stack" — only "one layer." `LayerAction` is a layer-level around-advice contract, not a stack representation.
 

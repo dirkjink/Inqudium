@@ -187,13 +187,13 @@ class name misleads readers about the dispatch model.
 
 **The drift:** After the proxy-consolidation refactor (PR series ending in
 PR #49), every proxy produced by the JDK-dynamic-proxy machinery is
-`Wrapper`-conforming with stable `chainId` and `layerDescription`. The
+`Wrapper`-conforming with stable `stackId` and `layerDescription`. The
 remaining divergence is between proxy-based introspection (`Wrapper`) and
 aspect-based introspection (`InqShieldAspect`'s `ResolvedPipelineState`
 from 6.B). A future refactor could harmonize the two surfaces into a
 technology-spanning API — perhaps a thin wrapper type that both
 proxy-`Wrapper` and aspect-`ResolvedPipelineState` adapt to, exposing
-`chainId` and the topology in a uniform shape.
+`stackId` and the topology in a uniform shape.
 
 **Surfaced in:** REFACTORING_PROXY_CONSOLIDATION.md, "What this refactor
 does NOT do" → "Unified introspection API".

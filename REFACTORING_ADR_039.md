@@ -678,7 +678,7 @@ sustainable pace.
 ## Completion log
 
 * [x] B.0 — Audit (no commit) (2026-05-19)
-* [ ] B.1 — chainId → stackId rename library-wide
+* [x] B.1 — chainId → stackId rename library-wide (2026-05-20)
 * [ ] B.2 — InqStackInfo sealed hierarchy + DTO migration
 * [ ] B.3 — FunctionStackAdapter implementation
 * [ ] B.4 — InqIntrospector + InqStackRenderer

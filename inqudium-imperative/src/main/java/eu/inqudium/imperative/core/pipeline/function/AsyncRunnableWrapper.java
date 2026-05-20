@@ -34,7 +34,7 @@ public class AsyncRunnableWrapper
     }
 
     private static AsyncLayerTerminal<Void, Void> coreFor(Runnable delegate) {
-        return (chainId, callId, arg) -> {
+        return (stackId, callId, arg) -> {
             delegate.run();
             return CompletableFuture.completedFuture(null);
         };

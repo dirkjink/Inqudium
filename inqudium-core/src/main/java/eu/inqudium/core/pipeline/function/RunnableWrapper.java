@@ -27,9 +27,9 @@ import eu.inqudium.core.pipeline.LayerAction;
  * <h3>Usage with explicit LayerAction</h3>
  * <pre>{@code
  * RunnableWrapper logged = new RunnableWrapper("logging", myRunnable,
- *     (chainId, callId, arg, next) -> {
- *         log.info("Before run [chain={}, call={}]", chainId, callId);
- *         next.execute(chainId, callId, arg);
+ *     (stackId, callId, arg, next) -> {
+ *         log.info("Before run [chain={}, call={}]", stackId, callId);
+ *         next.execute(stackId, callId, arg);
  *         log.info("After run");
  *         return null;
  *     });
@@ -81,7 +81,7 @@ public class RunnableWrapper
      * @return a terminal {@link LayerTerminal} that calls {@code delegate.run()}
      */
     private static LayerTerminal<Void, Void> coreFor(Runnable delegate) {
-        return (chainId, callId, arg) -> {
+        return (stackId, callId, arg) -> {
             delegate.run();
             return null; // Void return type — no value to propagate back
         };

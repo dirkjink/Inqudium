@@ -106,9 +106,9 @@ class ImperativeLifecyclePhasedComponentTest {
         class TestHotPhase implements ImperativePhase<String, String>, HotPhaseMarker {
             @Override
             public String execute(
-                    long chainId, long callId, String argument,
+                    long stackId, long callId, String argument,
                     LayerTerminal<String, String> next) {
-                return next.execute(chainId, callId, argument);
+                return next.execute(stackId, callId, argument);
             }
         }
 
@@ -123,7 +123,7 @@ class ImperativeLifecyclePhasedComponentTest {
     }
 
     private static <A> LayerTerminal<A, A> identityExecutor() {
-        return (chainId, callId, argument) -> argument;
+        return (stackId, callId, argument) -> argument;
     }
 
     private static InqEventPublisher isolatedPublisher() {
@@ -516,7 +516,7 @@ class ImperativeLifecyclePhasedComponentTest {
             // Given
             TestComponent component = new TestComponent(publisher, false, null);
             AtomicReference<String> seenArgument = new AtomicReference<>();
-            LayerTerminal<String, String> next = (chainId, callId, arg) -> {
+            LayerTerminal<String, String> next = (stackId, callId, arg) -> {
                 seenArgument.set(arg);
                 return arg.toUpperCase();
             };
@@ -534,8 +534,8 @@ class ImperativeLifecyclePhasedComponentTest {
             // Given
             TestComponent component = new TestComponent(publisher, false, null);
             AtomicReference<long[]> seenIds = new AtomicReference<>();
-            LayerTerminal<String, String> next = (chainId, callId, arg) -> {
-                seenIds.set(new long[]{chainId, callId});
+            LayerTerminal<String, String> next = (stackId, callId, arg) -> {
+                seenIds.set(new long[]{stackId, callId});
                 return arg;
             };
 
@@ -597,9 +597,9 @@ class ImperativeLifecyclePhasedComponentTest {
             class Hot implements ImperativePhase<String, String>, HotPhaseMarker {
                 @Override
                 public String execute(
-                        long chainId, long callId, String argument,
+                        long stackId, long callId, String argument,
                         LayerTerminal<String, String> next) {
-                    return next.execute(chainId, callId, argument);
+                    return next.execute(stackId, callId, argument);
                 }
             }
             return new Hot();

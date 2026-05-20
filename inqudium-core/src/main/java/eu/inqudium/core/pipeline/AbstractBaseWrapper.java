@@ -10,16 +10,16 @@ import java.util.function.LongSupplier;
  *
  * <p>This abstract class holds the immutable chain structure that all wrapper
  * layers share: the delegate reference, the human-readable layer name, the
- * chain ID, and the per-chain call-ID source. Subclasses only need to wire
+ * stack ID, and the per-chain call-ID source. Subclasses only need to wire
  * the execution strategy (sync via {@link BaseWrapper}, or async in the
  * corresponding async module).</p>
  *
- * <h3>Chain ID inheritance</h3>
+ * <h3>Stack ID inheritance</h3>
  * <p>When wrapping another {@code AbstractBaseWrapper}, the outer layer inherits
- * the inner layer's chain ID and call-ID source, ensuring that all layers in
+ * the inner layer's stack ID and call-ID source, ensuring that all layers in
  * the same stack share identical IDs. When wrapping a plain delegate (not a
- * wrapper), a new chain is started with a fresh chain ID from
- * {@link PipelineIds#nextChainId()} and a fresh call-ID source from
+ * wrapper), a new chain is started with a fresh stack ID from
+ * {@link PipelineIds#nextStackId()} and a fresh call-ID source from
  * {@link PipelineIds#newInstanceCallIdSource()}.</p>
  *
  * <h3>Call ID generation</h3>
@@ -50,10 +50,10 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
 
     /**
      * Unique identifier for this wrapper chain. All layers wrapping the same
-     * core delegate share the same chain ID. Generated from
-     * {@link PipelineIds#nextChainId()} when a new chain is started.
+     * core delegate share the same stack ID. Generated from
+     * {@link PipelineIds#nextStackId()} when a new chain is started.
      */
-    private final long chainId;
+    private final long stackId;
 
     /**
      * Per-chain call-ID source. All layers in the same chain reference the
@@ -73,10 +73,10 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
      *       (fail-fast to prevent obscure errors later in the chain).</li>
      *   <li>Determines whether this is a new chain or an extension of an existing one:
      *       <ul>
-     *         <li>If the delegate is itself an {@code AbstractBaseWrapper}, the chain ID
+     *         <li>If the delegate is itself an {@code AbstractBaseWrapper}, the stack ID
      *             and call-ID source are <em>inherited</em> from the inner wrapper.</li>
-     *         <li>Otherwise, a new chain ID is generated from
-     *             {@link PipelineIds#nextChainId()} and a fresh call-ID source is
+     *         <li>Otherwise, a new stack ID is generated from
+     *             {@link PipelineIds#nextStackId()} and a fresh call-ID source is
      *             obtained from {@link PipelineIds#newInstanceCallIdSource()}.</li>
      *       </ul>
      *   </li>
@@ -95,16 +95,16 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
 
         // Chain structure inheritance: if the delegate is already a wrapper,
         // join its chain rather than starting a new one. This ensures that
-        // chainId() and generateCallId() are consistent across all layers.
+        // stackId() and generateCallId() are consistent across all layers.
         if (delegate instanceof AbstractBaseWrapper<?, ?> innerWrapper) {
-            this.chainId = innerWrapper.chainId();
+            this.stackId = innerWrapper.stackId();
             this.callIdSource = innerWrapper.callIdSource;
         } else {
-            // New chain: allocate a globally unique chain ID and a fresh
+            // New chain: allocate a globally unique stack ID and a fresh
             // instance-local call-ID source. The source is a LongSupplier
             // whose backing AtomicLong is private to this chain — no cross-
             // chain contention.
-            this.chainId = PipelineIds.nextChainId();
+            this.stackId = PipelineIds.nextStackId();
             this.callIdSource = PipelineIds.newInstanceCallIdSource();
         }
     }
@@ -163,12 +163,12 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
     }
 
     /**
-     * Returns the chain ID shared by all wrapper layers in this chain.
+     * Returns the stack ID shared by all wrapper layers in this chain.
      *
-     * @return the chain ID
+     * @return the stack ID
      */
-    public long chainId() {
-        return chainId;
+    public long stackId() {
+        return stackId;
     }
 
     /**
@@ -208,10 +208,10 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
      * Renders the entire wrapper hierarchy as a formatted tree string,
      * starting from this layer and traversing inward via {@link #inner()}.
      *
-     * <p>The output includes the chain ID as a header, followed by each layer's
+     * <p>The output includes the stack ID as a header, followed by each layer's
      * description indented with tree-drawing characters. Example output:</p>
      * <pre>
-     * Chain-ID: 42
+     * Stack-ID: 42
      * auth
      *   └── timing
      *     └── logging
@@ -227,8 +227,8 @@ public abstract class AbstractBaseWrapper<T, S extends AbstractBaseWrapper<T, S>
         int maxDepth = 100;
         StringBuilder sb = new StringBuilder();
 
-        sb.append("Chain-ID: ")
-                .append(chainId())
+        sb.append("Stack-ID: ")
+                .append(stackId())
                 .append("\n");
 
         AbstractBaseWrapper<?, ?> current = this;

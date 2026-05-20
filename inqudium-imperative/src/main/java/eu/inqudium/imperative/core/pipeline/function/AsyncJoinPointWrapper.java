@@ -36,7 +36,7 @@ public class AsyncJoinPointWrapper<R>
     }
 
     private static <R> AsyncLayerTerminal<Void, R> coreFor(JoinPointExecutor<CompletionStage<R>> delegate) {
-        return (chainId, callId, arg) -> {
+        return (stackId, callId, arg) -> {
             try {
                 return delegate.proceed();
             } catch (RuntimeException | Error e) {

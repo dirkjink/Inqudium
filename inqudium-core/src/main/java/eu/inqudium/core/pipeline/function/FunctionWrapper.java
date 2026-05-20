@@ -66,7 +66,7 @@ public class FunctionWrapper<I, O>
      * @return a terminal {@link LayerTerminal} that calls {@code delegate.apply(input)}
      */
     private static <I, O> LayerTerminal<I, O> coreFor(Function<I, O> delegate) {
-        return (chainId, callId, input) -> delegate.apply(input);
+        return (stackId, callId, input) -> delegate.apply(input);
     }
 
     /**

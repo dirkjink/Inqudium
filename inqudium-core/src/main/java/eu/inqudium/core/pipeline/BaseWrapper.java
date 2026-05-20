@@ -50,7 +50,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
     private final LayerTerminal<A, R> nextStep;
 
     /**
-     * The around-advice for this layer. Receives the chain ID, call ID, argument,
+     * The around-advice for this layer. Receives the stack ID, call ID, argument,
      * and {@link #nextStep} reference, and decides how to proceed.
      */
     private final LayerAction<A, R> layerAction;
@@ -126,7 +126,7 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
      * @return the result produced by the chain
      */
     protected R initiateChain(A argument) {
-        return this.execute(chainId(), generateCallId(), argument);
+        return this.execute(stackId(), generateCallId(), argument);
     }
 
     /**
@@ -137,13 +137,13 @@ public abstract class BaseWrapper<T, A, R, S extends BaseWrapper<T, A, R, S>>
      * and the internal dispatch mechanism. The {@code layerAction} receives
      * {@link #nextStep} and decides when/whether to invoke it.</p>
      *
-     * @param chainId  the chain identifier (passed through unchanged)
+     * @param stackId  the stack identifier (passed through unchanged)
      * @param callId   the call identifier (passed through unchanged)
      * @param argument the argument flowing through the chain
      * @return the result produced by this layer or propagated from inner layers
      */
     @Override
-    public R execute(long chainId, long callId, A argument) {
-        return layerAction.execute(chainId, callId, argument, nextStep);
+    public R execute(long stackId, long callId, A argument) {
+        return layerAction.execute(stackId, callId, argument, nextStep);
     }
 }

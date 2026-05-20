@@ -85,9 +85,9 @@ class EndToEndPipelineProtectTest {
         }
 
         @Override
-        public CompletionStage<Object> executeAsync(long chainId, long callId, Object argument,
+        public CompletionStage<Object> executeAsync(long stackId, long callId, Object argument,
                                                     AsyncLayerTerminal<Object, Object> next) {
-            return next.executeAsync(chainId, callId, argument);
+            return next.executeAsync(stackId, callId, argument);
         }
     }
 
@@ -115,9 +115,9 @@ class EndToEndPipelineProtectTest {
         }
 
         @Override
-        public Object execute(long chainId, long callId, Object argument,
+        public Object execute(long stackId, long callId, Object argument,
                               LayerTerminal<Object, Object> next) {
-            return next.execute(chainId, callId, argument);
+            return next.execute(stackId, callId, argument);
         }
     }
 

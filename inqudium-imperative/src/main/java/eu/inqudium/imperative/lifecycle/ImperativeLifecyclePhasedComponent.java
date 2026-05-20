@@ -245,19 +245,19 @@ public abstract class ImperativeLifecyclePhasedComponent<S extends ComponentSnap
      * winning candidate, and then delegates to the (now-installed) hot phase's execute. Hot path:
      * the hot phase's execute runs directly without any lifecycle check.
      *
-     * @param chainId  the chain identifier of the call.
+     * @param stackId  the stack identifier of the call.
      * @param callId   the call identifier.
      * @param argument the argument flowing through the chain.
      * @param next     the next executor in the chain.
      * @return the value produced by the chain after passing through this component.
      */
     public final R execute(
-            long chainId, long callId, A argument, LayerTerminal<A, R> next) {
+            long stackId, long callId, A argument, LayerTerminal<A, R> next) {
         ImperativePhase<A, R> current = phase.get();
         if (current instanceof RemovedPhase) {
             throw new ComponentRemovedException(name, elementType);
         }
-        return current.execute(chainId, callId, argument, next);
+        return current.execute(stackId, callId, argument, next);
     }
 
     /**
@@ -280,7 +280,7 @@ public abstract class ImperativeLifecyclePhasedComponent<S extends ComponentSnap
      * error is therefore visible before any async work begins. Failures of the downstream stage
      * surface through that stage's exceptional completion.
      *
-     * @param chainId  the chain identifier of the call.
+     * @param stackId  the stack identifier of the call.
      * @param callId   the call identifier.
      * @param argument the argument flowing through the chain.
      * @param next     the next async executor in the chain.
@@ -293,7 +293,7 @@ public abstract class ImperativeLifecyclePhasedComponent<S extends ComponentSnap
      *         the async pipeline contract.
      */
     public final CompletionStage<R> executeAsync(
-            long chainId, long callId, A argument, AsyncLayerTerminal<A, R> next) {
+            long stackId, long callId, A argument, AsyncLayerTerminal<A, R> next) {
         ImperativePhase<A, R> current = phase.get();
         if (current instanceof RemovedPhase) {
             throw new ComponentRemovedException(name, elementType);
@@ -301,7 +301,7 @@ public abstract class ImperativeLifecyclePhasedComponent<S extends ComponentSnap
         if (current instanceof AsyncImperativePhase<?, ?> async) {
             @SuppressWarnings("unchecked")
             AsyncImperativePhase<A, R> typed = (AsyncImperativePhase<A, R>) async;
-            return typed.executeAsync(chainId, callId, argument, next);
+            return typed.executeAsync(stackId, callId, argument, next);
         }
         throw new UnsupportedOperationException(
                 "Hot phase " + current.getClass().getName() + " for component '" + name
@@ -365,20 +365,20 @@ public abstract class ImperativeLifecyclePhasedComponent<S extends ComponentSnap
 
         @Override
         public R execute(
-                long chainId, long callId, A argument, LayerTerminal<A, R> next) {
-            transitionToHot(chainId, callId);
-            return phase.get().execute(chainId, callId, argument, next);
+                long stackId, long callId, A argument, LayerTerminal<A, R> next) {
+            transitionToHot(stackId, callId);
+            return phase.get().execute(stackId, callId, argument, next);
         }
 
         @Override
         public CompletionStage<R> executeAsync(
-                long chainId, long callId, A argument, AsyncLayerTerminal<A, R> next) {
-            transitionToHot(chainId, callId);
+                long stackId, long callId, A argument, AsyncLayerTerminal<A, R> next) {
+            transitionToHot(stackId, callId);
             ImperativePhase<A, R> current = phase.get();
             if (current instanceof AsyncImperativePhase<?, ?> async) {
                 @SuppressWarnings("unchecked")
                 AsyncImperativePhase<A, R> typed = (AsyncImperativePhase<A, R>) async;
-                return typed.executeAsync(chainId, callId, argument, next);
+                return typed.executeAsync(stackId, callId, argument, next);
             }
             throw new UnsupportedOperationException(
                     "Hot phase " + current.getClass().getName() + " for component '" + name
@@ -392,11 +392,11 @@ public abstract class ImperativeLifecyclePhasedComponent<S extends ComponentSnap
          * on the winning candidate. Losing candidates are discarded; the next read of
          * {@code phase} sees whichever candidate won the CAS.
          */
-        private void transitionToHot(long chainId, long callId) {
+        private void transitionToHot(long stackId, long callId) {
             ImperativePhase<A, R> hot = createHotPhase();
             if (phase.compareAndSet(this, hot)) {
                 eventPublisher.publish(new ComponentBecameHotEvent(
-                        chainId, callId, name, elementType, clock.instant()));
+                        stackId, callId, name, elementType, clock.instant()));
                 if (hot instanceof PostCommitInitializable post) {
                     post.afterCommit(live);
                 }
@@ -430,7 +430,7 @@ public abstract class ImperativeLifecyclePhasedComponent<S extends ComponentSnap
 
         @Override
         public R execute(
-                long chainId, long callId, A argument, LayerTerminal<A, R> next) {
+                long stackId, long callId, A argument, LayerTerminal<A, R> next) {
             throw new ComponentRemovedException(componentName, componentElementType);
         }
     }

@@ -327,7 +327,7 @@ class RuntimeUpdateTest {
                 InqBulkhead<String, String> bh =
                         runtime.sync().bulkhead("inventory").target();
                 LayerTerminal<String, String> identity =
-                        (chainId, callId, argument) -> argument;
+                        (stackId, callId, argument) -> argument;
                 bh.execute(1L, 1L, "warm", identity);
                 assertThat(bh.lifecycleState()).isEqualTo(LifecycleState.HOT);
 
@@ -371,7 +371,7 @@ class RuntimeUpdateTest {
                 InqBulkhead<String, String> bhB =
                         runtime.sync().bulkhead("b").target();
                 LayerTerminal<String, String> identity =
-                        (chainId, callId, argument) -> argument;
+                        (stackId, callId, argument) -> argument;
                 bhA.execute(1L, 1L, "warm", identity);
                 bhB.execute(1L, 1L, "warm", identity);
                 assertThat(bhA.lifecycleState()).isEqualTo(LifecycleState.HOT);
@@ -426,7 +426,7 @@ class RuntimeUpdateTest {
                 InqBulkhead<String, String> bh =
                         runtime.sync().bulkhead("inventory").target();
                 LayerTerminal<String, String> identity =
-                        (chainId, callId, argument) -> argument;
+                        (stackId, callId, argument) -> argument;
                 bh.execute(1L, 1L, "warm", identity);
                 assertThat(bh.lifecycleState()).isEqualTo(LifecycleState.HOT);
 

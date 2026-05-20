@@ -67,11 +67,11 @@ class BulkheadRollbackTest {
     }
 
     private static <A> LayerTerminal<A, A> identity() {
-        return (chainId, callId, arg) -> arg;
+        return (stackId, callId, arg) -> arg;
     }
 
     private static <A> LayerTerminal<A, A> trackingIdentity(AtomicInteger calls) {
-        return (chainId, callId, arg) -> {
+        return (stackId, callId, arg) -> {
             calls.incrementAndGet();
             return arg;
         };

@@ -61,7 +61,7 @@ class InqBulkheadTest {
     }
 
     private static <A> LayerTerminal<A, A> identityExecutor() {
-        return (chainId, callId, argument) -> argument;
+        return (stackId, callId, argument) -> argument;
     }
 
     private InqBulkhead<String, String> newBulkhead(LiveContainer<BulkheadSnapshot> live) {
@@ -242,7 +242,7 @@ class InqBulkheadTest {
                     new LiveContainer<>(snapshot("x", 3, Duration.ofMillis(100)));
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
             AtomicReference<Integer> midFlightPermits = new AtomicReference<>();
-            LayerTerminal<String, String> next = (chainId, callId, arg) -> {
+            LayerTerminal<String, String> next = (stackId, callId, arg) -> {
                 midFlightPermits.set(bulkhead.availablePermits());
                 return arg.toUpperCase();
             };
@@ -272,7 +272,7 @@ class InqBulkheadTest {
             LiveContainer<BulkheadSnapshot> live =
                     new LiveContainer<>(snapshot("x", 2, Duration.ofMillis(100)));
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
-            LayerTerminal<String, String> next = (chainId, callId, arg) -> {
+            LayerTerminal<String, String> next = (stackId, callId, arg) -> {
                 throw new RuntimeException("downstream failure");
             };
 
@@ -300,7 +300,7 @@ class InqBulkheadTest {
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
             CountDownLatch holdPermit = new CountDownLatch(1);
             CountDownLatch firstAcquired = new CountDownLatch(1);
-            LayerTerminal<String, String> blocking = (chainId, callId, arg) -> {
+            LayerTerminal<String, String> blocking = (stackId, callId, arg) -> {
                 firstAcquired.countDown();
                 try {
                     holdPermit.await(5, TimeUnit.SECONDS);
@@ -343,7 +343,7 @@ class InqBulkheadTest {
 
             AtomicReference<Integer> midFlightPermits = new AtomicReference<>();
             CompletableFuture<String> downstream = new CompletableFuture<>();
-            AsyncLayerTerminal<String, String> next = (chainId, callId, arg) -> {
+            AsyncLayerTerminal<String, String> next = (stackId, callId, arg) -> {
                 midFlightPermits.set(bulkhead.availablePermits());
                 return downstream;
             };
@@ -387,10 +387,10 @@ class InqBulkheadTest {
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
             CompletableFuture<String> hold = new CompletableFuture<>();
             CompletionStage<String> first = bulkhead.executeAsync(
-                    1L, 1L, "first", (chainId, callId, arg) -> hold);
+                    1L, 1L, "first", (stackId, callId, arg) -> hold);
             assertThat(bulkhead.concurrentCalls()).isEqualTo(1);
 
-            AsyncLayerTerminal<String, String> never = (chainId, callId, arg) -> {
+            AsyncLayerTerminal<String, String> never = (stackId, callId, arg) -> {
                 throw new AssertionError("downstream must not run on a full bulkhead");
             };
 
@@ -425,7 +425,7 @@ class InqBulkheadTest {
                     new LiveContainer<>(snapshot("inv", 2, Duration.ofMillis(100)));
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
 
-            AsyncLayerTerminal<String, String> throwingNext = (chainId, callId, arg) -> {
+            AsyncLayerTerminal<String, String> throwingNext = (stackId, callId, arg) -> {
                 throw new IllegalStateException("downstream construction failure");
             };
 
@@ -449,7 +449,7 @@ class InqBulkheadTest {
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
 
             RuntimeException downstreamFailure = new RuntimeException("downstream boom");
-            AsyncLayerTerminal<String, String> failingNext = (chainId, callId, arg) ->
+            AsyncLayerTerminal<String, String> failingNext = (stackId, callId, arg) ->
                     CompletableFuture.failedFuture(downstreamFailure);
 
             // When
@@ -469,7 +469,7 @@ class InqBulkheadTest {
                     new LiveContainer<>(snapshot("inv", 2, Duration.ofMillis(100)));
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
             CompletableFuture<String> downstream = new CompletableFuture<>();
-            AsyncLayerTerminal<String, String> next = (chainId, callId, arg) -> downstream;
+            AsyncLayerTerminal<String, String> next = (stackId, callId, arg) -> downstream;
 
             // When — call returns a stage; permit held
             CompletionStage<String> result = bulkhead.executeAsync(1L, 1L, "x", next);
@@ -503,7 +503,7 @@ class InqBulkheadTest {
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
             CompletableFuture<String> alreadyDone = CompletableFuture.completedFuture("x");
             AtomicBoolean nextWasInvoked = new AtomicBoolean(false);
-            AsyncLayerTerminal<String, String> next = (chainId, callId, arg) -> {
+            AsyncLayerTerminal<String, String> next = (stackId, callId, arg) -> {
                 nextWasInvoked.set(true);
                 return alreadyDone;
             };

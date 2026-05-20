@@ -12,13 +12,13 @@ import java.util.Optional;
  * <p><strong>Public API. Standalone record</strong> (Option-B
  * scope): does not yet implement an {@code InqStackInfo} sealed
  * interface because that interface and the full library-wide
- * introspection plumbing (including the {@code chainId → stackId}
+ * introspection plumbing (including the {@code stackId → stackId}
  * rename) are deferred to a separate refactor. The record's shape
  * matches ADR-039 exactly so future migration into the sealed
  * hierarchy needs no contract change.</p>
  *
  * @param stackId      the per-proxy stack ID allocated by
- *                     {@code PipelineIds.nextChainId()} (per ADR-034)
+ *                     {@code PipelineIds.nextStackId()} (per ADR-034)
  * @param targetType   the service interface the proxy implements;
  *                     always present for the proxy paradigm but
  *                     declared as {@link Optional} per ADR-039

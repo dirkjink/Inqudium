@@ -19,7 +19,7 @@ import java.util.Set;
  * fire this event — operational tooling sees only real configuration changes.
  *
  * <p>The {@link #touchedFields()} set lets a subscriber inspect the patch's scope without parsing
- * the {@code BuildReport} or diffing snapshots. Identity fields {@code chainId} and {@code callId}
+ * the {@code BuildReport} or diffing snapshots. Identity fields {@code stackId} and {@code callId}
  * are zero — patches are triggered by {@code runtime.update(...)}, not by an in-flight execute.
  */
 public final class RuntimeComponentPatchedEvent extends InqEvent {

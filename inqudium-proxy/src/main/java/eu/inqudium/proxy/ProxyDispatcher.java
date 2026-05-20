@@ -60,7 +60,7 @@ public final class ProxyDispatcher {
         Map<Method, MethodDispatchEntry> entries =
                 ProxyBuilder.build(pipeline, serviceInterface, target);
 
-        long stackId = PipelineIds.nextChainId();
+        long stackId = PipelineIds.nextStackId();
         LongSupplier callIdSource = PipelineIds.newInstanceCallIdSource();
 
         InqInvocationHandler handler = new InqInvocationHandler(

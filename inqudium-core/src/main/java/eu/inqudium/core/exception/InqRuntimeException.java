@@ -57,13 +57,13 @@ public class InqRuntimeException extends InqException {
      * @param enableExceptionOptimization whether suppression is enabled or disabled, and whether the stack trace
      *                                    should be writable.
      */
-    public InqRuntimeException(long chainId,
+    public InqRuntimeException(long stackId,
                                long callId,
                                String elementName,
                                InqElementType elementType,
                                Throwable cause,
                                boolean enableExceptionOptimization) {
-        super(chainId, callId,
+        super(stackId, callId,
                 (elementType != null ? elementType : InqElementType.NO_ELEMENT).errorCode(0),
                 elementName,
                 elementType != null ? elementType : InqElementType.NO_ELEMENT,

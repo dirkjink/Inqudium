@@ -9,7 +9,7 @@ import java.time.Instant;
  * Emitted exactly once per component when it transitions from {@code COLD} to {@code HOT}.
  *
  * <p>The event travels on the {@code InqRuntime}-scoped publisher (ADR-026), distinct from any
- * per-component publisher in {@code inqudium-core}. Its identity fields ({@code chainId},
+ * per-component publisher in {@code inqudium-core}. Its identity fields ({@code stackId},
  * {@code callId}) describe the call that triggered the transition; the {@code elementName} and
  * {@code elementType} identify the component itself.
  *
@@ -21,18 +21,18 @@ import java.time.Instant;
 public final class ComponentBecameHotEvent extends InqEvent {
 
     /**
-     * @param chainId       the chain identifier of the call that triggered the transition.
+     * @param stackId       the stack identifier of the call that triggered the transition.
      * @param callId        the call identifier of the call that triggered the transition.
      * @param componentName the component's name; non-null and non-blank.
      * @param elementType   the component's element type.
      * @param timestamp     the wall-clock instant of the transition; non-null.
      */
     public ComponentBecameHotEvent(
-            long chainId,
+            long stackId,
             long callId,
             String componentName,
             InqElementType elementType,
             Instant timestamp) {
-        super(chainId, callId, componentName, elementType, timestamp);
+        super(stackId, callId, componentName, elementType, timestamp);
     }
 }

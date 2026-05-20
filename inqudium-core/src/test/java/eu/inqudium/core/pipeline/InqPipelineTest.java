@@ -58,9 +58,9 @@ class InqPipelineTest {
         }
 
         @Override
-        public Object execute(long chainId, long callId, Void arg,
+        public Object execute(long stackId, long callId, Void arg,
                               LayerTerminal<Void, Object> next) {
-            return next.execute(chainId, callId, arg);
+            return next.execute(stackId, callId, arg);
         }
     }
 
@@ -95,11 +95,11 @@ class InqPipelineTest {
         }
 
         @Override
-        public Object execute(long chainId, long callId, Void arg,
+        public Object execute(long stackId, long callId, Void arg,
                               LayerTerminal<Void, Object> next) {
             trace.add(name + ":enter");
             try {
-                return next.execute(chainId, callId, arg);
+                return next.execute(stackId, callId, arg);
             } finally {
                 trace.add(name + ":exit");
             }

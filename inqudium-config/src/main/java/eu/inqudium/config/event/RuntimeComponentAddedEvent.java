@@ -13,7 +13,7 @@ import java.time.Instant;
  * inserted into its paradigm container's map. A name that already existed in the runtime triggers
  * a patch — and a {@code RuntimeComponentPatchedEvent} — instead.
  *
- * <p>Identity fields {@code chainId} and {@code callId} are zero — adds are triggered by
+ * <p>Identity fields {@code stackId} and {@code callId} are zero — adds are triggered by
  * {@code runtime.update(...)}, not by an in-flight execute. The {@code elementName} and
  * {@code elementType} identify the newly added component.
  */

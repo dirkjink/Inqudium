@@ -155,7 +155,7 @@ class FinalWrapperHierarchyTest {
 
             // Then
             // Expected format:
-            // Line 0: Chain-ID: ...
+            // Line 0: Stack-ID: ...
             // Line 1: <Name>-Root (Without └──)
             // Line 2:   └── <Name>-Inner
             assertThat(lines[1])
@@ -171,17 +171,17 @@ class FinalWrapperHierarchyTest {
 
         @ParameterizedTest(name = "Testing identity for {0}")
         @MethodSource("eu.inqudium.core.pipeline.FinalWrapperHierarchyTest#wrapperProvider")
-        @DisplayName("The Chain-ID must be stable and shared between layers")
+        @DisplayName("The Stack-ID must be stable and shared between layers")
         void chainIdMustBeStable(WrapperTestBridge bridge) {
             // Given
             BaseWrapper<?, ?, ?, ?> root = bridge.getWrapper();
             BaseWrapper<?, ?, ?, ?> inner = root.inner();
 
             // When & Then
-            assertThat(root.chainId())
-                    .as("Chain-ID must be non-null and identical across the hierarchy")
+            assertThat(root.stackId())
+                    .as("Stack-ID must be non-null and identical across the hierarchy")
                     .isNotNull()
-                    .isEqualTo(inner.chainId());
+                    .isEqualTo(inner.stackId());
         }
     }
 }

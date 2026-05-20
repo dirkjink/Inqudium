@@ -162,9 +162,9 @@ class AbstractBaseWrapperInnerTypeSafetyTest {
             WrapperB outer = new WrapperB("outer", inner);
 
             // When / Then — chain identity is shared even though inner() returns null
-            assertThat(outer.chainId())
-                    .as("Chain ID should be inherited from the inner wrapper")
-                    .isEqualTo(inner.chainId());
+            assertThat(outer.stackId())
+                    .as("Stack ID should be inherited from the inner wrapper")
+                    .isEqualTo(inner.stackId());
             assertThat(outer.inner())
                     .as("inner() returns null because the types are incompatible")
                     .isNull();

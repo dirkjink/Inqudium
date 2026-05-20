@@ -140,11 +140,11 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
      *   <li>Measure RTT and release the permit in a {@code finally} block</li>
      * </ol>
      *
-     * <p>{@code chainId} and {@code callId} flow through events, exceptions, and the
+     * <p>{@code stackId} and {@code callId} flow through events, exceptions, and the
      * downstream chain as primitive {@code long} values (ADR-022). No boxing, no string
      * conversion on the hot path.</p>
      *
-     * @param chainId  identifies the wrapper chain; shared by all invocations
+     * @param stackId  identifies the wrapper chain; shared by all invocations
      *                 passing through the same composed pipeline
      * @param callId   identifies this particular invocation; unique within
      *                 the chain, monotonically increasing from 1
@@ -153,7 +153,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
      * @return the result of the downstream chain execution
      */
     @Override
-    public R execute(long chainId,
+    public R execute(long stackId,
                      long callId,
                      A argument,
                      LayerTerminal<A, R> next) {
@@ -168,16 +168,16 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
             rejection = strategy.tryAcquire(maxWaitDuration);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            handleAcquireFailure(chainId, callId, startWait, null);
-            throw new InqBulkheadInterruptedException(chainId,
+            handleAcquireFailure(stackId, callId, startWait, null);
+            throw new InqBulkheadInterruptedException(stackId,
                     callId,
                     name,
                     config.general().enableExceptionOptimization());
         }
 
         if (rejection != null) {
-            handleAcquireFailure(chainId, callId, startWait, rejection);
-            throw new InqBulkheadFullException(chainId,
+            handleAcquireFailure(stackId, callId, startWait, rejection);
+            throw new InqBulkheadFullException(stackId,
                     callId,
                     name,
                     rejection,
@@ -185,20 +185,20 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
         }
 
         // Diagnostic events (acquire) — no-op in standard mode
-        handleAcquireSuccess(chainId, callId, startWait);
+        handleAcquireSuccess(stackId, callId, startWait);
 
         // ── Execute downstream chain with RTT measurement ──
         long startNanos = nanoTimeSource.now();
         Throwable businessError = null;
 
         try {
-            return next.execute(chainId, callId, argument);
+            return next.execute(stackId, callId, argument);
         } catch (Throwable t) {
             businessError = t;
             throw t;
         } finally {
             long rttNanos = nanoTimeSource.now() - startNanos;
-            releaseAndReport(chainId, callId, rttNanos, businessError);
+            releaseAndReport(stackId, callId, rttNanos, businessError);
         }
     }
 
@@ -220,7 +220,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
      *       Attached via {@code whenComplete()} to the downstream {@link CompletionStage}.</li>
      * </ul>
      *
-     * @param chainId  the chain identifier
+     * @param stackId  the stack identifier
      * @param callId   the call identifier
      * @param argument the argument flowing through the chain
      * @param next     the next async step in the chain
@@ -231,7 +231,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
      * entry (fast path), no callback is registered and the original is returned.
      */
     @Override
-    public CompletionStage<R> executeAsync(long chainId,
+    public CompletionStage<R> executeAsync(long stackId,
                                            long callId,
                                            A argument,
                                            AsyncLayerTerminal<A, R> next) {
@@ -245,33 +245,33 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
             rejection = strategy.tryAcquire(maxWaitDuration);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            handleAcquireFailure(chainId, callId, startWait, null);
-            throw new InqBulkheadInterruptedException(chainId,
+            handleAcquireFailure(stackId, callId, startWait, null);
+            throw new InqBulkheadInterruptedException(stackId,
                     callId,
                     name,
                     config.general().enableExceptionOptimization());
         }
 
         if (rejection != null) {
-            handleAcquireFailure(chainId, callId, startWait, rejection);
-            throw new InqBulkheadFullException(chainId,
+            handleAcquireFailure(stackId, callId, startWait, rejection);
+            throw new InqBulkheadFullException(stackId,
                     callId,
                     name,
                     rejection,
                     config.general().enableExceptionOptimization());
         }
 
-        handleAcquireSuccess(chainId, callId, startWait);
+        handleAcquireSuccess(stackId, callId, startWait);
 
         // ── Invoke downstream async chain ──
         long startNanos = nanoTimeSource.now();
         CompletionStage<R> stage;
         try {
-            stage = next.executeAsync(chainId, callId, argument);
+            stage = next.executeAsync(stackId, callId, argument);
         } catch (Throwable t) {
             // Sync failure during stage creation — release immediately
             long rttNanos = nanoTimeSource.now() - startNanos;
-            releaseAndReport(chainId, callId, rttNanos, t);
+            releaseAndReport(stackId, callId, rttNanos, t);
             throw t;
         }
 
@@ -292,12 +292,12 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
         // the release callback via whenComplete() and return the copy.
         if (stage instanceof CompletableFuture<?> cf && cf.isDone()) {
             long rttNanos = nanoTimeSource.now() - startNanos;
-            releaseAndReport(chainId, callId, rttNanos, completionError(cf));
+            releaseAndReport(stackId, callId, rttNanos, completionError(cf));
             return stage;
         } else {
             return stage.whenComplete((result, error) -> {
                 long rttNanos = nanoTimeSource.now() - startNanos;
-                releaseAndReport(chainId, callId, rttNanos, error);
+                releaseAndReport(stackId, callId, rttNanos, error);
             });
         }
     }
@@ -338,10 +338,10 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
     /**
      * Publishes diagnostic acquire events. In standard mode, this is a complete no-op.
      */
-    private void handleAcquireSuccess(long chainId, long callId, long startWait) {
+    private void handleAcquireSuccess(long stackId, long callId, long startWait) {
         if (eventConfig.isLifecycleEnabled()) {
             try {
-                eventPublisher.publish(new BulkheadOnAcquireEvent(chainId,
+                eventPublisher.publish(new BulkheadOnAcquireEvent(stackId,
                         callId,
                         name,
                         strategy.concurrentCalls(),
@@ -350,7 +350,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
                 strategy.rollback();
                 if (eventConfig.isTraceEnabled()) {
                     try {
-                        eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(chainId,
+                        eventPublisher.publishTrace(() -> new BulkheadRollbackTraceEvent(stackId,
                                 callId,
                                 name,
                                 e.getClass().getSimpleName(),
@@ -366,7 +366,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
 
         if (eventConfig.isTraceEnabled()) {
             try {
-                publishWaitTrace(chainId, callId, startWait, true);
+                publishWaitTrace(stackId, callId, startWait, true);
             } catch (RuntimeException e) {
                 logger.error().log("Failed to publish wait trace for acquired call on bulkhead '{}', "
                         + "callId='{}'. Diagnostic-only failure.", name, callId, e);
@@ -377,10 +377,10 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
     /**
      * Publishes diagnostic events for a rejected or interrupted acquire attempt.
      */
-    private void handleAcquireFailure(long chainId, long callId, long startWait, RejectionContext rejection) {
+    private void handleAcquireFailure(long stackId, long callId, long startWait, RejectionContext rejection) {
         if (eventConfig.isTraceEnabled()) {
             try {
-                publishWaitTrace(chainId, callId, startWait, false);
+                publishWaitTrace(stackId, callId, startWait, false);
             } catch (RuntimeException e) {
                 logger.error().log("Failed to publish wait trace for rejected call on bulkhead '{}', "
                         + "callId='{}'. Diagnostic-only failure.", name, callId, e);
@@ -388,7 +388,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
         }
         if (eventConfig.isRejectionEnabled()) {
             try {
-                eventPublisher.publish(new BulkheadOnRejectEvent(chainId,
+                eventPublisher.publish(new BulkheadOnRejectEvent(stackId,
                         callId,
                         name,
                         rejection,
@@ -403,7 +403,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
     /**
      * Releases the permit, feeds the adaptive algorithm, and publishes diagnostic events.
      */
-    private void releaseAndReport(long chainId, long callId, long rttNanos, Throwable businessError) {
+    private void releaseAndReport(long stackId, long callId, long rttNanos, Throwable businessError) {
         RuntimeException releaseError = null;
 
         try {
@@ -423,7 +423,7 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
 
         if (eventConfig.isLifecycleEnabled()) {
             try {
-                eventPublisher.publish(new BulkheadOnReleaseEvent(chainId,
+                eventPublisher.publish(new BulkheadOnReleaseEvent(stackId,
                         callId,
                         name,
                         strategy.concurrentCalls(),
@@ -443,11 +443,11 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
         }
     }
 
-    private void publishWaitTrace(long chainId, long callId, long startWait, boolean acquired) {
+    private void publishWaitTrace(long stackId, long callId, long startWait, boolean acquired) {
         if (eventPublisher.isTraceEnabled()) {
             long waitDurationNanos = nanoTimeSource.now() - startWait;
             if (waitDurationNanos > 0) {
-                eventPublisher.publishTrace(() -> new BulkheadWaitTraceEvent(chainId,
+                eventPublisher.publishTrace(() -> new BulkheadWaitTraceEvent(stackId,
                         callId,
                         name,
                         waitDurationNanos,
