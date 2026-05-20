@@ -703,7 +703,7 @@ distributed over 3 working days at sustainable pace.
 * [x] B.1 — chainId → stackId rename library-wide (2026-05-20, PR #106)
 * [x] B.2 — InqStackInfo sealed hierarchy + DTO migration (2026-05-20, PR #107)
 * [~] B.3 — FunctionStackAdapter (deferred 2026-05-20 — see section for rationale)
-* [ ] B.4 — InqIntrospector + InqStackRenderer
+* [x] B.4 — InqIntrospector + InqStackRenderer (2026-05-20)
 * [ ] B.5 — Bridge-state resolution
 * [ ] B.6 — ADR-039 status flip + final cleanup
 
