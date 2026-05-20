@@ -31,10 +31,10 @@ class JoinPointWrapperDynamicProxyTest {
      * Creates a {@link LayerAction} that records layer name and call ID for test assertions.
      */
     static <A, R> LayerAction<A, R> trackingAction(String layerName, InterceptionLog log) {
-        return (chainId, callId, argument, next) -> {
+        return (stackId, callId, argument, next) -> {
             log.layerNames.add(layerName);
             log.callIds.add(callId);
-            return next.execute(chainId, callId, argument);
+            return next.execute(stackId, callId, argument);
         };
     }
 
@@ -272,15 +272,15 @@ class JoinPointWrapperDynamicProxyTest {
         }
 
         @Test
-        @DisplayName("should share the same chain id across both layers")
-        void should_share_the_same_chain_id_across_both_layers() {
+        @DisplayName("should share the same stack id across both layers")
+        void should_share_the_same_stack_id_across_both_layers() {
             // Given
             DefaultGreetingService target = new DefaultGreetingService();
             JoinPointWrapper<Object> inner = new JoinPointWrapper<>("inner", () -> target.greet("test"));
             JoinPointWrapper<Object> outer = new JoinPointWrapper<>("outer", inner);
 
             // When / Then
-            assertThat(outer.chainId()).isEqualTo(inner.chainId());
+            assertThat(outer.stackId()).isEqualTo(inner.stackId());
         }
 
         @Test
@@ -388,9 +388,9 @@ class JoinPointWrapperDynamicProxyTest {
                 JoinPointWrapper<Object> wrapper = new JoinPointWrapper<>(
                         method.getName() + "()",
                         () -> method.invoke(target, args),
-                        (chainId, callId, arg, next) -> {
+                        (stackId, callId, arg, next) -> {
                             long start = System.nanoTime();
-                            Object result = next.execute(chainId, callId, arg);
+                            Object result = next.execute(stackId, callId, arg);
                             durations.add(System.nanoTime() - start);
                             return result;
                         }
@@ -448,8 +448,8 @@ class JoinPointWrapperDynamicProxyTest {
                     JoinPointWrapper<Object> wrapper = new JoinPointWrapper<>(
                             "Cache[" + method.getName() + "]",
                             () -> method.invoke(trackingTarget, args),
-                            (chainId, callId, arg, next) -> {
-                                Object result = next.execute(chainId, callId, arg);
+                            (stackId, callId, arg, next) -> {
+                                Object result = next.execute(stackId, callId, arg);
                                 cache.put(key, result);
                                 return result;
                             }

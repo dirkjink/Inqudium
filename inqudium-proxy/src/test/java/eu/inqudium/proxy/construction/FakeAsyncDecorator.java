@@ -47,10 +47,10 @@ final class FakeAsyncDecorator implements InqAsyncDecorator<Object, Object> {
     }
 
     @Override
-    public CompletionStage<Object> executeAsync(long chainId, long callId, Object argument,
+    public CompletionStage<Object> executeAsync(long stackId, long callId, Object argument,
                                                 AsyncLayerTerminal<Object, Object> next) {
         callCount.incrementAndGet();
-        return next.executeAsync(chainId, callId, argument);
+        return next.executeAsync(stackId, callId, argument);
     }
 
     int callCount() {

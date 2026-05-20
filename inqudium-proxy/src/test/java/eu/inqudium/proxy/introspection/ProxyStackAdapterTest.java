@@ -66,9 +66,9 @@ class ProxyStackAdapterTest {
         }
 
         @Override
-        public Object execute(long chainId, long callId, Object argument,
+        public Object execute(long stackId, long callId, Object argument,
                               LayerTerminal<Object, Object> next) {
-            return next.execute(chainId, callId, argument);
+            return next.execute(stackId, callId, argument);
         }
     }
 

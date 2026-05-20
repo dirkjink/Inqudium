@@ -54,7 +54,7 @@ before this document was written:
 3. **Topology logging.** Logged in `OrderService` at construction
    time. One log line per service method (so a service with four
    `@InqBulkhead`-annotated methods produces four lines). The
-   `chainId` is NOT included in the topology log — it surfaces in
+   `stackId` is NOT included in the topology log — it surfaces in
    bulkhead-event log lines instead, where it is naturally available.
    This avoids the need for active wrapper materialization at
    construction time.

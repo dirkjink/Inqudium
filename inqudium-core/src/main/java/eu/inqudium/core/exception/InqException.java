@@ -28,7 +28,7 @@ import eu.inqudium.core.element.InqElementType;
  */
 public abstract class InqException extends RuntimeException {
 
-    private final long chainId;
+    private final long stackId;
     private final long callId;
     private final String code;
     private final String elementName;
@@ -47,7 +47,7 @@ public abstract class InqException extends RuntimeException {
      * @param enableExceptionOptimization whether suppression is enabled or disabled, and whether the stack trace
      *                                    should be writable.
      */
-    protected InqException(long chainId,
+    protected InqException(long stackId,
                            long callId,
                            String code,
                            String elementName,
@@ -55,8 +55,8 @@ public abstract class InqException extends RuntimeException {
                            String message,
                            Throwable cause,
                            boolean enableExceptionOptimization) {
-        super(formatMessage(chainId, callId, code, message), cause, enableExceptionOptimization, !enableExceptionOptimization);
-        this.chainId = chainId;
+        super(formatMessage(stackId, callId, code, message), cause, enableExceptionOptimization, !enableExceptionOptimization);
+        this.stackId = stackId;
         this.callId = callId;
         this.code = code;
         this.elementName = elementName;
@@ -64,8 +64,8 @@ public abstract class InqException extends RuntimeException {
         this.enableExceptionOptimization = enableExceptionOptimization;
     }
 
-    private static String formatMessage(long chainId, long callId, String code, String message) {
-        return "[" + chainId + "-" + callId + "] " + code + ": " + message;
+    private static String formatMessage(long stackId, long callId, String code, String message) {
+        return "[" + stackId + "-" + callId + "] " + code + ": " + message;
     }
 
     public static void rethrowIfFatal(Throwable t) {
@@ -79,7 +79,7 @@ public abstract class InqException extends RuntimeException {
     }
 
     public long getChainId() {
-        return chainId;
+        return stackId;
     }
 
     /**

@@ -11,9 +11,9 @@ enum AsyncPassThrough implements AsyncLayerAction<Object, Object> {
     INSTANCE;
 
     @Override
-    public CompletionStage<Object> executeAsync(long chainId, long callId, Object argument,
+    public CompletionStage<Object> executeAsync(long stackId, long callId, Object argument,
                                                 AsyncLayerTerminal<Object, Object> next) {
-        return next.executeAsync(chainId, callId, argument);
+        return next.executeAsync(stackId, callId, argument);
     }
 }
 
@@ -34,11 +34,11 @@ enum AsyncPassThrough implements AsyncLayerAction<Object, Object> {
  *
  * <h3>Bulkhead example (acquire sync, release async)</h3>
  * <pre>{@code
- * (chainId, callId, arg, next) -> {
+ * (stackId, callId, arg, next) -> {
  *     acquire();                                          // start phase — sync
  *     CompletionStage<T> stage;
  *     try {
- *         stage = next.executeAsync(chainId, callId, arg);     // delegate starts async op
+ *         stage = next.executeAsync(stackId, callId, arg);     // delegate starts async op
  *     } catch (Throwable t) {
  *         release();                                      // cleanup on sync failure
  *         throw t;
@@ -50,9 +50,9 @@ enum AsyncPassThrough implements AsyncLayerAction<Object, Object> {
  *
  * <h3>Timing example</h3>
  * <pre>{@code
- * (chainId, callId, arg, next) -> {
+ * (stackId, callId, arg, next) -> {
  *     long start = System.nanoTime();
- *     CompletionStage<R> stage = next.executeAsync(chainId, callId, arg)
+ *     CompletionStage<R> stage = next.executeAsync(stackId, callId, arg)
  *     stage.whenComplete((r, e) -> metrics.record(System.nanoTime() - start));
  *     return stage
  *
@@ -82,7 +82,7 @@ public interface AsyncLayerAction<A, R> {
      * explicitly on the caller's future rather than disappearing on a
      * detached branch.
      *
-     * @param chainId  identifies the wrapper chain
+     * @param stackId  identifies the wrapper chain
      * @param callId   identifies this particular invocation
      * @param argument the argument flowing through the chain
      * @param next     the next async step — call {@code next.execute(...)} to proceed
@@ -92,6 +92,6 @@ public interface AsyncLayerAction<A, R> {
      * original stage. Exception: if the downstream future is already completed on
      * entry (fast path), no callback is registered and the original is returned.
      */
-    CompletionStage<R> executeAsync(long chainId, long callId, A argument,
+    CompletionStage<R> executeAsync(long stackId, long callId, A argument,
                                     AsyncLayerTerminal<A, R> next);
 }

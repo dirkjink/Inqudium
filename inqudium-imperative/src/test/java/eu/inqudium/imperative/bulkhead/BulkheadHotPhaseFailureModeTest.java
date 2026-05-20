@@ -55,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BulkheadHotPhaseFailureModeTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     private static BulkheadSnapshot snapshotOf(
             eu.inqudium.config.snapshot.BulkheadStrategyConfig strategy, int max) {

@@ -92,16 +92,16 @@ public class DefaultOrderService implements OrderService {
             eu.inqudium.imperative.bulkhead.InqBulkhead<?, ?> bulkhead) {
         var publisher = bulkhead.eventPublisher();
         publisher.onEvent(BulkheadOnAcquireEvent.class, e ->
-                LOG.trace("Permit acquired on bulkhead '{}' (chain-id {}, call-id {}, concurrent {})",
+                LOG.trace("Permit acquired on bulkhead '{}' (stack-id {}, call-id {}, concurrent {})",
                         e.getElementName(), e.getChainId(), e.getCallId(), e.getConcurrentCalls()));
         publisher.onEvent(BulkheadOnReleaseEvent.class, e ->
-                LOG.trace("Permit released on bulkhead '{}' (chain-id {}, call-id {}, concurrent {})",
+                LOG.trace("Permit released on bulkhead '{}' (stack-id {}, call-id {}, concurrent {})",
                         e.getElementName(), e.getChainId(), e.getCallId(), e.getConcurrentCalls()));
         publisher.onEvent(BulkheadOnRejectEvent.class, e ->
-                LOG.warn("Permit rejected on bulkhead '{}' (chain-id {}, call-id {}, reason {})",
+                LOG.warn("Permit rejected on bulkhead '{}' (stack-id {}, call-id {}, reason {})",
                         e.getElementName(), e.getChainId(), e.getCallId(), e.getRejectionReason()));
         publisher.onEvent(BulkheadRollbackTraceEvent.class, e ->
-                LOG.error("Permit rolled back on bulkhead '{}' (chain-id {}, call-id {}, cause {})",
+                LOG.error("Permit rolled back on bulkhead '{}' (stack-id {}, call-id {}, cause {})",
                         e.getElementName(), e.getChainId(), e.getCallId(), e.getErrorType()));
     }
 }

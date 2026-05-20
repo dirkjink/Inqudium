@@ -182,10 +182,10 @@ class AsyncWrapperPipelineTest {
      * then forwards to the next async step.
      */
     static <A, R> AsyncLayerAction<A, R> trackingAction(String layerName, ExecutionLog log) {
-        return (chainId, callId, argument, next) -> {
+        return (stackId, callId, argument, next) -> {
             log.layerNames.add(layerName);
             log.callIds.add(callId);
-            return next.executeAsync(chainId, callId, argument);
+            return next.executeAsync(stackId, callId, argument);
         };
     }
 
@@ -238,20 +238,20 @@ class AsyncWrapperPipelineTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.imperative.core.pipeline.AsyncWrapperPipelineTest#allAsyncWrapperTypes")
-        @DisplayName("should generate a positive chain id for a single wrapper")
-        void should_generate_a_positive_chain_id_for_a_single_wrapper(AsyncWrapperScenario scenario) {
+        @DisplayName("should generate a positive stack id for a single wrapper")
+        void should_generate_a_positive_stack_id_for_a_single_wrapper(AsyncWrapperScenario scenario) {
             // Given / When
             ExecutionLog log = new ExecutionLog();
             AsyncBaseWrapper<?, ?, ?, ?> wrapper = scenario.createSingle("layer", log);
 
             // Then
-            assertThat(wrapper.chainId()).isGreaterThan(0L);
+            assertThat(wrapper.stackId()).isGreaterThan(0L);
         }
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.imperative.core.pipeline.AsyncWrapperPipelineTest#allAsyncWrapperTypes")
-        @DisplayName("should inherit the chain id from the inner wrapper")
-        void should_inherit_the_chain_id_from_the_inner_wrapper(AsyncWrapperScenario scenario) {
+        @DisplayName("should inherit the stack id from the inner wrapper")
+        void should_inherit_the_stack_id_from_the_inner_wrapper(AsyncWrapperScenario scenario) {
             // Given
             ExecutionLog log = new ExecutionLog();
             AsyncBaseWrapper<?, ?, ?, ?> inner = scenario.createSingle("inner", log);
@@ -260,13 +260,13 @@ class AsyncWrapperPipelineTest {
             AsyncBaseWrapper<?, ?, ?, ?> outer = scenario.wrapAround("outer", inner, log);
 
             // Then
-            assertThat(outer.chainId()).isEqualTo(inner.chainId());
+            assertThat(outer.stackId()).isEqualTo(inner.stackId());
         }
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.imperative.core.pipeline.AsyncWrapperPipelineTest#allAsyncWrapperTypes")
-        @DisplayName("should assign different chain ids to independent chains")
-        void should_assign_different_chain_ids_to_independent_chains(AsyncWrapperScenario scenario) {
+        @DisplayName("should assign different stack ids to independent chains")
+        void should_assign_different_stack_ids_to_independent_chains(AsyncWrapperScenario scenario) {
             // Given / When
             ExecutionLog log1 = new ExecutionLog();
             ExecutionLog log2 = new ExecutionLog();
@@ -274,7 +274,7 @@ class AsyncWrapperPipelineTest {
             AsyncBaseWrapper<?, ?, ?, ?> chain2 = scenario.createSingle("chain2", log2);
 
             // Then
-            assertThat(chain1.chainId()).isNotEqualTo(chain2.chainId());
+            assertThat(chain1.stackId()).isNotEqualTo(chain2.stackId());
         }
 
         @ParameterizedTest(name = "{0}")
@@ -437,9 +437,9 @@ class AsyncWrapperPipelineTest {
                         events.add("core");
                         return CompletableFuture.completedFuture("value");
                     },
-                    (chainId, callId, arg, next) -> {
+                    (stackId, callId, arg, next) -> {
                         events.add("start-phase");
-                        CompletionStage<String> stage = next.executeAsync(chainId, callId, arg);
+                        CompletionStage<String> stage = next.executeAsync(stackId, callId, arg);
                         return stage.thenApply(result -> {
                             events.add("end-phase");
                             return result;
@@ -462,11 +462,11 @@ class AsyncWrapperPipelineTest {
             AtomicBoolean released = new AtomicBoolean(false);
             AsyncSupplierWrapper<String> wrapper = new AsyncSupplierWrapper<>("bulkhead-sim",
                     () -> CompletableFuture.completedFuture("ok"),
-                    (chainId, callId, arg, next) -> {
+                    (stackId, callId, arg, next) -> {
                         // Simulate acquire
                         CompletionStage<String> stage;
                         try {
-                            stage = next.executeAsync(chainId, callId, arg);
+                            stage = next.executeAsync(stackId, callId, arg);
                         } catch (Throwable t) {
                             released.set(true);
                             throw t;
@@ -490,8 +490,8 @@ class AsyncWrapperPipelineTest {
             AtomicBoolean released = new AtomicBoolean(false);
             AsyncSupplierWrapper<String> wrapper = new AsyncSupplierWrapper<>("resilient",
                     () -> CompletableFuture.failedFuture(new RuntimeException("async-boom")),
-                    (chainId, callId, arg, next) -> {
-                        return next.executeAsync(chainId, callId, arg)
+                    (stackId, callId, arg, next) -> {
+                        return next.executeAsync(stackId, callId, arg)
                                 .whenComplete((r, e) -> released.set(true));
                     }
             );
@@ -510,8 +510,8 @@ class AsyncWrapperPipelineTest {
             // Given
             AsyncSupplierWrapper<String> wrapper = new AsyncSupplierWrapper<>("transform",
                     () -> CompletableFuture.completedFuture("hello"),
-                    (chainId, callId, arg, next) -> {
-                        return next.executeAsync(chainId, callId, arg)
+                    (stackId, callId, arg, next) -> {
+                        return next.executeAsync(stackId, callId, arg)
                                 .thenApply(String::toUpperCase);
                     }
             );
@@ -526,8 +526,8 @@ class AsyncWrapperPipelineTest {
             // Given
             AsyncSupplierWrapper<String> wrapper = new AsyncSupplierWrapper<>("fallback",
                     () -> CompletableFuture.failedFuture(new RuntimeException("fail")),
-                    (chainId, callId, arg, next) -> {
-                        return next.executeAsync(chainId, callId, arg)
+                    (stackId, callId, arg, next) -> {
+                        return next.executeAsync(stackId, callId, arg)
                                 .exceptionally(e -> "recovered");
                     }
             );
@@ -548,17 +548,17 @@ class AsyncWrapperPipelineTest {
             });
 
             AsyncSupplierWrapper<String> inner = new AsyncSupplierWrapper<>("metrics", core,
-                    (chainId, callId, arg, next) -> {
+                    (stackId, callId, arg, next) -> {
                         events.add("metrics-start");
-                        return next.executeAsync(chainId, callId, arg)
+                        return next.executeAsync(stackId, callId, arg)
                                 .whenComplete((r, e) -> events.add("metrics-end"));
                     }
             );
 
             AsyncSupplierWrapper<String> outer = new AsyncSupplierWrapper<>("logging", inner,
-                    (chainId, callId, arg, next) -> {
+                    (stackId, callId, arg, next) -> {
                         events.add("logging-start");
-                        return next.executeAsync(chainId, callId, arg)
+                        return next.executeAsync(stackId, callId, arg)
                                 .whenComplete((r, e) -> events.add("logging-end"));
                     }
             );
@@ -574,18 +574,18 @@ class AsyncWrapperPipelineTest {
         }
 
         @Test
-        @DisplayName("should provide chain id and call id to the async layer action")
-        void should_provide_chain_id_and_call_id_to_the_async_layer_action() {
+        @DisplayName("should provide stack id and call id to the async layer action")
+        void should_provide_stack_id_and_call_id_to_the_async_layer_action() {
             // Given
             AtomicReference<Long> capturedChainId = new AtomicReference<>();
             AtomicReference<Long> capturedCallId = new AtomicReference<>();
 
             AsyncSupplierWrapper<String> wrapper = new AsyncSupplierWrapper<>("tracing",
                     () -> CompletableFuture.completedFuture("ok"),
-                    (chainId, callId, arg, next) -> {
-                        capturedChainId.set(chainId);
+                    (stackId, callId, arg, next) -> {
+                        capturedChainId.set(stackId);
                         capturedCallId.set(callId);
-                        return next.executeAsync(chainId, callId, arg);
+                        return next.executeAsync(stackId, callId, arg);
                     }
             );
 
@@ -593,7 +593,7 @@ class AsyncWrapperPipelineTest {
             join(wrapper.get());
 
             // Then
-            assertThat(capturedChainId.get()).isEqualTo(wrapper.chainId());
+            assertThat(capturedChainId.get()).isEqualTo(wrapper.stackId());
             assertThat(capturedCallId.get()).isGreaterThan(0L);
         }
     }
@@ -629,8 +629,8 @@ class AsyncWrapperPipelineTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.imperative.core.pipeline.AsyncWrapperPipelineTest#allAsyncWrapperTypes")
-        @DisplayName("should share the same chain id when wrapping the same inner delegate")
-        void should_share_the_same_chain_id_when_wrapping_the_same_inner_delegate(
+        @DisplayName("should share the same stack id when wrapping the same inner delegate")
+        void should_share_the_same_stack_id_when_wrapping_the_same_inner_delegate(
                 AsyncWrapperScenario scenario) {
             // Given
             ExecutionLog log = new ExecutionLog();
@@ -641,9 +641,9 @@ class AsyncWrapperPipelineTest {
             AsyncBaseWrapper<?, ?, ?, ?> outerB = scenario.wrapAround("B", shared, log);
 
             // Then
-            assertThat(outerA.chainId())
-                    .isEqualTo(outerB.chainId())
-                    .isEqualTo(shared.chainId());
+            assertThat(outerA.stackId())
+                    .isEqualTo(outerB.stackId())
+                    .isEqualTo(shared.stackId());
         }
     }
 
@@ -745,8 +745,8 @@ class AsyncWrapperPipelineTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("eu.inqudium.imperative.core.pipeline.AsyncWrapperPipelineTest#allAsyncWrapperTypes")
-        @DisplayName("should render a single layer hierarchy with chain id and layer name")
-        void should_render_a_single_layer_hierarchy_with_chain_id_and_layer_name(
+        @DisplayName("should render a single layer hierarchy with stack id and layer name")
+        void should_render_a_single_layer_hierarchy_with_stack_id_and_layer_name(
                 AsyncWrapperScenario scenario) {
             // Given
             ExecutionLog log = new ExecutionLog();
@@ -757,8 +757,8 @@ class AsyncWrapperPipelineTest {
 
             // Then
             assertThat(hierarchy)
-                    .startsWith("Chain-ID: ")
-                    .contains(Long.toString(wrapper.chainId()))
+                    .startsWith("Stack-ID: ")
+                    .contains(Long.toString(wrapper.stackId()))
                     .contains("my-async-layer");
         }
 

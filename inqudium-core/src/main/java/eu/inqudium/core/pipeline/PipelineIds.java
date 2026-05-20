@@ -15,10 +15,10 @@ import java.util.function.LongSupplier;
  *
  * <h3>One JVM-global counter + a factory for instance-local counters</h3>
  * <dl>
- *   <dt>{@link #nextChainId() Chain IDs}</dt>
+ *   <dt>{@link #nextStackId() Stack IDs}</dt>
  *   <dd>JVM-global. Drawn once per new wrapper chain and once per resolved
  *       pipeline. Every layer wrapping the same delegate inherits the same
- *       chain ID. Call rate is low (once per long-lived pipeline or chain
+ *       stack ID. Call rate is low (once per long-lived pipeline or chain
  *       construction) — contention is a non-issue.</dd>
  *
  *   <dt>{@link #newInstanceCallIdSource() Instance-local call-ID source}</dt>
@@ -56,9 +56,9 @@ import java.util.function.LongSupplier;
 public final class PipelineIds {
 
     /**
-     * JVM-wide counter for chain IDs.
+     * JVM-wide counter for stack IDs.
      */
-    private static final AtomicLong CHAIN_ID_COUNTER = new AtomicLong();
+    private static final AtomicLong STACK_ID_COUNTER = new AtomicLong();
 
     /**
      * Prevent instantiation — this is a utility class.
@@ -67,16 +67,16 @@ public final class PipelineIds {
     }
 
     /**
-     * Generates the next globally unique chain ID.
+     * Generates the next globally unique stack ID.
      *
      * <p>Returned IDs are monotonically increasing and never collide within
      * the same JVM lifetime, regardless of whether they are requested by a
      * wrapper chain or a resolved pipeline.</p>
      *
-     * @return a new, unique chain ID
+     * @return a new, unique stack ID
      */
-    public static long nextChainId() {
-        return CHAIN_ID_COUNTER.incrementAndGet();
+    public static long nextStackId() {
+        return STACK_ID_COUNTER.incrementAndGet();
     }
 
     /**

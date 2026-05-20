@@ -62,7 +62,7 @@ public class SupplierWrapper<T>
      * @return a terminal {@link LayerTerminal} that calls {@code delegate.get()}
      */
     private static <T> LayerTerminal<Void, T> coreFor(Supplier<T> delegate) {
-        return (chainId, callId, arg) -> delegate.get();
+        return (stackId, callId, arg) -> delegate.get();
     }
 
     /**

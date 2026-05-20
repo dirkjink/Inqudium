@@ -19,7 +19,7 @@
  *
  * <p>Per the Option-B scope decision, the central
  * {@code InqIntrospector} dispatcher, the {@code InqStackInfo} sealed
- * hierarchy, and the library-wide {@code chainId → stackId} rename are
+ * hierarchy, and the library-wide {@code stackId → stackId} rename are
  * deferred to a separate refactor. The DTO records' shapes already
  * match ADR-039 exactly, so a future migration into the sealed
  * hierarchy will not require a contract change.</p>

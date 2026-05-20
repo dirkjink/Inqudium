@@ -91,7 +91,7 @@ class BulkheadEventPublishingTest {
     }
 
     private static <A> LayerTerminal<A, A> identity() {
-        return (chainId, callId, arg) -> arg;
+        return (stackId, callId, arg) -> arg;
     }
 
     @Nested
@@ -213,7 +213,7 @@ class BulkheadEventPublishingTest {
                     new LiveContainer<>(snapshot(events, Duration.ZERO));
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
 
-            LayerTerminal<String, String> failing = (chainId, callId, arg) -> {
+            LayerTerminal<String, String> failing = (stackId, callId, arg) -> {
                 throw new RuntimeException("boom");
             };
 
@@ -403,7 +403,7 @@ class BulkheadEventPublishingTest {
             InqBulkhead<String, String> bulkhead = newBulkhead(live);
 
             CompletableFuture<String> downstream = new CompletableFuture<>();
-            AsyncLayerTerminal<String, String> next = (chainId, callId, arg) -> downstream;
+            AsyncLayerTerminal<String, String> next = (stackId, callId, arg) -> downstream;
 
             // When — start phase publishes the two acquire events on the calling thread
             CompletionStage<String> result = bulkhead.executeAsync(7L, 11L, "x", next);

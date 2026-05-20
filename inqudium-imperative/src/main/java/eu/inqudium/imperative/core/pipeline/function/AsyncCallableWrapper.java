@@ -38,7 +38,7 @@ public class AsyncCallableWrapper<V>
     }
 
     private static <V> AsyncLayerTerminal<Void, V> coreFor(Callable<CompletionStage<V>> delegate) {
-        return (chainId, callId, arg) -> {
+        return (stackId, callId, arg) -> {
             try {
                 return delegate.call();
             } catch (RuntimeException | Error e) {

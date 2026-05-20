@@ -8,7 +8,7 @@ package eu.inqudium.core.pipeline;
  * be either another wrapper layer or the terminal "core execution" lambda that
  * invokes the actual delegate.</p>
  *
- * <p>The interface deliberately uses primitive {@code long} parameters for chain ID
+ * <p>The interface deliberately uses primitive {@code long} parameters for stack ID
  * and call ID to achieve zero-allocation tracing on the hot path — no boxing,
  * no wrapper objects, no string formatting until explicitly needed.</p>
  *
@@ -35,7 +35,7 @@ public interface LayerTerminal<A, R> {
      * end of the chain invokes the actual delegate (e.g. calls
      * {@code delegate.run()}, {@code delegate.get()}, etc.).</p>
      *
-     * @param chainId  identifies the wrapper chain — shared across all layers,
+     * @param stackId  identifies the wrapper chain — shared across all layers,
      *                 useful for correlating log entries from the same chain
      * @param callId   identifies this particular invocation — unique per call,
      *                 incremented by the outermost wrapper before chain traversal
@@ -45,5 +45,5 @@ public interface LayerTerminal<A, R> {
      * @return the result of the innermost delegate's execution, potentially
      * modified by intermediate layers
      */
-    R execute(long chainId, long callId, A argument);
+    R execute(long stackId, long callId, A argument);
 }

@@ -39,7 +39,7 @@ class BulkheadHandleListenerTest {
             new ComponentKey("inventory", SyncTag.INSTANCE);
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     /**
      * Build a runtime with a single bulkhead and warm it up so subsequent updates take the hot

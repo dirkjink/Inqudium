@@ -39,8 +39,8 @@ public class InqBulkheadInterruptedException extends InqException {
      * @param enableExceptionOptimization whether suppression is enabled or disabled, and whether the stack trace
      *                                    should be writable.
      */
-    public InqBulkheadInterruptedException(long chainId, long callId, String elementName, boolean enableExceptionOptimization) {
-        super(chainId,
+    public InqBulkheadInterruptedException(long stackId, long callId, String elementName, boolean enableExceptionOptimization) {
+        super(stackId,
                 callId,
                 CODE,
                 elementName,

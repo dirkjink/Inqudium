@@ -23,8 +23,8 @@ enum PassThrough implements LayerAction<Object, Object> {
      * this is a true no-op layer.
      */
     @Override
-    public Object execute(long chainId, long callId, Object argument, LayerTerminal<Object, Object> next) {
-        return next.execute(chainId, callId, argument);
+    public Object execute(long stackId, long callId, Object argument, LayerTerminal<Object, Object> next) {
+        return next.execute(stackId, callId, argument);
     }
 }
 
@@ -42,17 +42,17 @@ enum PassThrough implements LayerAction<Object, Object> {
  *
  * <h3>Pre-processing only (fire-and-forget logging)</h3>
  * <pre>{@code
- * (chainId, callId, arg, next) -> {
- *     log.info("[chain={}, call={}] entering", chainId, callId);
- *     return next.execute(chainId, callId, arg);
+ * (stackId, callId, arg, next) -> {
+ *     log.info("[chain={}, call={}] entering", stackId, callId);
+ *     return next.execute(stackId, callId, arg);
  * }
  * }</pre>
  *
  * <h3>Pre- and post-processing (timing)</h3>
  * <pre>{@code
- * (chainId, callId, arg, next) -> {
+ * (stackId, callId, arg, next) -> {
  *     long start = System.nanoTime();
- *     R result = next.execute(chainId, callId, arg);
+ *     R result = next.execute(stackId, callId, arg);
  *     metrics.record(System.nanoTime() - start);
  *     return result;
  * }
@@ -60,9 +60,9 @@ enum PassThrough implements LayerAction<Object, Object> {
  *
  * <h3>Exception handling (resilience)</h3>
  * <pre>{@code
- * (chainId, callId, arg, next) -> {
+ * (stackId, callId, arg, next) -> {
  *     try {
- *         return next.execute(chainId, callId, arg);
+ *         return next.execute(stackId, callId, arg);
  *     } catch (Exception e) {
  *         return fallbackValue;
  *     }
@@ -71,9 +71,9 @@ enum PassThrough implements LayerAction<Object, Object> {
  *
  * <h3>Conditional execution (caching)</h3>
  * <pre>{@code
- * (chainId, callId, arg, next) -> {
+ * (stackId, callId, arg, next) -> {
  *     if (cache.containsKey(arg)) return cache.get(arg);
- *     R result = next.execute(chainId, callId, arg);
+ *     R result = next.execute(stackId, callId, arg);
  *     cache.put(arg, result);
  *     return result;
  * }
@@ -111,18 +111,18 @@ public interface LayerAction<A, R> {
      *
      * <p>The implementation has full control over the invocation flow:</p>
      * <ul>
-     *   <li>Call {@code next.execute(chainId, callId, argument)} to proceed down the chain</li>
+     *   <li>Call {@code next.execute(stackId, callId, argument)} to proceed down the chain</li>
      *   <li>Skip the call to short-circuit (e.g. return a cached value)</li>
      *   <li>Call it multiple times for retry logic</li>
      *   <li>Wrap it in try/catch for exception handling</li>
      *   <li>Modify the argument before or the result after the call</li>
      * </ul>
      *
-     * @param chainId  identifies the wrapper chain (shared across all layers in the same chain)
+     * @param stackId  identifies the wrapper chain (shared across all layers in the same chain)
      * @param callId   identifies this particular invocation (unique per call, monotonically increasing)
      * @param argument the argument flowing through the chain ({@code null} for void-argument wrappers)
      * @param next     the next step in the chain — call {@code next.execute(...)} to proceed
      * @return the result, either from the next step or produced/modified by this layer
      */
-    R execute(long chainId, long callId, A argument, LayerTerminal<A, R> next);
+    R execute(long stackId, long callId, A argument, LayerTerminal<A, R> next);
 }

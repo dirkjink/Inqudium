@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RuntimeTopologyEventsTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     @Nested
     @DisplayName("RuntimeComponentAddedEvent")

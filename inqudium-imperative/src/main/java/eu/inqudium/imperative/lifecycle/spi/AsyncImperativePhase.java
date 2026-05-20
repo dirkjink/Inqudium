@@ -27,7 +27,7 @@ public interface AsyncImperativePhase<A, R> extends ImperativePhase<A, R> {
     /**
      * Execute this phase's async around-advice.
      *
-     * @param chainId  identifies the wrapper chain.
+     * @param stackId  identifies the wrapper chain.
      * @param callId   identifies this particular invocation.
      * @param argument the argument flowing through the chain.
      * @param next     the next async step in the chain.
@@ -36,5 +36,5 @@ public interface AsyncImperativePhase<A, R> extends ImperativePhase<A, R> {
      *         except on the fast path where the downstream stage is already complete on entry.
      */
     CompletionStage<R> executeAsync(
-            long chainId, long callId, A argument, AsyncLayerTerminal<A, R> next);
+            long stackId, long callId, A argument, AsyncLayerTerminal<A, R> next);
 }

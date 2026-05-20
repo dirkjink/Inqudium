@@ -17,12 +17,12 @@ much like a Servlet Filter or Spring AOP `@Around` advice.
 
 ### Wrapper Chain
 
-A wrapper chain is an immutable, linked sequence of layers that all share the same **chain ID**. Each invocation through
+A wrapper chain is an immutable, linked sequence of layers that all share the same **stack ID**. Each invocation through
 the chain receives a unique **call ID**, giving you two zero-allocation primitives for tracing and correlation.
 
 ```
 Outer Layer  →  Middle Layer  →  Inner Layer  →  Core Delegate
- (chainId=7)     (chainId=7)      (chainId=7)     (the real work)
+ (stackId=7)     (stackId=7)      (stackId=7)     (the real work)
 ```
 
 ### LayerAction
@@ -30,10 +30,10 @@ Outer Layer  →  Middle Layer  →  Inner Layer  →  Core Delegate
 `LayerAction<A, R>` is the fundamental building block. It is a functional interface with a single method:
 
 ```java
-R execute(long chainId, long callId, A argument, InternalExecutor<A, R> next);
+R execute(long stackId, long callId, A argument, InternalExecutor<A, R> next);
 ```
 
-The `next` parameter represents the remainder of the chain. You call `next.execute(chainId, callId, argument)` to
+The `next` parameter represents the remainder of the chain. You call `next.execute(stackId, callId, argument)` to
 proceed, or skip it to short-circuit.
 
 #### Common Patterns
@@ -41,18 +41,18 @@ proceed, or skip it to short-circuit.
 **Pre-processing (logging)**
 
 ```java
-LayerAction<Void, Void> logging = (chainId, callId, arg, next) -> {
-    log.info("[chain={}, call={}] entering", chainId, callId);
-    return next.execute(chainId, callId, arg);
+LayerAction<Void, Void> logging = (stackId, callId, arg, next) -> {
+    log.info("[chain={}, call={}] entering", stackId, callId);
+    return next.execute(stackId, callId, arg);
 };
 ```
 
 **Pre- and post-processing (timing)**
 
 ```java
-LayerAction<Void, Object> timing = (chainId, callId, arg, next) -> {
+LayerAction<Void, Object> timing = (stackId, callId, arg, next) -> {
     long start = System.nanoTime();
-    Object result = next.execute(chainId, callId, arg);
+    Object result = next.execute(stackId, callId, arg);
     metrics.record(System.nanoTime() - start);
     return result;
 };
@@ -61,9 +61,9 @@ LayerAction<Void, Object> timing = (chainId, callId, arg, next) -> {
 **Exception handling (resilience)**
 
 ```java
-LayerAction<Void, Object> fallback = (chainId, callId, arg, next) -> {
+LayerAction<Void, Object> fallback = (stackId, callId, arg, next) -> {
     try {
-        return next.execute(chainId, callId, arg);
+        return next.execute(stackId, callId, arg);
     } catch (Exception e) {
         return defaultValue;
     }
@@ -73,9 +73,9 @@ LayerAction<Void, Object> fallback = (chainId, callId, arg, next) -> {
 **Conditional execution (caching)**
 
 ```java
-LayerAction<I, O> caching = (chainId, callId, arg, next) -> {
+LayerAction<I, O> caching = (stackId, callId, arg, next) -> {
     if (cache.containsKey(arg)) return cache.get(arg);
-    O result = next.execute(chainId, callId, arg);
+    O result = next.execute(stackId, callId, arg);
     cache.put(arg, result);
     return result;
 };
@@ -163,9 +163,9 @@ creates JDK dynamic proxies that route every method call through the wrapper pip
 The simplest entry point:
 
 ```java
-LayerAction<Void, Object> timing = (chainId, callId, arg, next) -> {
+LayerAction<Void, Object> timing = (stackId, callId, arg, next) -> {
     long start = System.nanoTime();
-    Object result = next.execute(chainId, callId, arg);
+    Object result = next.execute(stackId, callId, arg);
     recorder.record(System.nanoTime() - start);
     return result;
 };
@@ -227,7 +227,7 @@ public class AsyncDispatchExtension implements DispatchExtension {
     }
 
     @Override
-    public Object dispatch(long chainId, long callId,
+    public Object dispatch(long stackId, long callId,
                            Method method, Object[] args, Object target) {
         // async dispatch logic
     }
@@ -262,7 +262,7 @@ Proxies handle `Object` methods with well-defined behavior:
   proxy is never equal to a bare (unwrapped) object.
 - **`hashCode`** — Delegates to the deep real target, so equal proxies produce the same hash code.
 - **`toString`** — Returns `"layerDescription -> realTarget.toString()"`.
-- **`Wrapper` interface methods** (`inner()`, `chainId()`, `layerDescription()`, etc.) are dispatched to the invocation
+- **`Wrapper` interface methods** (`inner()`, `stackId()`, `layerDescription()`, etc.) are dispatched to the invocation
   handler itself, not the target.
 
 ### MethodHandleCache
@@ -285,7 +285,7 @@ the chain without executing it.
 
 | Method                | Returns             | Purpose                                                                                                                         |
 |-----------------------|---------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| `chainId()`           | `long`              | Unique ID shared by every layer wrapping the same core delegate. Two wrappers with the same chain ID belong to the same stack.  |
+| `stackId()`           | `long`              | Unique ID shared by every layer wrapping the same core delegate. Two wrappers with the same stack ID belong to the same stack.  |
 | `currentCallId()`     | `long`              | The most recent call ID generated by this chain's shared counter. Useful for correlating log output after an invocation.        |
 | `layerDescription()`  | `String`            | Human-readable label of this specific layer (e.g. `"BULKHEAD(pool-A)"` or `"timing"`).                                          |
 | `inner()`             | `Wrapper` or `null` | The next layer inward. Returns `null` when you have reached the innermost wrapper (the layer directly above the core delegate). |
@@ -342,21 +342,21 @@ System.out.println(wrapper.toStringHierarchy());
 Output:
 
 ```
-Chain-ID: 42 (current call-ID: 7)
+Stack-ID: 42 (current call-ID: 7)
 auth
   └── timing
     └── logging
 ```
 
-The output includes the shared chain ID and the current call ID, making it easy to correlate with trace logs. A built-in
+The output includes the shared stack ID and the current call ID, making it easy to correlate with trace logs. A built-in
 depth guard truncates at 100 layers to protect against corrupted or cyclic chains.
 
 ### Verifying Chain Identity
 
-Because all layers in a stack share the same `chainId()`, you can verify that two references belong to the same chain:
+Because all layers in a stack share the same `stackId()`, you can verify that two references belong to the same chain:
 
 ```java
-assert outerLayer.chainId() == innerLayer.chainId();
+assert outerLayer.stackId() == innerLayer.stackId();
 ```
 
 This is particularly useful in tests to confirm that wrapping did not accidentally create a disconnected chain.
@@ -372,7 +372,7 @@ MyService proxy = factory.protect(MyService.class, realService);
 // The proxy implements Wrapper — cast to access introspection
 Wrapper<?> w = (Wrapper<?>) proxy;
 System.out.println(w.toStringHierarchy());
-System.out.println("Chain ID: " + w.chainId());
+System.out.println("Stack ID: " + w.stackId());
 ```
 
 When proxies are stacked (a proxy wrapping another proxy), `inner()` traverses through each proxy layer:
@@ -389,7 +389,7 @@ System.out.println(w.toStringHierarchy());
 ```
 
 ```
-Chain-ID: 5 (current call-ID: 0)
+Stack-ID: 5 (current call-ID: 0)
 auth
   └── logging
 ```
@@ -448,7 +448,7 @@ For code that runs outside a wrapper chain but still needs compatible chain/call
 or test harnesses):
 
 ```java
-long chainId = StandaloneIdGenerator.nextChainId();
+long stackId = StandaloneIdGenerator.nextStackId();
 long callId  = StandaloneIdGenerator.nextCallId();
 ```
 
@@ -460,7 +460,7 @@ Both use atomic counters shared with the wrapper infrastructure, so IDs are glob
 
 - **Immutability** — Once constructed, a chain's layer relationships are fixed. The same inner wrapper can safely
   participate in multiple independent chains.
-- **Zero-allocation tracing** — Chain IDs and call IDs are primitive `long` values, not objects.
+- **Zero-allocation tracing** — Stack IDs and call IDs are primitive `long` values, not objects.
 - **Drop-in replacement** — Homogeneous wrappers implement the same functional interface as their delegate, so wrapping
   is invisible to callers.
 - **Composition over inheritance** — Behavior is plugged in via `LayerAction` lambdas or `DispatchExtension` instances,

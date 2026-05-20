@@ -28,9 +28,9 @@ public class BulkheadOnRejectEvent extends BulkheadEvent {
      *                         caused by a thread interrupt (no strategy decision was made)
      * @param timestamp        the event timestamp
      */
-    public BulkheadOnRejectEvent(long chainId, long callId, String elementName,
+    public BulkheadOnRejectEvent(long stackId, long callId, String elementName,
                                  RejectionContext rejectionContext, Instant timestamp) {
-        super(chainId, callId, elementName, timestamp);
+        super(stackId, callId, elementName, timestamp);
         this.rejectionContext = rejectionContext;
     }
 

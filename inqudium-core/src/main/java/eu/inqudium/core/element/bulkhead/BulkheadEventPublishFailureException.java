@@ -31,7 +31,7 @@ public class BulkheadEventPublishFailureException extends InqException {
     private final String failedEventType;
 
     /**
-     * @param chainId         the chain identifier of the call.
+     * @param stackId         the stack identifier of the call.
      * @param callId          the call identifier of the call.
      * @param elementName     the bulkhead instance name.
      * @param failedEventType the simple class name of the event whose publish triggered the
@@ -41,12 +41,12 @@ public class BulkheadEventPublishFailureException extends InqException {
      *                        survives the wrap.
      */
     public BulkheadEventPublishFailureException(
-            long chainId,
+            long stackId,
             long callId,
             String elementName,
             String failedEventType,
             Throwable cause) {
-        super(chainId,
+        super(stackId,
                 callId,
                 CODE,
                 elementName,

@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BulkheadHotSwapTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     private static final ComponentKey INVENTORY_KEY =
             new ComponentKey("inventory", SyncTag.INSTANCE);

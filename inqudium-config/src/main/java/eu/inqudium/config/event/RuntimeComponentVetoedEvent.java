@@ -19,7 +19,7 @@ import java.util.Objects;
  * {@link VetoFinding.Source#COMPONENT_INTERNAL COMPONENT_INTERNAL}), and the touched fields if
  * the veto was on a patch — for a vetoed removal the touched-field set is empty.
  *
- * <p>Identity fields {@code chainId} and {@code callId} are zero — vetoes are triggered by
+ * <p>Identity fields {@code stackId} and {@code callId} are zero — vetoes are triggered by
  * {@code runtime.update(...)}, not by an in-flight execute. The {@code elementName} mirrors
  * {@code vetoFinding.componentKey().name()}; the {@code elementType} is supplied separately
  * because the dispatcher's {@link VetoFinding} is paradigm-agnostic and does not carry it.

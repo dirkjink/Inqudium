@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BulkheadConcurrentRemovalAndPatchTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     @Nested
     @DisplayName("removal racing snapshot patches")

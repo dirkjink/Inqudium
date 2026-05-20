@@ -35,7 +35,7 @@ public class AsyncSupplierWrapper<T>
     }
 
     private static <T> AsyncLayerTerminal<Void, T> coreFor(Supplier<CompletionStage<T>> delegate) {
-        return (chainId, callId, arg) -> delegate.get();
+        return (stackId, callId, arg) -> delegate.get();
     }
 
     @Override

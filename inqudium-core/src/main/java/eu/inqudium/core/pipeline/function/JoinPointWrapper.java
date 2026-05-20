@@ -76,7 +76,7 @@ public class JoinPointWrapper<R>
      * @return a terminal {@link LayerTerminal} with throwable wrapping
      */
     private static <R> LayerTerminal<Void, R> coreFor(JoinPointExecutor<R> delegate) {
-        return (chainId, callId, arg) -> {
+        return (stackId, callId, arg) -> {
             try {
                 return delegate.proceed();
             } catch (Throwable t) {

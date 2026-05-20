@@ -52,7 +52,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class BulkheadHotPhaseFeedbackTest {
 
     private static final LayerTerminal<String, String> IDENTITY =
-            (chainId, callId, argument) -> argument;
+            (stackId, callId, argument) -> argument;
 
     private static GeneralSnapshot defaultGeneral() {
         return new GeneralSnapshotBuilder().build();
@@ -192,7 +192,7 @@ class BulkheadHotPhaseFeedbackTest {
             InqBulkhead<String, String> bh = new InqBulkhead<>(live, defaultGeneral());
             RecordingStrategy stub = new RecordingStrategy();
             BulkheadHotPhase<String, String> phase = new BulkheadHotPhase<>(bh, stub);
-            LayerTerminal<String, String> failing = (chainId, callId, arg) -> {
+            LayerTerminal<String, String> failing = (stackId, callId, arg) -> {
                 throw new RuntimeException("boom");
             };
 
@@ -567,7 +567,7 @@ class BulkheadHotPhaseFeedbackTest {
                 new java.util.concurrent.CountDownLatch(1);
 
         @Override
-        public String execute(long chainId, long callId, String argument) {
+        public String execute(long stackId, long callId, String argument) {
             acquired.countDown();
             try {
                 if (!release.await(10, java.util.concurrent.TimeUnit.SECONDS)) {

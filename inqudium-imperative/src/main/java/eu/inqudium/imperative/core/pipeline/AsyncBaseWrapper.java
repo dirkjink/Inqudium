@@ -45,11 +45,11 @@ public abstract class AsyncBaseWrapper<T, A, R, S extends AsyncBaseWrapper<T, A,
      * Entry point: generates a call ID and starts async chain traversal.
      */
     protected CompletionStage<R> initiateChain(A argument) {
-        return this.executeAsync(chainId(), generateCallId(), argument);
+        return this.executeAsync(stackId(), generateCallId(), argument);
     }
 
     @Override
-    public CompletionStage<R> executeAsync(long chainId, long callId, A argument) {
-        return layerAction.executeAsync(chainId, callId, argument, nextStep);
+    public CompletionStage<R> executeAsync(long stackId, long callId, A argument) {
+        return layerAction.executeAsync(stackId, callId, argument, nextStep);
     }
 }
