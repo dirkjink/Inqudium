@@ -10,5 +10,17 @@ package eu.inqudium.core.paradigm;
  * the canonical instance via {@link ReactiveTag#FLUX}.</p>
  */
 public sealed interface ReactiveFluxTag extends ReactiveTag
-        permits ReactiveFluxTagDefault {
+        permits ReactiveFluxTag.ReactiveFluxTagDefault {
+    /**
+     * Package-private default implementation of {@link ReactiveFluxTag}.
+     *
+     * <p>Singleton — clients access via {@link ReactiveTag#FLUX}.</p>
+     */
+    final class ReactiveFluxTagDefault implements ReactiveFluxTag {
+
+        static final ReactiveFluxTagDefault INSTANCE = new ReactiveFluxTagDefault();
+
+        private ReactiveFluxTagDefault() {
+        }
+    }
 }

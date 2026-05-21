@@ -13,8 +13,21 @@ package eu.inqudium.core.paradigm;
  * canonical instance via {@link #INSTANCE}.</p>
  */
 public sealed interface SyncTag extends ParadigmTag
-        permits SyncTagDefault {
+        permits SyncTag.SyncTagDefault {
 
     /** The canonical singleton instance. */
     SyncTag INSTANCE = SyncTagDefault.INSTANCE;
+
+    /**
+     * Package-private default implementation of {@link SyncTag}.
+     *
+     * <p>Singleton — clients access via {@link SyncTag#INSTANCE}.</p>
+     */
+    final class SyncTagDefault implements SyncTag {
+
+        static final SyncTagDefault INSTANCE = new SyncTagDefault();
+
+        private SyncTagDefault() {
+        }
+    }
 }

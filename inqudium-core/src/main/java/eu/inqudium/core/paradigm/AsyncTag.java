@@ -18,8 +18,21 @@ package eu.inqudium.core.paradigm;
  * canonical instance via {@link #INSTANCE}.</p>
  */
 public sealed interface AsyncTag extends ParadigmTag
-        permits AsyncTagDefault {
+        permits AsyncTag.AsyncTagDefault {
 
     /** The canonical singleton instance. */
     AsyncTag INSTANCE = AsyncTagDefault.INSTANCE;
+
+    /**
+     * Package-private default implementation of {@link AsyncTag}.
+     *
+     * <p>Singleton — clients access via {@link AsyncTag#INSTANCE}.</p>
+     */
+    final class AsyncTagDefault implements AsyncTag {
+
+        static final AsyncTagDefault INSTANCE = new AsyncTagDefault();
+
+        private AsyncTagDefault() {
+        }
+    }
 }

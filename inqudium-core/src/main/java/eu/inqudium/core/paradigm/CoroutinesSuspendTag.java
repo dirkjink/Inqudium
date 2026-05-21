@@ -11,5 +11,18 @@ package eu.inqudium.core.paradigm;
  * access the canonical instance via {@link CoroutinesTag#SUSPEND}.</p>
  */
 public sealed interface CoroutinesSuspendTag extends CoroutinesTag
-        permits CoroutinesSuspendTagDefault {
+        permits CoroutinesSuspendTag.CoroutinesSuspendTagDefault {
+    /**
+     * Package-private default implementation of {@link CoroutinesSuspendTag}.
+     *
+     * <p>Singleton — clients access via {@link CoroutinesTag#SUSPEND}.</p>
+     */
+    final class CoroutinesSuspendTagDefault implements CoroutinesSuspendTag {
+
+        static final CoroutinesSuspendTagDefault INSTANCE =
+                new CoroutinesSuspendTagDefault();
+
+        private CoroutinesSuspendTagDefault() {
+        }
+    }
 }

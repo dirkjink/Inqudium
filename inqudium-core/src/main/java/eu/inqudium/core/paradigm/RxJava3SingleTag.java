@@ -10,5 +10,17 @@ package eu.inqudium.core.paradigm;
  * the canonical instance via {@link RxJava3Tag#SINGLE}.</p>
  */
 public sealed interface RxJava3SingleTag extends RxJava3Tag
-        permits RxJava3SingleTagDefault {
+        permits RxJava3SingleTag.RxJava3SingleTagDefault {
+    /**
+     * Package-private default implementation of {@link RxJava3SingleTag}.
+     *
+     * <p>Singleton — clients access via {@link RxJava3Tag#SINGLE}.</p>
+     */
+    final class RxJava3SingleTagDefault implements RxJava3SingleTag {
+
+        static final RxJava3SingleTagDefault INSTANCE = new RxJava3SingleTagDefault();
+
+        private RxJava3SingleTagDefault() {
+        }
+    }
 }

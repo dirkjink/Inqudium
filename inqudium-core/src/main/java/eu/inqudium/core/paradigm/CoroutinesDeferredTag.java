@@ -10,5 +10,18 @@ package eu.inqudium.core.paradigm;
  * access the canonical instance via {@link CoroutinesTag#DEFERRED}.</p>
  */
 public sealed interface CoroutinesDeferredTag extends CoroutinesTag
-        permits CoroutinesDeferredTagDefault {
+        permits CoroutinesDeferredTag.CoroutinesDeferredTagDefault {
+    /**
+     * Package-private default implementation of {@link CoroutinesDeferredTag}.
+     *
+     * <p>Singleton — clients access via {@link CoroutinesTag#DEFERRED}.</p>
+     */
+    final class CoroutinesDeferredTagDefault implements CoroutinesDeferredTag {
+
+        static final CoroutinesDeferredTagDefault INSTANCE =
+                new CoroutinesDeferredTagDefault();
+
+        private CoroutinesDeferredTagDefault() {
+        }
+    }
 }

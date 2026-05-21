@@ -30,17 +30,17 @@ public sealed interface RxJava3Tag extends ParadigmTag
                 RxJava3ObservableTag {
 
     /** The {@code Single<T>} sub-shape. */
-    RxJava3SingleTag SINGLE = RxJava3SingleTagDefault.INSTANCE;
+    RxJava3SingleTag SINGLE = RxJava3SingleTag.RxJava3SingleTagDefault.INSTANCE;
 
     /** The {@code Maybe<T>} sub-shape. */
-    RxJava3MaybeTag MAYBE = RxJava3MaybeTagDefault.INSTANCE;
+    RxJava3MaybeTag MAYBE = RxJava3MaybeTag.RxJava3MaybeTagDefault.INSTANCE;
 
     /** The {@code Completable} sub-shape. */
-    RxJava3CompletableTag COMPLETABLE = RxJava3CompletableTagDefault.INSTANCE;
+    RxJava3CompletableTag COMPLETABLE = RxJava3CompletableTag.RxJava3CompletableTagDefault.INSTANCE;
 
     /** The {@code Flowable<T>} sub-shape. */
-    RxJava3FlowableTag FLOWABLE = RxJava3FlowableTagDefault.INSTANCE;
+    RxJava3FlowableTag FLOWABLE = RxJava3FlowableTag.RxJava3FlowableTagDefault.INSTANCE;
 
     /** The {@code Observable<T>} sub-shape. */
-    RxJava3ObservableTag OBSERVABLE = RxJava3ObservableTagDefault.INSTANCE;
+    RxJava3ObservableTag OBSERVABLE = RxJava3ObservableTag.RxJava3ObservableTagDefault.INSTANCE;
 }

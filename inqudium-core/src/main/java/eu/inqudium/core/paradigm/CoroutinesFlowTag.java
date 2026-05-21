@@ -9,5 +9,17 @@ package eu.inqudium.core.paradigm;
  * access the canonical instance via {@link CoroutinesTag#FLOW}.</p>
  */
 public sealed interface CoroutinesFlowTag extends CoroutinesTag
-        permits CoroutinesFlowTagDefault {
+        permits CoroutinesFlowTag.CoroutinesFlowTagDefault {
+    /**
+     * Package-private default implementation of {@link CoroutinesFlowTag}.
+     *
+     * <p>Singleton — clients access via {@link CoroutinesTag#FLOW}.</p>
+     */
+    final class CoroutinesFlowTagDefault implements CoroutinesFlowTag {
+
+        static final CoroutinesFlowTagDefault INSTANCE = new CoroutinesFlowTagDefault();
+
+        private CoroutinesFlowTagDefault() {
+        }
+    }
 }

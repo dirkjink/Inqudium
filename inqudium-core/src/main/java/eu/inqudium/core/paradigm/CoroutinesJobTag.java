@@ -10,5 +10,17 @@ package eu.inqudium.core.paradigm;
  * the canonical instance via {@link CoroutinesTag#JOB}.</p>
  */
 public sealed interface CoroutinesJobTag extends CoroutinesTag
-        permits CoroutinesJobTagDefault {
+        permits CoroutinesJobTag.CoroutinesJobTagDefault {
+    /**
+     * Package-private default implementation of {@link CoroutinesJobTag}.
+     *
+     * <p>Singleton — clients access via {@link CoroutinesTag#JOB}.</p>
+     */
+    final class CoroutinesJobTagDefault implements CoroutinesJobTag {
+
+        static final CoroutinesJobTagDefault INSTANCE = new CoroutinesJobTagDefault();
+
+        private CoroutinesJobTagDefault() {
+        }
+    }
 }
