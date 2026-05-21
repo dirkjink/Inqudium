@@ -1,10 +1,10 @@
 package eu.inqudium.proxy.construction;
 
+import eu.inqudium.annotation.evaluator.AnnotationEvaluator;
 import eu.inqudium.annotation.evaluator.EvaluationResult;
 import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.pipeline.InqPipeline;
-import eu.inqudium.pipeline.InqPipelineAnnotationEvaluator;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
 import eu.inqudium.proxy.handler.ObjectMethodHandler.Kind;
 
@@ -19,8 +19,11 @@ import java.util.Objects;
  *
  * <ol>
  *   <li>Validate inputs.</li>
- *   <li>Call the annotation evaluator via the
- *       {@link InqPipelineAnnotationEvaluator} bridge (ADR-036).</li>
+ *   <li>Call the {@link AnnotationEvaluator} to derive the per-method
+ *       protection plan (ADR-036).</li>
+ *   <li>Call {@link InqPipeline#validateReferences} to confirm every
+ *       referenced element exists in the pipeline with a matching
+ *       paradigm (ADR-040 §3 Invariant 2).</li>
  *   <li>For each method in the evaluator's plan, classify and build
  *       a {@link MethodDispatchEntry} via
  *       {@link MethodDispatchEntryFactory}.</li>
@@ -96,8 +99,11 @@ public final class ProxyBuilder {
         @SuppressWarnings("unchecked")
         Class<? extends T> implClass = (Class<? extends T>) target.getClass();
 
-        EvaluationResult evaluation = InqPipelineAnnotationEvaluator
-                .evaluate(pipeline, serviceInterface, implClass);
+        EvaluationResult evaluation = AnnotationEvaluator
+                .instance()
+                .evaluate(serviceInterface, implClass);
+
+        pipeline.validateReferences(evaluation, serviceInterface);
 
         Map<Method, MethodPlan> plans = evaluation.plans();
         Map<Method, MethodDispatchEntry> entries =

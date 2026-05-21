@@ -1,11 +1,8 @@
 package eu.inqudium.annotation.evaluator;
 
-import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.paradigm.ParadigmTag;
-import eu.inqudium.core.pipeline.InqPipeline;
 
-import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -23,15 +20,10 @@ import java.util.Map;
  */
 final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
 
-    private final InqPipeline pipeline;
     private final InheritanceResolver inheritanceResolver;
     private final OrderingResolver orderingResolver;
 
-    DefaultAnnotationEvaluator(InqPipeline pipeline) {
-        if (pipeline == null) {
-            throw new IllegalArgumentException("pipeline must not be null");
-        }
-        this.pipeline = pipeline;
+    DefaultAnnotationEvaluator() {
         MethodResolver methodResolver = new DefaultMethodResolver();
         this.inheritanceResolver = new DefaultInheritanceResolver(methodResolver);
         this.orderingResolver = new DefaultOrderingResolver();
@@ -107,8 +99,7 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
             AnnotatedElement annotatedElement,
             java.util.function.BiConsumer<InqElementType, String> consumer) {
 
-        Map<InqElementType, String> elementNames = collectElementNames(
-                serviceInterface, interfaceMethod, annotatedElement);
+        Map<InqElementType, String> elementNames = collectElementNames(annotatedElement);
         List<InqElementType> ordering = orderingResolver.resolveOrder(annotatedElement);
 
         for (InqElementType type : ordering) {
@@ -128,43 +119,20 @@ final class DefaultAnnotationEvaluator implements AnnotationEvaluator {
     }
 
     /**
-     * Reads every Inqudium element annotation present on {@code annotatedElement}
-     * and projects it onto an {@code (element type, instance name)} map. Each
-     * referenced name is then verified against the pipeline; the first
-     * unknown name aborts the evaluation.
+     * Reads every Inqudium element annotation present on
+     * {@code annotatedElement} and projects it onto an
+     * {@code (element type, instance name)} map.
      */
-    private Map<InqElementType, String> collectElementNames(
-            Class<?> serviceInterface, Method interfaceMethod, AnnotatedElement annotatedElement) {
-
+    private Map<InqElementType, String> collectElementNames(AnnotatedElement annotatedElement) {
         EnumMap<InqElementType, String> result = new EnumMap<>(InqElementType.class);
         for (ElementAnnotationDescriptor<?> descriptor : ElementAnnotations.DESCRIPTORS) {
             String name = descriptor.readName(annotatedElement);
             if (name == null) {
                 continue;
             }
-            requirePipelineHasElement(
-                    serviceInterface, interfaceMethod, descriptor.annotationType(), name);
             result.put(descriptor.elementType(), name);
         }
         return result;
-    }
-
-    private void requirePipelineHasElement(
-            Class<?> serviceInterface,
-            Method interfaceMethod,
-            Class<? extends Annotation> annotationType,
-            String elementName) {
-
-        for (InqElement element : pipeline.elements()) {
-            if (elementName.equals(element.name())) {
-                return;
-            }
-        }
-        throw new InqAnnotationConfigurationException(
-                "@" + annotationType.getSimpleName() + " on "
-                        + describe(serviceInterface, interfaceMethod)
-                        + " references element name '" + elementName
-                        + "' which is not present in the pipeline");
     }
 
     private static String describe(Class<?> serviceInterface, Method interfaceMethod) {

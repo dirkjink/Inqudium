@@ -8,10 +8,12 @@ import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.core.event.InqEventPublisher;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Asynchronous-imperative handle on a {@link BulkheadComponent}.
@@ -58,6 +60,11 @@ final class AsyncBulkheadHandle implements BulkheadHandle<AsyncTag> {
     @Override
     public InqEventPublisher eventPublisher() {
         return component.eventPublisher();
+    }
+
+    @Override
+    public Set<ParadigmTag> paradigmTags() {
+        return Set.of(AsyncTag.INSTANCE);
     }
 
     @Override

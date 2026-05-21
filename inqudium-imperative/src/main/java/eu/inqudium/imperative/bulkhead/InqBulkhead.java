@@ -12,6 +12,9 @@ import eu.inqudium.config.snapshot.LimitAlgorithm;
 import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
 import eu.inqudium.config.snapshot.VegasLimitAlgorithmConfig;
 import eu.inqudium.core.element.InqElementType;
+import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.time.InqClock;
@@ -19,6 +22,8 @@ import eu.inqudium.core.time.InqNanoTimeSource;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
 import eu.inqudium.imperative.lifecycle.ImperativeLifecyclePhasedComponent;
 import eu.inqudium.imperative.lifecycle.spi.ImperativePhase;
+
+import java.util.Set;
 
 /**
  * Lifecycle-aware imperative bulkhead built on top of the new configuration architecture
@@ -108,6 +113,11 @@ public final class InqBulkhead<A, R>
     @Override
     public InqEventPublisher eventPublisher() {
         return componentEventPublisher;
+    }
+
+    @Override
+    public Set<ParadigmTag> paradigmTags() {
+        return Set.of(SyncTag.INSTANCE, AsyncTag.INSTANCE);
     }
 
     /**

@@ -12,7 +12,6 @@ import eu.inqudium.core.element.paradigm.ReactiveTag;
 import eu.inqudium.core.element.paradigm.RxJava3Tag;
 import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
-import eu.inqudium.core.pipeline.InqPipeline;
 import io.reactivex.rxjava3.core.Single;
 import kotlinx.coroutines.Deferred;
 import org.junit.jupiter.api.Nested;
@@ -29,30 +28,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * End-to-end tests for the paradigm-stamped evaluator method from ADR-046 §3.
+ * End-to-end tests for the paradigm-stamped evaluator method from
+ * ADR-046 §3.
  *
- * <p>The tests pin: validation parity with the legacy {@code evaluate(...)},
- * paradigm-stamping across all five top-level paradigm families, the
- * {@link ElementRef} pair shape carried by {@link MethodPlan.Decorated},
- * the {@link MethodPlan.PassThrough} variant, immutability of the
- * element list, and backward-compatibility — the existing
- * {@code evaluate(...)} method continues to produce the legacy plan
- * variants unchanged.</p>
+ * <p>The tests pin: argument validation, paradigm-stamping across all
+ * five top-level paradigm families, the {@link ElementRef} pair shape
+ * carried by {@link MethodPlan.Decorated}, the
+ * {@link MethodPlan.PassThrough} variant, and immutability of the
+ * element list.</p>
  *
- * <p>Fixtures mirror the layout of {@link AnnotationEvaluatorTest}: each
- * test builds a minimal pipeline holding exactly the stub elements the
- * fixture's annotations reference; one stub element per element type per
- * pipeline (ADR-036 §4).</p>
+ * <p>Pipeline reference resolution (whether a given
+ * {@code (elementType, paradigmTag, name)} reference resolves to an
+ * element in a pipeline) is no longer an evaluator concern; it is
+ * tested in {@code eu.inqudium.pipeline.InqPipelineValidationTest}.</p>
  */
 class DefaultAnnotationEvaluatorTest {
 
     @Nested
-    class ValidationParityWithLegacyMethod {
+    class ArgumentValidation {
 
         @Test
         void should_reject_null_service_interface_with_illegal_argument_exception() {
             // Given
-            AnnotationEvaluator evaluator = evaluatorWith();
+            AnnotationEvaluator evaluator = AnnotationEvaluator.instance();
             // When / Then
             assertThatThrownBy(() -> evaluator.evaluate(null, SyncAnnotatedImpl.class))
                     .isInstanceOf(IllegalArgumentException.class)
@@ -62,7 +60,7 @@ class DefaultAnnotationEvaluatorTest {
         @Test
         void should_reject_null_implementation_class_with_illegal_argument_exception() {
             // Given
-            AnnotationEvaluator evaluator = evaluatorWith();
+            AnnotationEvaluator evaluator = AnnotationEvaluator.instance();
             // When / Then
             assertThatThrownBy(() -> evaluator.evaluate(SyncApi.class, null))
                     .isInstanceOf(IllegalArgumentException.class)
@@ -72,7 +70,7 @@ class DefaultAnnotationEvaluatorTest {
         @Test
         void should_reject_concrete_class_passed_as_service_interface() {
             // Given
-            AnnotationEvaluator evaluator = evaluatorWith();
+            AnnotationEvaluator evaluator = AnnotationEvaluator.instance();
             // When / Then
             assertThatThrownBy(() -> evaluator.evaluate(
                     SyncAnnotatedImpl.class, SyncAnnotatedImpl.class))
@@ -424,16 +422,14 @@ class DefaultAnnotationEvaluatorTest {
         }
     }
 
-    private static AnnotationEvaluator evaluatorWith(InqElement... elements) {
-        return AnnotationEvaluator.forPipeline(pipelineWithElements(elements));
-    }
-
-    private static InqPipeline pipelineWithElements(InqElement... elements) {
-        InqPipeline.Builder builder = InqPipeline.builder();
-        for (InqElement element : elements) {
-            builder.shield(element);
-        }
-        return builder.build();
+    /**
+     * The evaluator is paradigm-agnostic and pipeline-free; the
+     * varargs are accepted purely so test call sites that previously
+     * wired a stub pipeline can be left untouched. The arguments are
+     * discarded — they exist only for readability at the call site.
+     */
+    private static AnnotationEvaluator evaluatorWith(InqElement... ignoredStubElements) {
+        return AnnotationEvaluator.instance();
     }
 
     private static InqElement stubElement(String name, InqElementType type) {
@@ -444,6 +440,11 @@ class DefaultAnnotationEvaluatorTest {
         @Override
         public InqEventPublisher eventPublisher() {
             return null;
+        }
+
+        @Override
+        public java.util.Set<ParadigmTag> paradigmTags() {
+            return java.util.Set.of(SyncTag.INSTANCE);
         }
     }
 

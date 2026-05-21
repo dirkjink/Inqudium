@@ -313,6 +313,13 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
     }
 
     @Override
+    public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+        return java.util.Set.of(
+                eu.inqudium.core.element.paradigm.SyncTag.INSTANCE,
+                eu.inqudium.core.element.paradigm.AsyncTag.INSTANCE);
+    }
+
+    @Override
     public InqImperativeBulkheadConfig getConfig() {
         return config;
     }

@@ -4,6 +4,7 @@ import java.lang.annotation.Annotation;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import eu.inqudium.annotation.InqBulkhead;
 import eu.inqudium.annotation.InqCircuitBreaker;
@@ -20,9 +21,14 @@ import eu.inqudium.core.element.InqElementType;
  * refer to them in this sequence regardless of which consumer produced the
  * message.
  *
+ * <p>The class is public to expose {@link #annotationFor(InqElementType)} to
+ * cross-module consumers (notably {@code inqudium-pipeline}'s reference
+ * validation). The descriptor list and map remain package-private — only the
+ * reverse-lookup helper is part of the cross-module surface.</p>
+ *
  * @since 0.8.0
  */
-final class ElementAnnotations {
+public final class ElementAnnotations {
 
     static final List<ElementAnnotationDescriptor<?>> DESCRIPTORS = List.of(
             new ElementAnnotationDescriptor<>(
@@ -50,5 +56,31 @@ final class ElementAnnotations {
 
     private ElementAnnotations() {
         // utility class
+    }
+
+    /**
+     * Returns the annotation class associated with the given element type.
+     * Reverse of the annotation-to-type mapping used during evaluation.
+     *
+     * <p>Used by pipeline-side validation to produce error messages that
+     * reference the annotation by its source-level name (e.g.
+     * {@code @InqBulkhead}) rather than just its element type
+     * ({@code BULKHEAD}).</p>
+     *
+     * @param elementType the element type to look up; must not be {@code null}
+     * @return the associated annotation class
+     * @throws IllegalArgumentException if no annotation is registered for the
+     *         given element type
+     * @since 0.10.0
+     */
+    public static Class<? extends Annotation> annotationFor(InqElementType elementType) {
+        Objects.requireNonNull(elementType, "elementType");
+        for (ElementAnnotationDescriptor<?> descriptor : DESCRIPTORS) {
+            if (descriptor.elementType() == elementType) {
+                return descriptor.annotationType();
+            }
+        }
+        throw new IllegalArgumentException(
+                "No annotation registered for element type " + elementType);
     }
 }

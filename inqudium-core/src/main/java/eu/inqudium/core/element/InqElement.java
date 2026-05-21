@@ -1,13 +1,18 @@
 package eu.inqudium.core.element;
 
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.core.event.InqEventPublisher;
+
+import java.util.Set;
 
 /**
  * Base interface implemented by all resilience elements across all paradigms.
  *
  * <p>Every element has a name (used for registry lookup and event correlation),
- * a type (used for pipeline ordering and event identification), and an event
- * publisher (used for observability).
+ * a type (used for pipeline ordering and event identification), an event
+ * publisher (used for observability), and an explicit set of paradigm tags
+ * (used by pipeline reference validation to confirm that an annotation-driven
+ * plan can be wrapped by this element).</p>
  *
  * @since 0.1.0
  */
@@ -39,6 +44,39 @@ public interface InqElement {
      * @return the per-instance event publisher
      */
     InqEventPublisher eventPublisher();
+
+    /**
+     * Returns the paradigm tags this element supports.
+     *
+     * <p>Every concrete element declares explicitly which paradigms it can
+     * wrap. A bulkhead that handles both synchronous and asynchronous calls
+     * returns both {@link eu.inqudium.core.element.paradigm.SyncTag SyncTag}
+     * and {@link eu.inqudium.core.element.paradigm.AsyncTag AsyncTag}; a
+     * future reactive bulkhead returns
+     * {@link eu.inqudium.core.element.paradigm.ReactiveMonoTag ReactiveMonoTag}
+     * and {@link eu.inqudium.core.element.paradigm.ReactiveFluxTag ReactiveFluxTag};
+     * a synchronous-only traffic shaper returns just {@code SyncTag}.</p>
+     *
+     * <p>This is an abstract method by design: every element must declare
+     * its paradigm coverage. There is no sensible default — a "paradigm-less"
+     * element cannot be wrapped by any annotation, and silent misclassification
+     * would defer the problem to runtime stack traces. The compile-time error
+     * from omitting this method is the correct enforcement.</p>
+     *
+     * <p>The annotation evaluator builds plans referring to elements by
+     * {@code (elementType, name)} pair plus a per-method
+     * {@link ParadigmTag}. Pipeline reference validation checks that each
+     * reference resolves to an element whose {@link #paradigmTags()} contains
+     * the method's paradigm.</p>
+     *
+     * @return the immutable set of paradigm tags this element supports;
+     *         never {@code null}, never empty in production code (an empty
+     *         set is legal only for deprecated/test fixtures and results in
+     *         the element being unreachable from any annotation-driven plan)
+     *
+     * @since 0.10.0
+     */
+    Set<ParadigmTag> paradigmTags();
 
     /**
      * Element-kind marker interfaces. Components implement

@@ -209,6 +209,13 @@ public class ImperativeCircuitBreaker<A, R> implements CircuitBreaker<A, R> {
         return eventPublisher;
     }
 
+    @Override
+    public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+        return java.util.Set.of(
+                eu.inqudium.core.element.paradigm.SyncTag.INSTANCE,
+                eu.inqudium.core.element.paradigm.AsyncTag.INSTANCE);
+    }
+
     // ======================== Synchronous pipeline execution ========================
 
     /**

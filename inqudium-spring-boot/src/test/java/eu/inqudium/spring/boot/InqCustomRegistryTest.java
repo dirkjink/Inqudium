@@ -140,6 +140,11 @@ class InqCustomRegistryTest {
             }
 
             @Override
+            public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+                return java.util.Set.of(eu.inqudium.core.element.paradigm.SyncTag.INSTANCE);
+            }
+
+            @Override
             public Object execute(long stackId, long callId, Void arg,
                                   LayerTerminal<Void, Object> next) {
                 return next.execute(stackId, callId, arg);
