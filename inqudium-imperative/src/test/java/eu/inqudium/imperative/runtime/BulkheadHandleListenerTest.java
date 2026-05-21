@@ -5,7 +5,7 @@ import eu.inqudium.config.lifecycle.ChangeDecision;
 import eu.inqudium.config.lifecycle.LifecycleState;
 import eu.inqudium.config.runtime.BulkheadHandle;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.validation.ApplyOutcome;
 import eu.inqudium.config.validation.BuildReport;

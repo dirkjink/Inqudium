@@ -2,7 +2,7 @@ package eu.inqudium.imperative.bulkhead.dsl;
 
 import eu.inqudium.config.dsl.AsyncBulkheadBuilder;
 import eu.inqudium.config.dsl.BulkheadBuilderBase;
-import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
 
 /**
  * Concrete async-paradigm bulkhead builder. A thin shell over

@@ -1,6 +1,6 @@
 package eu.inqudium.config.runtime;
 
-import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
 
 import java.util.Optional;
 import java.util.Set;

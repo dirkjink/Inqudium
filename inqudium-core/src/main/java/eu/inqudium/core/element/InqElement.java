@@ -1,7 +1,11 @@
 package eu.inqudium.core.element;
 
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 import eu.inqudium.core.event.InqEventPublisher;
+import eu.inqudium.core.paradigm.ReactiveFluxTag;
+import eu.inqudium.core.paradigm.ReactiveMonoTag;
+import eu.inqudium.core.paradigm.SyncTag;
 
 import java.util.Set;
 
@@ -50,11 +54,11 @@ public interface InqElement {
      *
      * <p>Every concrete element declares explicitly which paradigms it can
      * wrap. A bulkhead that handles both synchronous and asynchronous calls
-     * returns both {@link eu.inqudium.core.element.paradigm.SyncTag SyncTag}
-     * and {@link eu.inqudium.core.element.paradigm.AsyncTag AsyncTag}; a
+     * returns both {@link SyncTag SyncTag}
+     * and {@link AsyncTag AsyncTag}; a
      * future reactive bulkhead returns
-     * {@link eu.inqudium.core.element.paradigm.ReactiveMonoTag ReactiveMonoTag}
-     * and {@link eu.inqudium.core.element.paradigm.ReactiveFluxTag ReactiveFluxTag};
+     * {@link ReactiveMonoTag ReactiveMonoTag}
+     * and {@link ReactiveFluxTag ReactiveFluxTag};
      * a synchronous-only traffic shaper returns just {@code SyncTag}.</p>
      *
      * <p>This is an abstract method by design: every element must declare

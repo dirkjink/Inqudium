@@ -13,6 +13,9 @@ import eu.inqudium.core.element.bulkhead.strategy.TimedBulkheadStrategy;
 import eu.inqudium.core.element.bulkhead.strategy.RejectionContext;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.log.Logger;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerTerminal;
 import eu.inqudium.core.time.InqClock;
@@ -313,10 +316,10 @@ public final class ImperativeBulkhead<A, R> implements Bulkhead<A, R> {
     }
 
     @Override
-    public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+    public java.util.Set<ParadigmTag> paradigmTags() {
         return java.util.Set.of(
-                eu.inqudium.core.element.paradigm.SyncTag.INSTANCE,
-                eu.inqudium.core.element.paradigm.AsyncTag.INSTANCE);
+                SyncTag.INSTANCE,
+                AsyncTag.INSTANCE);
     }
 
     @Override

@@ -1,6 +1,6 @@
 package eu.inqudium.config.runtime;
 
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 
 import java.util.Objects;
 

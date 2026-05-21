@@ -4,11 +4,12 @@ import eu.inqudium.annotation.evaluator.ElementRef;
 import eu.inqudium.annotation.evaluator.InqAnnotationConfigurationException;
 import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.CoroutinesTag;
-import eu.inqudium.core.element.paradigm.ReactiveTag;
-import eu.inqudium.core.element.paradigm.RxJava3Tag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.CoroutinesTag;
+import eu.inqudium.core.paradigm.ReactiveTag;
+import eu.inqudium.core.paradigm.RxJava3Tag;
+import eu.inqudium.core.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 import eu.inqudium.pipeline.InqPipeline;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
 import org.junit.jupiter.api.Nested;
@@ -368,7 +369,7 @@ class MethodDispatchEntryFactoryTest {
                     .hasMessageContaining("remove the resilience annotation");
         }
 
-        private void assertFailFast(eu.inqudium.core.element.paradigm.ParadigmTag tag,
+        private void assertFailFast(ParadigmTag tag,
                                     String tagFamilyInMessage,
                                     String descriptionInMessage) throws NoSuchMethodException {
             Method m = method("simple");

@@ -2,7 +2,7 @@ package eu.inqudium.config.runtime;
 
 import eu.inqudium.config.dsl.GeneralSnapshotBuilder;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 import eu.inqudium.config.spi.ParadigmProvider;
 import eu.inqudium.config.validation.BuildReport;
 import eu.inqudium.config.validation.CrossComponentRule;

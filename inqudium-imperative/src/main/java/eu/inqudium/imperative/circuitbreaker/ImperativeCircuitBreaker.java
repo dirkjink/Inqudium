@@ -10,6 +10,9 @@ import eu.inqudium.core.element.circuitbreaker.StateTransition;
 import eu.inqudium.core.element.circuitbreaker.config.InqCircuitBreakerConfig;
 import eu.inqudium.core.element.circuitbreaker.metrics.FailureMetrics;
 import eu.inqudium.core.event.InqEventPublisher;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.core.pipeline.LayerTerminal;
 import eu.inqudium.core.time.InqNanoTimeSource;
 import eu.inqudium.imperative.core.pipeline.AsyncLayerTerminal;
@@ -210,10 +213,10 @@ public class ImperativeCircuitBreaker<A, R> implements CircuitBreaker<A, R> {
     }
 
     @Override
-    public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+    public java.util.Set<ParadigmTag> paradigmTags() {
         return java.util.Set.of(
-                eu.inqudium.core.element.paradigm.SyncTag.INSTANCE,
-                eu.inqudium.core.element.paradigm.AsyncTag.INSTANCE);
+                SyncTag.INSTANCE,
+                AsyncTag.INSTANCE);
     }
 
     // ======================== Synchronous pipeline execution ========================

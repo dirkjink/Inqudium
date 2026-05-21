@@ -4,7 +4,7 @@ import eu.inqudium.config.snapshot.ComponentSnapshot;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
 import eu.inqudium.config.validation.ApplyOutcome;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 
 import java.util.stream.Stream;
 

@@ -5,9 +5,8 @@ import eu.inqudium.config.runtime.Async;
 import eu.inqudium.config.runtime.BulkheadHandle;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.runtime.Sync;
-import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 

@@ -2,8 +2,8 @@ package eu.inqudium.pipeline;
 
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
 
 import java.util.Set;

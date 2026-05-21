@@ -1,6 +1,8 @@
 package eu.inqudium.proxy.handler;
 
 import eu.inqudium.core.element.InqElement;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.proxy.InqUndeclaredCheckedException;
 import eu.inqudium.proxy.entries.MethodDispatchEntry;
 import eu.inqudium.pipeline.introspection.MethodLayers;
@@ -470,8 +472,8 @@ class InqInvocationHandlerTest {
             }
 
             @Override
-            public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
-                return java.util.Set.of(eu.inqudium.core.element.paradigm.SyncTag.INSTANCE);
+            public java.util.Set<ParadigmTag> paradigmTags() {
+                return java.util.Set.of(SyncTag.INSTANCE);
             }
         }
 

@@ -1,7 +1,7 @@
 package eu.inqudium.bulkhead.integration.proxy;
 
 import eu.inqudium.config.runtime.BulkheadHandle;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.core.element.bulkhead.InqBulkheadFullException;
 import eu.inqudium.imperative.bulkhead.InqBulkhead;

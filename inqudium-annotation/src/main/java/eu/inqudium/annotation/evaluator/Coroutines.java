@@ -1,6 +1,6 @@
 package eu.inqudium.annotation.evaluator;
 
-import eu.inqudium.core.element.paradigm.CoroutinesTag;
+import eu.inqudium.core.paradigm.CoroutinesTag;
 
 import java.lang.reflect.Method;
 import java.util.Optional;

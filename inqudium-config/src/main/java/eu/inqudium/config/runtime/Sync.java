@@ -1,6 +1,6 @@
 package eu.inqudium.config.runtime;
 
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 
 import java.util.Optional;
 import java.util.Set;

@@ -1,5 +1,35 @@
 package eu.inqudium.core.element.paradigm;
 
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.AsyncTagDefault;
+import eu.inqudium.core.paradigm.CoroutinesDeferredTag;
+import eu.inqudium.core.paradigm.CoroutinesDeferredTagDefault;
+import eu.inqudium.core.paradigm.CoroutinesFlowTag;
+import eu.inqudium.core.paradigm.CoroutinesFlowTagDefault;
+import eu.inqudium.core.paradigm.CoroutinesJobTag;
+import eu.inqudium.core.paradigm.CoroutinesJobTagDefault;
+import eu.inqudium.core.paradigm.CoroutinesSuspendTag;
+import eu.inqudium.core.paradigm.CoroutinesSuspendTagDefault;
+import eu.inqudium.core.paradigm.CoroutinesTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ReactiveFluxTag;
+import eu.inqudium.core.paradigm.ReactiveFluxTagDefault;
+import eu.inqudium.core.paradigm.ReactiveMonoTag;
+import eu.inqudium.core.paradigm.ReactiveMonoTagDefault;
+import eu.inqudium.core.paradigm.ReactiveTag;
+import eu.inqudium.core.paradigm.RxJava3CompletableTag;
+import eu.inqudium.core.paradigm.RxJava3CompletableTagDefault;
+import eu.inqudium.core.paradigm.RxJava3FlowableTag;
+import eu.inqudium.core.paradigm.RxJava3FlowableTagDefault;
+import eu.inqudium.core.paradigm.RxJava3MaybeTag;
+import eu.inqudium.core.paradigm.RxJava3MaybeTagDefault;
+import eu.inqudium.core.paradigm.RxJava3ObservableTag;
+import eu.inqudium.core.paradigm.RxJava3ObservableTagDefault;
+import eu.inqudium.core.paradigm.RxJava3SingleTag;
+import eu.inqudium.core.paradigm.RxJava3SingleTagDefault;
+import eu.inqudium.core.paradigm.RxJava3Tag;
+import eu.inqudium.core.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTagDefault;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 

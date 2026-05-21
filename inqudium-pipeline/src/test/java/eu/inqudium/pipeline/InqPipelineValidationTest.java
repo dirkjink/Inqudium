@@ -8,8 +8,8 @@ import eu.inqudium.annotation.evaluator.EvaluationResult;
 import eu.inqudium.annotation.evaluator.InqAnnotationConfigurationException;
 import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 

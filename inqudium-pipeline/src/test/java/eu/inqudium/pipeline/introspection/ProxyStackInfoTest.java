@@ -3,6 +3,8 @@ package eu.inqudium.pipeline.introspection;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.event.InqEventPublisher;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -46,8 +48,8 @@ class ProxyStackInfoTest {
         }
 
         @Override
-        public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
-            return java.util.Set.of(eu.inqudium.core.element.paradigm.SyncTag.INSTANCE);
+        public java.util.Set<ParadigmTag> paradigmTags() {
+            return java.util.Set.of(SyncTag.INSTANCE);
         }
     }
 

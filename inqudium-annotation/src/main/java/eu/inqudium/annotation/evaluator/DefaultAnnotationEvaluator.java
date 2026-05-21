@@ -1,7 +1,7 @@
 package eu.inqudium.annotation.evaluator;
 
 import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;

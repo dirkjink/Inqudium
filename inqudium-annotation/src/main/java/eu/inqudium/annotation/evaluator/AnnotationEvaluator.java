@@ -1,5 +1,7 @@
 package eu.inqudium.annotation.evaluator;
 
+import eu.inqudium.core.paradigm.ParadigmTag;
+
 /**
  * Reads the resilience-element annotations on a service interface's
  * implementation class and produces a per-method paradigm-stamped
@@ -41,7 +43,7 @@ public interface AnnotationEvaluator {
      * paradigm-stamped {@link MethodPlan}.
      *
      * <p>Each per-method plan carries the method's
-     * {@link eu.inqudium.core.element.paradigm.ParadigmTag}; decorated
+     * {@link ParadigmTag}; decorated
      * plans reference their pipeline elements by {@link ElementRef} pair
      * so paradigm-aware resolvers can disambiguate elements that share a
      * name across element types (ADR-046).</p>

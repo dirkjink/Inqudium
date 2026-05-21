@@ -2,7 +2,7 @@ package eu.inqudium.config.spi;
 
 import eu.inqudium.config.dsl.BulkheadBuilderBase;
 import eu.inqudium.config.runtime.ParadigmContainer;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
 
 /**

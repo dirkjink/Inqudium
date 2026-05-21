@@ -15,8 +15,8 @@ import eu.inqudium.config.validation.ConsistencyRule;
 import eu.inqudium.config.validation.ConsistencyRulePipeline;
 import eu.inqudium.config.validation.CrossComponentRule;
 import eu.inqudium.config.validation.ValidationFinding;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 
 import java.time.Instant;
 import java.util.ArrayList;

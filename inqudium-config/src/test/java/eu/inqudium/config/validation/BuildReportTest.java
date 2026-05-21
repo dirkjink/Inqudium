@@ -1,7 +1,7 @@
 package eu.inqudium.config.validation;
 
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

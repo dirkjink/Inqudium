@@ -1,8 +1,8 @@
 package eu.inqudium.proxy.construction;
 
 import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.imperative.core.pipeline.AsyncLayerTerminal;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;

@@ -1,6 +1,6 @@
 package eu.inqudium.config.spi;
 
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

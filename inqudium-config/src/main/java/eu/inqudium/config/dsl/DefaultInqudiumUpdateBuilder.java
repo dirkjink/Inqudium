@@ -3,8 +3,8 @@ package eu.inqudium.config.dsl;
 import eu.inqudium.config.runtime.ParadigmUnavailableException;
 import eu.inqudium.config.spi.ParadigmProvider;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

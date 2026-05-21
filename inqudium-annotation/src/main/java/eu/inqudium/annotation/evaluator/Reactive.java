@@ -1,6 +1,6 @@
 package eu.inqudium.annotation.evaluator;
 
-import eu.inqudium.core.element.paradigm.ReactiveTag;
+import eu.inqudium.core.paradigm.ReactiveTag;
 
 import java.util.Optional;
 

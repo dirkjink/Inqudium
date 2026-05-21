@@ -1,6 +1,6 @@
 package eu.inqudium.config.dsl;
 
-import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
 
 /**
  * Async-paradigm extension of {@link BulkheadBuilder}.

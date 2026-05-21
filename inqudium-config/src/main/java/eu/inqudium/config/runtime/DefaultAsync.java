@@ -3,9 +3,9 @@ package eu.inqudium.config.runtime;
 import eu.inqudium.config.snapshot.ComponentSnapshot;
 import eu.inqudium.config.snapshot.GeneralSnapshot;
 import eu.inqudium.config.spi.ParadigmSectionPatches;
-import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 
 import java.util.Objects;
 import java.util.Optional;

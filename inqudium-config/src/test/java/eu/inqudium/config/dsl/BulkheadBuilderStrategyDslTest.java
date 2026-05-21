@@ -1,6 +1,6 @@
 package eu.inqudium.config.dsl;
 
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.config.snapshot.AdaptiveInstantStrategyConfig;
 import eu.inqudium.config.snapshot.AdaptiveStrategyConfig;
 import eu.inqudium.config.snapshot.AimdLimitAlgorithmConfig;

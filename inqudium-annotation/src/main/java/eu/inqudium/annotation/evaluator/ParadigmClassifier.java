@@ -1,11 +1,11 @@
 package eu.inqudium.annotation.evaluator;
 
-import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.CoroutinesTag;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
-import eu.inqudium.core.element.paradigm.ReactiveTag;
-import eu.inqudium.core.element.paradigm.RxJava3Tag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.CoroutinesTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ReactiveTag;
+import eu.inqudium.core.paradigm.RxJava3Tag;
+import eu.inqudium.core.paradigm.SyncTag;
 
 import java.lang.reflect.Method;
 import java.util.Objects;

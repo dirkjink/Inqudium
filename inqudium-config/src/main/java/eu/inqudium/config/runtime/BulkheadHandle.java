@@ -1,7 +1,9 @@
 package eu.inqudium.config.runtime;
 
 import eu.inqudium.core.element.InqElement;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 
 /**
  * Paradigm-tagged handle on a {@link BulkheadComponent}.
@@ -45,8 +47,8 @@ import eu.inqudium.core.element.paradigm.ParadigmTag;
  * non-bulkhead types at compile time (assigning to an
  * {@code InqElement.Kind.CircuitBreaker} variable fails to compile).</p>
  *
- * @param <P> the paradigm tag — {@link eu.inqudium.core.element.paradigm.SyncTag},
- *            {@link eu.inqudium.core.element.paradigm.AsyncTag}, etc.
+ * @param <P> the paradigm tag — {@link SyncTag},
+ *            {@link AsyncTag}, etc.
  * @since 0.10.0
  */
 public sealed interface BulkheadHandle<P extends ParadigmTag>
@@ -71,7 +73,7 @@ public sealed interface BulkheadHandle<P extends ParadigmTag>
      * @param component the underlying bulkhead component; non-null
      * @return a fresh sync handle wrapping {@code component}
      */
-    static BulkheadHandle<eu.inqudium.core.element.paradigm.SyncTag> sync(BulkheadComponent component) {
+    static BulkheadHandle<SyncTag> sync(BulkheadComponent component) {
         return new SyncBulkheadHandle(component);
     }
 
@@ -83,7 +85,7 @@ public sealed interface BulkheadHandle<P extends ParadigmTag>
      * @param component the underlying bulkhead component; non-null
      * @return a fresh async handle wrapping {@code component}
      */
-    static BulkheadHandle<eu.inqudium.core.element.paradigm.AsyncTag> async(BulkheadComponent component) {
+    static BulkheadHandle<AsyncTag> async(BulkheadComponent component) {
         return new AsyncBulkheadHandle(component);
     }
 }

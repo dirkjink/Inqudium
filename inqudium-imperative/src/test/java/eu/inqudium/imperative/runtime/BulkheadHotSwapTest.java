@@ -3,7 +3,7 @@ package eu.inqudium.imperative.runtime;
 import eu.inqudium.config.Inqudium;
 import eu.inqudium.config.lifecycle.ChangeDecision;
 import eu.inqudium.config.runtime.ComponentKey;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.config.runtime.InqRuntime;
 import eu.inqudium.config.snapshot.AdaptiveInstantStrategyConfig;
 import eu.inqudium.config.snapshot.AdaptiveStrategyConfig;

@@ -12,9 +12,9 @@ import eu.inqudium.config.snapshot.LimitAlgorithm;
 import eu.inqudium.config.snapshot.SemaphoreStrategyConfig;
 import eu.inqudium.config.snapshot.VegasLimitAlgorithmConfig;
 import eu.inqudium.core.element.InqElementType;
-import eu.inqudium.core.element.paradigm.AsyncTag;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.AsyncTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.time.InqClock;
@@ -72,6 +72,8 @@ public final class InqBulkhead<A, R>
                    InqDecorator<A, R>,
                    InqAsyncDecorator<A, R> {
 
+    private static final Set<ParadigmTag> PARADIGM_TAGS = Set.of(SyncTag.INSTANCE, AsyncTag.INSTANCE);
+
     private final InqEventPublisher componentEventPublisher;
     private final InqClock clock;
     private final InqNanoTimeSource nanoTimeSource;
@@ -117,7 +119,7 @@ public final class InqBulkhead<A, R>
 
     @Override
     public Set<ParadigmTag> paradigmTags() {
-        return Set.of(SyncTag.INSTANCE, AsyncTag.INSTANCE);
+        return PARADIGM_TAGS;
     }
 
     /**

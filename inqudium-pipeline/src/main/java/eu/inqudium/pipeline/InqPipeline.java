@@ -6,7 +6,7 @@ import eu.inqudium.annotation.evaluator.EvaluationResult;
 import eu.inqudium.annotation.evaluator.InqAnnotationConfigurationException;
 import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElement;
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;

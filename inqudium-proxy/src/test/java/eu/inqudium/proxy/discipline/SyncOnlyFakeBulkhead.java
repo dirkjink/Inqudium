@@ -2,6 +2,8 @@ package eu.inqudium.proxy.discipline;
 
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.event.InqEventPublisher;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerTerminal;
 
@@ -40,8 +42,8 @@ public final class SyncOnlyFakeBulkhead implements InqDecorator<Object, Object> 
     }
 
     @Override
-    public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
-        return java.util.Set.of(eu.inqudium.core.element.paradigm.SyncTag.INSTANCE);
+    public java.util.Set<ParadigmTag> paradigmTags() {
+        return java.util.Set.of(SyncTag.INSTANCE);
     }
 
     @Override

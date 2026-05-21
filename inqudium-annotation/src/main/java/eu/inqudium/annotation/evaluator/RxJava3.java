@@ -1,6 +1,6 @@
 package eu.inqudium.annotation.evaluator;
 
-import eu.inqudium.core.element.paradigm.RxJava3Tag;
+import eu.inqudium.core.paradigm.RxJava3Tag;
 
 import java.util.Optional;
 

@@ -2,6 +2,8 @@ package eu.inqudium.proxy.introspection;
 
 import eu.inqudium.core.element.InqElementType;
 import eu.inqudium.core.event.InqEventPublisher;
+import eu.inqudium.core.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerTerminal;
 import eu.inqudium.pipeline.DetectionProxy;
@@ -67,8 +69,8 @@ class InqIntrospectorEndToEndTest {
         }
 
         @Override
-        public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
-            return java.util.Set.of(eu.inqudium.core.element.paradigm.SyncTag.INSTANCE);
+        public java.util.Set<ParadigmTag> paradigmTags() {
+            return java.util.Set.of(SyncTag.INSTANCE);
         }
 
         @Override

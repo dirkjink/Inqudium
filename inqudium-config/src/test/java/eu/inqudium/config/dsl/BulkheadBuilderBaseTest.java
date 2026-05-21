@@ -1,7 +1,7 @@
 package eu.inqudium.config.dsl;
 
 import eu.inqudium.config.patch.BulkheadPatch;
-import eu.inqudium.core.element.paradigm.SyncTag;
+import eu.inqudium.core.paradigm.SyncTag;
 import eu.inqudium.config.snapshot.BulkheadEventConfig;
 import eu.inqudium.config.snapshot.BulkheadField;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;

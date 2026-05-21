@@ -1,6 +1,6 @@
 package eu.inqudium.config.dsl;
 
-import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.paradigm.ParadigmTag;
 import eu.inqudium.config.snapshot.BulkheadEventConfig;
 
 import java.time.Duration;
