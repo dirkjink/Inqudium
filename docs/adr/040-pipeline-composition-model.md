@@ -1,7 +1,7 @@
 # ADR-040: `InqPipeline` composition model
 
 **Status:** Accepted  
-**Date:** 2026-05-17  
+**Date:** 2026-05-17 (accepted); 2026-05-21 (refined Invariant 2 + added §6 sub-section per B.5)  
 **Deciders:** Core team  
 **Related:** ADR-002 (functional decoration API), ADR-036 (annotation model),
 ADR-037 (module topology), ADR-041 (composition ordering — to follow),
@@ -115,18 +115,30 @@ This rule supports three orthogonal use cases:
   uniqueness rule lets that name reuse work.
 
 The element type, paradigm tag, and name together form the element's identity within a pipeline. The
-element type is determined by `InqElement.elementType()`; the paradigm tag is determined by the element's
-paradigm-specific interface (e.g. an `InqDecorator<A, R>` implementer carries `ImperativeTag`; an
-`InqReactorDecorator` implementer would carry `ReactiveTag`); the name is determined by
-`InqElement.name()`. The builder validates the triple at `shield(...)` time; a second `shield(...)` call
-with an element whose triple is already present raises an error.
+element type is determined by `InqElement.elementType()`; the name is determined by `InqElement.name()`;
+the paradigm tags an element supports are explicitly declared via `InqElement.paradigmTags()`, returning
+an immutable `Set<ParadigmTag>`. The uniqueness rule generalises accordingly: no two elements may share
+`(elementType, name)` if their `paradigmTags()` sets overlap.
 
-The annotation evaluator (ADR-036) uses the same triple to resolve annotation references. When a method
-annotated `@InqBulkhead("orderBh")` is evaluated, the evaluator selects from the pipeline the bulkhead
-named `"orderBh"` whose paradigm tag matches the method's dispatch paradigm. If no element matches, or if
-the matching element's paradigm-specific contract is incompatible with the method's signature (e.g. the
-named bulkhead does not implement `InqAsyncDecorator` for an async method), proxy construction fails per
-ADR-036 phase 1. Mismatches are surfaced eagerly, not at first invocation.
+A single element may support multiple paradigm tags when its underlying component truly serves all of
+them. For instance, `InqBulkhead` returns `Set.of(SyncTag.INSTANCE, AsyncTag.INSTANCE)` because its
+permit state and lifecycle are paradigm-agnostic; sync calls acquire-and-block while async calls
+acquire-eagerly-release-on-stage-completion (per ADR-020 and ADR-023), but both are bounded by the same
+state. A future `InqReactiveBulkhead` would return `Set.of(ReactiveMonoTag.INSTANCE,
+ReactiveFluxTag.INSTANCE)` and coexist with `InqBulkhead` under the same name because their sets are
+disjoint.
+
+Handle types narrow this further: `SyncBulkheadHandle` and `AsyncBulkheadHandle` (per ADR-047) are
+paradigm-specific views over a shared `BulkheadComponent`, each returning the single tag they expose.
+The handle/component split lets a single component back multiple paradigm-tagged handles without
+violating Invariant 2 — the handles are separate elements with disjoint `paradigmTags()`, even though
+their component identity is shared.
+
+Reference resolution against this triple happens on the pipeline itself, not in the annotation
+evaluator. The evaluator (per ADR-036) produces an `EvaluationResult` of `(elementType, name)`-pair
+references stamped with each method's paradigm tag; the pipeline's `validateReferences(...)` invariant
+(see §6) checks every such reference against the elements it actually holds. Mismatches are surfaced at
+construction time, before any wrapping work begins.
 
 **Invariant 3 — immutable after build.** Once `InqPipelineBuilder.build()` returns, the resulting pipeline
 is structurally frozen. The element list cannot be extended, replaced, or reordered through any operation
@@ -193,6 +205,30 @@ default methods route the pipeline to the appropriate integration dispatcher —
 The composition model specified here is independent of which `protect(...)` overload is invoked. The
 pipeline's structure, invariants, and `elements()` accessor are the same regardless of how the pipeline is
 applied. The integration dispatchers consume the pipeline through the same interface that user code uses.
+
+#### Pipeline-side reference validation
+
+Every integration dispatcher (proxy today, Function-Dispatch / AspectJ / Spring in the future) consumes
+the pipeline through the same interface. A precondition all dispatchers share is that annotation-derived
+element references in the service interface's `EvaluationResult` must resolve to elements in the
+pipeline.
+
+This validation is a pipeline invariant, not a dispatcher concern: it asks "does this pipeline contain
+the elements the annotations name?", a question only the pipeline can answer. The
+`InqPipeline.validateReferences(EvaluationResult, Class<?>)` default method on the interface is the
+canonical place; integration dispatchers call it once during construction, before any wrapping work
+begins.
+
+The validation respects Invariant 2's triple identity (see §3): an element resolves an `ElementRef` only
+if its `elementType` and `name` match and its `paradigmTags()` set contains the method's paradigm tag.
+Failure raises `InqAnnotationConfigurationException` with the annotation class, the offending method,
+the missing triple, and the paradigm — fail-fast diagnostic, so a service interface never reaches
+dispatch construction with an unresolved reference.
+
+The annotation evaluator (`AnnotationEvaluator`) is deliberately pipeline-free: it reads annotations and
+produces a plan of `ElementRef`s, knowing nothing about which pipeline (if any) the plan will run
+against. Pipeline composition and annotation evaluation are orthogonal concerns; reference resolution is
+the seam where they meet, and the pipeline owns the seam.
 
 ## Consequences
 

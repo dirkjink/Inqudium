@@ -702,10 +702,12 @@ distributed over 3 working days at sustainable pace.
 * [x] B.0 — Audit (no commit) (2026-05-19)
 * [x] B.1 — chainId → stackId rename library-wide (2026-05-20, PR #106)
 * [x] B.2 — InqStackInfo sealed hierarchy + DTO migration (2026-05-20, PR #107)
-* [~] B.3 — FunctionStackAdapter (deferred 2026-05-20 — see section for rationale)
-* [x] B.4 — InqIntrospector + InqStackRenderer (2026-05-20)
-* [x] B.5 — Bridge-state resolution (2026-05-21, PR TBD)
-* [ ] B.6 — ADR-039 status flip + final cleanup
+* [~] B.3 — FunctionStackAdapter (deferred 2026-05-20, PR #108)
+* [x] B.4 — InqIntrospector + InqStackRenderer (2026-05-20, PR #109)
+* [x] B.5 — Bridge-state resolution (2026-05-21, PR #110)
+* [x] B.6 — ADR-039 status flip + final cleanup (2026-05-21, PR #XXX)
+
+**Phase B complete 2026-05-21.**
 
 ## Scope discipline
 

@@ -1,45 +1,69 @@
 # ADR-039: Uniform stack introspection across wrapping paradigms
 
-**Status:** Proposed
-**Date:** 2026-05-13
+**Status:** Accepted
+**Date:** 2026-05-13 (proposed); 2026-05-21 (accepted)
 **Deciders:** Core team
 **Related:** ADR-003 (event system), ADR-022 (call identity propagation),
 ADR-035 (proxy architecture), ADR-037 (module topology and paradigm
-recognition).
+recognition), ADR-040 (pipeline composition model).
 
 ## Implementation status
 
-**Proposed.** Sub-step 3.12 of the proxy rewrite implements the
-proxy-side adapter and DTOs as standalone artefacts in
-`eu.inqudium.proxy.introspection`:
+Implemented in two phases.
 
-- `ProxyStackAdapter` (with `supports(Object)` and `inspect(Object)`)
-- `ProxyStackInfo`, `MethodLayers` — standalone records whose
-  shapes exactly match the ADR-039 specification, ready to fold
-  into a sealed `InqStackInfo` hierarchy without contract change
-- `MethodSignatureFormatter` — the canonical signature format
-  defined by this ADR
+**Phase A** (sub-step 3.12 of the proxy rewrite, mid-2026-05)
+delivered the proxy-paradigm half of the introspection plumbing:
+`ProxyStackAdapter` produces a `ProxyStackInfo` from a JDK proxy;
+`MethodLayers` captures per-method element layering; the proxy
+dispatch builds tier-1 reflection-resolved method signatures via
+`MethodSignatureFormatter`.
 
-**Deferred** to a separate library-wide refactor of comparable
-scope to the proxy rewrite itself:
+**Phase B** (2026-05-19 to 2026-05-21) delivered the remaining
+deferred work.
 
-- The central `InqIntrospector` adapter chain in
-  `inqudium-pipeline`, including the `DetectionAspectJ` and
-  `DetectionSpringAop` probes
-- The `InqStackInfo` sealed interface and its four permits
-  (`FunctionStackInfo`, `ProxyStackInfo`, `AspectJStackInfo`,
-  `SpringAspectStackInfo`)
-- `FunctionStackAdapter`, `AspectJStackAdapter`,
-  `SpringAspectStackAdapter`
-- `InqStackRenderer` (`toTree`, `toJson`)
-- The library-wide `chainId` → `stackId` rename
-  (`BulkheadOnAcquireEvent`, `BulkheadEventPublishFailureException`,
-  `InqRuntimeException`, etc.)
-- The `SerializedLambda` tier-2 method resolution
+- `chainId` → `stackId` rename library-wide (PR #106).
+- `InqStackInfo` sealed hierarchy with permits `FunctionStackInfo`
+  and `ProxyStackInfo`; DTOs migrated from `inqudium-proxy` to
+  `inqudium-pipeline` (PR #107).
+- `InqIntrospector` central dispatch utility + `InqStackRenderer`
+  paradigm-agnostic ASCII-tree and JSON renderers (PR #109).
+- Phase A's transitional bridge resolved: `AnnotationEvaluator` is
+  now pipeline-free, `InqPipeline.validateReferences(...)` carries
+  the pipeline-invariant validation, the legacy
+  `eu.inqudium.core.pipeline.InqPipeline` class and its
+  transitional bridge are deleted (PR #110).
+- `InqElement.paradigmTags()` is an abstract method returning
+  `Set<ParadigmTag>` — paradigm coverage is declared explicitly on
+  every element (PR #110).
 
-ADR-039 will be promoted to "Accepted" only after the deferred
-work lands. Until then, the proxy adapter is consumed directly
-(no central dispatch).
+### Adapters
+
+The sealed `InqStackInfo` hierarchy registers two permits today:
+`FunctionStackInfo` (empty permit, awaiting
+Function-Dispatch-Integration) and `ProxyStackInfo` (populated by
+`ProxyStackAdapter`). The `InqIntrospector` dispatch wires one
+adapter: `ProxyStackAdapter` for the JDK-proxy paradigm.
+
+Three further adapters are anticipated as separate future work:
+
+- **`FunctionStackAdapter`** — requires Function-Dispatch-Integration
+  on `InqPipeline` (`protect(Supplier<T>)` and siblings per ADR-040
+  §6). An upcoming ADR will specify Function-Dispatch-Integration in
+  detail, including the architectural reason why a
+  `FunctionStackAdapter` cannot be built against raw
+  `AbstractBaseWrapper` chains. Once that ADR's implementation
+  lands, `FunctionStackAdapter` becomes a straightforward port of
+  `ProxyStackAdapter` against pipeline-aware function wrappers.
+- **`AspectJStackAdapter`** — requires the `inqudium-aspect` module
+  to be rebuilt (currently stubbed post-Phase-A).
+- **`SpringAspectStackAdapter`** — requires the `inqudium-spring`
+  module to be rebuilt (currently stubbed post-Phase-A).
+
+Adding a future adapter is strictly additive: a new classpath probe
++ a new reflective delegation bridge (analogous to
+`ProxyStackAdapterDelegation`) + a new branch in
+`InqIntrospector.inspect()`. The hardwired dispatch chain (per
+ADR-037) is closed for third-party extension by design.
 
 ## Context
 
