@@ -380,33 +380,38 @@ class ProxyBuilderTest {
         }
 
         @Test
-        void should_propagate_illegal_state_exception_for_async_paradigm_mismatch() {
+        void should_fail_validation_for_async_paradigm_mismatch_before_dispatch_is_built() {
             // What is to be tested?
-            //   When the pipeline carries a sync-only decorator and
-            //   the service interface declares an async method, the
-            //   builder must surface AsyncParadigmValidator's
-            //   IllegalStateException. Replaces the 3.10 placeholder
-            //   that asserted UnsupportedOperationException with the
-            //   "3.11" message.
+            //   When the pipeline carries a sync-only element and the
+            //   service interface declares an async method that
+            //   references that element by name, the builder must
+            //   raise an InqAnnotationConfigurationException from
+            //   InqPipeline.validateReferences — earlier and more
+            //   diagnostically than the late AsyncParadigmValidator
+            //   used to. (See B.5: pipeline-level triple-key
+            //   validation supersedes the dispatch-time paradigm
+            //   validator for the reference-existence check.)
             // How will the test case be deemed successful and why?
-            //   IllegalStateException with "InqAsyncDecorator" in the
-            //   message — pins routing through the async branch and
-            //   the async validator.
+            //   InqAnnotationConfigurationException whose message
+            //   names the AsyncTag paradigm and the referenced
+            //   element name — pins that validation fires before any
+            //   wrapper construction.
             // Why is it important to test this test case?
             //   The first user-visible failure mode for a half-wired
             //   async pipeline; a regression here makes the error
             //   message unhelpful.
 
-            // Given — pipeline element implements sync InqDecorator
-            // only, not InqAsyncDecorator.
+            // Given — pipeline element advertises only SyncTag in its
+            // paradigmTags() set; service method needs AsyncTag.
             InqPipeline pipeline = pipelineWithBulkhead();
             AsyncServiceImpl target = new AsyncServiceImpl();
 
             // When / Then
             assertThatThrownBy(() -> ProxyBuilder.build(
                     pipeline, AsyncService.class, target))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("InqAsyncDecorator");
+                    .isInstanceOf(InqAnnotationConfigurationException.class)
+                    .hasMessageContaining("AsyncTag")
+                    .hasMessageContaining("bh");
         }
 
         @Test

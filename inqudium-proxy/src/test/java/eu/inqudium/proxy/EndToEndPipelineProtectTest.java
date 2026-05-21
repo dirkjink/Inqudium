@@ -85,6 +85,11 @@ class EndToEndPipelineProtectTest {
         }
 
         @Override
+        public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+            return java.util.Set.of(eu.inqudium.core.element.paradigm.AsyncTag.INSTANCE);
+        }
+
+        @Override
         public CompletionStage<Object> executeAsync(long stackId, long callId, Object argument,
                                                     AsyncLayerTerminal<Object, Object> next) {
             return next.executeAsync(stackId, callId, argument);
@@ -112,6 +117,11 @@ class EndToEndPipelineProtectTest {
         @Override
         public InqEventPublisher eventPublisher() {
             return null;
+        }
+
+        @Override
+        public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+            return java.util.Set.of(eu.inqudium.core.element.paradigm.SyncTag.INSTANCE);
         }
 
         @Override

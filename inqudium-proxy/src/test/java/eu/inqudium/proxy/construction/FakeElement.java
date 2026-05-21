@@ -2,7 +2,11 @@ package eu.inqudium.proxy.construction;
 
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
+
+import java.util.Set;
 
 /**
  * Minimal {@link InqElement} fixture for construction tests that
@@ -36,6 +40,11 @@ final class FakeElement implements InqElement {
     @Override
     public InqEventPublisher eventPublisher() {
         return null;
+    }
+
+    @Override
+    public Set<ParadigmTag> paradigmTags() {
+        return Set.of(SyncTag.INSTANCE);
     }
 
     @Override

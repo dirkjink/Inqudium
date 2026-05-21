@@ -1,10 +1,13 @@
 package eu.inqudium.proxy.construction;
 
 import eu.inqudium.core.element.InqElementType;
+import eu.inqudium.core.element.paradigm.AsyncTag;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.imperative.core.pipeline.AsyncLayerTerminal;
 import eu.inqudium.imperative.core.pipeline.InqAsyncDecorator;
 
+import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -44,6 +47,11 @@ final class FakeAsyncDecorator implements InqAsyncDecorator<Object, Object> {
     @Override
     public InqEventPublisher eventPublisher() {
         return null;
+    }
+
+    @Override
+    public Set<ParadigmTag> paradigmTags() {
+        return Set.of(AsyncTag.INSTANCE);
     }
 
     @Override

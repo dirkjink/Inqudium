@@ -7,11 +7,13 @@ import eu.inqudium.config.lifecycle.LifecycleState;
 import eu.inqudium.config.snapshot.BulkheadSnapshot;
 import eu.inqudium.core.element.InqElement;
 import eu.inqudium.core.element.InqElementType;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Synchronous-imperative handle on a {@link BulkheadComponent}.
@@ -57,6 +59,11 @@ final class SyncBulkheadHandle implements BulkheadHandle<SyncTag> {
     @Override
     public InqEventPublisher eventPublisher() {
         return component.eventPublisher();
+    }
+
+    @Override
+    public Set<ParadigmTag> paradigmTags() {
+        return Set.of(SyncTag.INSTANCE);
     }
 
     @Override

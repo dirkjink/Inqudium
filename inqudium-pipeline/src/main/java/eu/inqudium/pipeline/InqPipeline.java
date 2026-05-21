@@ -1,8 +1,17 @@
 package eu.inqudium.pipeline;
 
+import eu.inqudium.annotation.evaluator.ElementAnnotations;
+import eu.inqudium.annotation.evaluator.ElementRef;
+import eu.inqudium.annotation.evaluator.EvaluationResult;
+import eu.inqudium.annotation.evaluator.InqAnnotationConfigurationException;
+import eu.inqudium.annotation.evaluator.MethodPlan;
 import eu.inqudium.core.element.InqElement;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Composition primitive: a finite, ordered list of resilience elements
@@ -88,5 +97,95 @@ public interface InqPipeline {
      */
     static InqPipelineBuilder builder() {
         return new InqPipelineBuilder();
+    }
+
+    /**
+     * Validates that every {@link ElementRef} in the given evaluation
+     * result resolves to an element in this pipeline whose
+     * {@link InqElement#paradigmTags()} contains the method's paradigm
+     * tag.
+     *
+     * <p>Used by integration dispatchers (proxy, future aspectj/spring/
+     * function) to fail fast on annotation-pipeline mismatches before
+     * any wrapping work begins. The validation walks each method's plan
+     * once; unresolved references raise
+     * {@link InqAnnotationConfigurationException} with an error message
+     * identifying the annotation type, the service method, the
+     * referenced name, and the required paradigm.</p>
+     *
+     * <p>The triple {@code (elementType, paradigmTag, name)} is the
+     * identity of an element reference (per ADR-040 §3 Invariant 2).
+     * Validation passes when, for each decorated method's references,
+     * a pipeline element exists whose {@code elementType()} and
+     * {@code name()} match the reference and whose
+     * {@code paradigmTags()} contains the method's paradigm tag.</p>
+     *
+     * @param evaluation       the annotation evaluation result whose
+     *                         references are validated
+     * @param serviceInterface the service interface for the evaluation;
+     *                         used in error messages
+     * @throws InqAnnotationConfigurationException if any reference does
+     *         not resolve to a pipeline element matching the full triple
+     *
+     * @since 0.10.0
+     */
+    default void validateReferences(EvaluationResult evaluation, Class<?> serviceInterface) {
+        Map<Method, MethodPlan> plans = evaluation.plans();
+        for (Map.Entry<Method, MethodPlan> entry : plans.entrySet()) {
+            Method method = entry.getKey();
+            if (!(entry.getValue() instanceof MethodPlan.Decorated decorated)) {
+                continue;
+            }
+            ParadigmTag methodTag = decorated.paradigm();
+            for (ElementRef ref : decorated.elementsOuterToInner()) {
+                if (!hasMatchingElement(ref, methodTag)) {
+                    throw new InqAnnotationConfigurationException(
+                            buildValidationMessage(ref, methodTag, method, serviceInterface));
+                }
+            }
+        }
+    }
+
+    private boolean hasMatchingElement(ElementRef ref, ParadigmTag methodTag) {
+        for (InqElement element : elements()) {
+            if (ref.elementType() == element.elementType()
+                    && ref.name().equals(element.name())
+                    && element.paradigmTags().contains(methodTag)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String buildValidationMessage(
+            ElementRef ref, ParadigmTag methodTag, Method method, Class<?> serviceInterface) {
+        Class<? extends Annotation> annotationClass =
+                ElementAnnotations.annotationFor(ref.elementType());
+        String paradigmName = paradigmTagName(methodTag);
+        return "@" + annotationClass.getSimpleName()
+                + " on " + serviceInterface.getName() + "#" + method.getName()
+                + " names '" + ref.name() + "' for paradigm " + paradigmName
+                + " but pipeline has no matching ("
+                + ref.elementType() + ", " + paradigmName
+                + ", '" + ref.name() + "') element";
+    }
+
+    /**
+     * Returns the canonical name of a {@link ParadigmTag} for use in
+     * diagnostic messages. The concrete default implementation classes
+     * are named {@code *Default} (e.g. {@code SyncTagDefault}); the
+     * sealed parent interface they directly implement carries the
+     * canonical paradigm name (e.g. {@code SyncTag}). Reading
+     * {@code getInterfaces()[0]} is reliable here because every
+     * {@code ParadigmTag} concrete implementation is the sole permitted
+     * default of its sealed parent and declares that parent as its
+     * first (and only) interface.
+     */
+    private static String paradigmTagName(ParadigmTag tag) {
+        Class<?>[] interfaces = tag.getClass().getInterfaces();
+        if (interfaces.length == 0) {
+            return tag.getClass().getSimpleName();
+        }
+        return interfaces[0].getSimpleName();
     }
 }

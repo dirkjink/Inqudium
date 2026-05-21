@@ -1,10 +1,13 @@
 package eu.inqudium.proxy.construction;
 
 import eu.inqudium.core.element.InqElementType;
+import eu.inqudium.core.element.paradigm.ParadigmTag;
+import eu.inqudium.core.element.paradigm.SyncTag;
 import eu.inqudium.core.event.InqEventPublisher;
 import eu.inqudium.core.pipeline.InqDecorator;
 import eu.inqudium.core.pipeline.LayerTerminal;
 
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -38,6 +41,11 @@ final class FakeDecorator implements InqDecorator<Object, Object> {
     @Override
     public InqEventPublisher eventPublisher() {
         return null;
+    }
+
+    @Override
+    public Set<ParadigmTag> paradigmTags() {
+        return Set.of(SyncTag.INSTANCE);
     }
 
     @Override

@@ -1,11 +1,13 @@
 package eu.inqudium.annotation.evaluator;
 
-import eu.inqudium.core.pipeline.InqPipeline;
-
 /**
  * Reads the resilience-element annotations on a service interface's
  * implementation class and produces a per-method paradigm-stamped
- * protection plan, validated against a given {@link InqPipeline}.
+ * protection plan. The plan references pipeline elements by
+ * {@code (elementType, name)} pair via {@link ElementRef}; validation
+ * that those references resolve to actual pipeline elements is the
+ * responsibility of the consuming side (see
+ * {@code InqPipeline#validateReferences} in {@code inqudium-pipeline}).
  *
  * <p>The evaluator is the library-internal entry point described in
  * ADR-036 / ADR-046. Annotation rules (which method to inspect, how
@@ -13,27 +15,24 @@ import eu.inqudium.core.pipeline.InqPipeline;
  * configurations are invalid) are encoded in its collaborators in
  * this package.</p>
  *
- * <p>Instances are created via the static factory
- * {@link #forPipeline(InqPipeline)}; the returned evaluator holds the
- * pipeline reference and can {@link #evaluate(Class, Class) evaluate}
- * multiple service interfaces against it.</p>
+ * <p>Instances are obtained via the static factory {@link #instance()};
+ * a fresh evaluator can {@link #evaluate(Class, Class) evaluate} any
+ * number of service interfaces.</p>
  *
  * @since 0.8.0
  */
 public interface AnnotationEvaluator {
 
     /**
-     * Creates an evaluator that resolves annotations against the given
-     * pipeline. Element names referenced by annotations must exist in the
-     * pipeline; otherwise the evaluator throws at evaluation time.
+     * Returns a new evaluator instance. The evaluator holds no
+     * pipeline reference — reference resolution against pipeline
+     * elements is performed by the consumer after evaluation, via
+     * {@code InqPipeline#validateReferences}.
      *
-     * @param pipeline the pipeline whose elements back the annotations;
-     *                 must not be {@code null}
-     * @return a new evaluator bound to {@code pipeline}
-     * @throws IllegalArgumentException if {@code pipeline} is {@code null}
+     * @return a new evaluator
      */
-    static AnnotationEvaluator forPipeline(InqPipeline pipeline) {
-        return new DefaultAnnotationEvaluator(pipeline);
+    static AnnotationEvaluator instance() {
+        return new DefaultAnnotationEvaluator();
     }
 
     /**
@@ -56,19 +55,14 @@ public interface AnnotationEvaluator {
      *                             not be {@code null} and must implement
      *                             {@code serviceInterface}
      * @return the per-method plans, keyed by interface method
-     * @throws IllegalArgumentException             if either argument is
-     *                                              {@code null}, if
-     *                                              {@code serviceInterface}
-     *                                              is not an interface, or
-     *                                              if {@code implementationClass}
-     *                                              does not implement
-     *                                              {@code serviceInterface}
-     * @throws InqAnnotationConfigurationException  if any annotation
-     *                                              references an element
-     *                                              name not present in the
-     *                                              pipeline, or if any
-     *                                              other ADR-036 validation
-     *                                              rule is violated
+     * @throws IllegalArgumentException if either argument is {@code null},
+     *         if {@code serviceInterface} is not an interface, or if
+     *         {@code implementationClass} does not implement
+     *         {@code serviceInterface}
+     * @throws InqAnnotationConfigurationException if any ADR-036 validation
+     *         rule is violated by the annotation set itself (note:
+     *         reference-name resolution against a pipeline is no longer
+     *         performed here; see {@code InqPipeline#validateReferences})
      */
     <T> EvaluationResult evaluate(Class<T> serviceInterface, Class<? extends T> implementationClass);
 }

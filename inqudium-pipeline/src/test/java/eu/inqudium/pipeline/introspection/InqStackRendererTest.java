@@ -52,6 +52,11 @@ class InqStackRendererTest {
         public InqEventPublisher eventPublisher() {
             return null;
         }
+
+        @Override
+        public java.util.Set<eu.inqudium.core.element.paradigm.ParadigmTag> paradigmTags() {
+            return java.util.Set.of(eu.inqudium.core.element.paradigm.SyncTag.INSTANCE);
+        }
     }
 
     private static ProxyStackInfo sampleProxyStack() {
